@@ -12,6 +12,26 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseStaticFiles();
+
+app.MapGet("/vlastovka", () => Results.Content("""
+    <!DOCTYPE html>
+    <html lang="cs">
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Vlaštovka</title>
+      <style>
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #eef3f8; }
+        img { width: min(960px, 100%); height: auto; display: block; }
+      </style>
+    </head>
+    <body>
+      <img src="/vlastovka.jpg" alt="Vlaštovka">
+    </body>
+    </html>
+    """, "text/html; charset=utf-8"));
+
 var summaries = new[]
 {
     "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"

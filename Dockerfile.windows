@@ -1,0 +1,16 @@
+# Windows Server 2022 container.
+# Sestavení na serveru (Docker ve Windows container módu):
+#   docker build -f Dockerfile.windows -t phmtrans .
+#   docker run -d -p 8089:8080 --name phmtrans phmtrans
+FROM mcr.microsoft.com/dotnet/sdk:10.0-windowsservercore-ltsc2022 AS build
+WORKDIR /src
+COPY . .
+RUN dotnet restore
+RUN dotnet publish -c Release -o /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-windowsservercore-ltsc2022
+EXPOSE 8080
+WORKDIR /app
+COPY --from=build /app/publish .
+USER ContainerUser
+ENTRYPOINT ["dotnet", "PHMTRANS.dll"]

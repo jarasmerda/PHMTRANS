@@ -1,0 +1,36 @@
+# PHMTRANS – Nastavení projektu
+
+## Základní informace
+- Název projektu: PHMTRANS
+- Typ: ASP.NET Core Web API (.NET 10)
+- Lokální umístění: C:\Projects\PHMTRANS
+- GitHub: https://github.com/jarasmerda/PHMTRANS
+
+## Lokální vývoj (Windows PC + Cursor)
+- Editor: Cursor
+- .NET SDK: 10.0.403
+- Docker Desktop je nainstalovaný
+- Dockerfile používá Linux image (mcr.microsoft.com/dotnet/sdk:10.0 a aspnet:10.0)
+- Lokální test: docker build -t phmtrans . && docker run -p 5000:8080 phmtrans
+- Výchozí endpoint: /weatherforecast
+
+## Server (Windows Server)
+- Docker běží ve Windows container módu
+- Na serveru je použit Windows Dockerfile (windowsservercore-ltsc2022)
+- Projekt je naklonovaný v: C:\PHMTRANS
+- Image se staví z Dockerfile.windows:
+  docker build -f Dockerfile.windows -t phmtrans .
+- Kontejner se publikuje na portu 8089 (uvnitř image zůstává 8080):
+  docker run -d -p 8089:8080 --name phmtrans phmtrans
+- Aplikace je dostupná na: http://185.219.164.45:8089/weatherforecast
+
+## Důležité soubory
+- Dockerfile (lokální verze = Linux)
+- Dockerfile.windows (server = Windows Server Core ltsc2022)
+- .dockerignore
+- Program.cs (výchozí Web API šablona)
+
+## Workflow
+1. Vývoj a změny v Cursoru na Windows PC
+2. Commit + push na GitHub
+3. Na serveru: git pull → docker build -f Dockerfile.windows -t phmtrans . → restartovat kontejner
