@@ -1,0 +1,6 @@
+@PHMTRANS_HostAddress = http://localhost:5053
+
+GET {{PHMTRANS_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

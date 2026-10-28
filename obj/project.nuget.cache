@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "hjLuvJQQKQ4=",
+  "success": true,
+  "projectFilePath": "C:\\Projects\\PHMTRANS\\PHMTRANS.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\CODER\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.14\\microsoft.aspnetcore.openapi.10.0.14.nupkg.sha512",
+    "C:\\Users\\CODER\\.nuget\\packages\\microsoft.openapi\\2.12.2\\microsoft.openapi.2.12.2.nupkg.sha512"
+  ],
+  "logs": []
+}
