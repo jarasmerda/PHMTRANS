@@ -8,8 +8,10 @@ public static class BiEndpoints
     {
         app.Use(async (context, next) =>
         {
+            var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(',')[0].Trim()
+                ?? context.Request.Host.Host;
             var path = context.Request.Path.Value ?? "";
-            if (IsErpHost(context.Request.Host.Host) && path is "" or "/" or "/index.html")
+            if (IsErpHost(host) && path is "" or "/" or "/index.html")
                 context.Request.Path = "/erp.html";
 
             await next();
@@ -39,9 +41,12 @@ public static class BiEndpoints
         });
     }
 
-    private static bool IsErpHost(string host) =>
-        host.Equals("www.erp.phmtrans.cz", StringComparison.OrdinalIgnoreCase)
-        || host.Equals("erp.phmtrans.cz", StringComparison.OrdinalIgnoreCase);
+    private static bool IsErpHost(string host)
+    {
+        var name = host.Split(':')[0];
+        return name.Equals("www.erp.phmtrans.cz", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("erp.phmtrans.cz", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static IssuedInvoiceReport CreateReport(DateOnly from, DateOnly to, IReadOnlyList<IssuedInvoice> invoices)
     {

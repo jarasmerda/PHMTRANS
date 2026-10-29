@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.AspNetCore.HttpOverrides;
 using PHMTRANS.Bi;
 using PHMTRANS.Cpq;
 using PHMTRANS.Pohoda;
@@ -8,6 +9,12 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.Configure<PohodaOptions>(builder.Configuration.GetSection(PohodaOptions.SectionName));
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
@@ -20,6 +27,8 @@ builder.Services.AddHttpClient<PohodaMServerClient>()
     });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
