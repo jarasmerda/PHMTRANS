@@ -1,7 +1,9 @@
 # Windows Server 2022 container.
-# Sestavení na serveru (Docker ve Windows container módu):
+# Image se staví jen při změně kódu aplikace nebo tohoto Dockerfile.
+# Soubory ve wwwroot se berou ze složky na serveru, takže úprava stránky
+# je jen git pull a kontejner se nespouští znovu.
 #   docker build -f Dockerfile.windows -t phmtrans .
-#   docker run -d -p 8089:8080 --name phmtrans phmtrans
+#   docker run -d -p 8089:8080 --name phmtrans -v C:\PHMTRANS\wwwroot:C:\app\wwwroot phmtrans
 FROM mcr.microsoft.com/dotnet/sdk:10.0-windowsservercore-ltsc2022 AS build
 WORKDIR /src
 COPY . .

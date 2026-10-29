@@ -1,8 +1,21 @@
+using System.Text;
+using PHMTRANS.Cpq;
+using PHMTRANS.Pohoda;
+
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.Configure<PohodaOptions>(builder.Configuration.GetSection(PohodaOptions.SectionName));
+builder.Services.AddHttpClient<PohodaMServerClient>()
+    .ConfigureHttpClient((services, client) =>
+    {
+        var pohoda = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<PohodaOptions>>().Value;
+        client.BaseAddress = new Uri($"{pohoda.BaseUrl.TrimEnd('/')}/");
+        client.Timeout = TimeSpan.FromSeconds(Math.Clamp(pohoda.TimeoutSeconds, 5, 600));
+        client.DefaultRequestHeaders.ExpectContinue = false;
+    });
 
 var app = builder.Build();
 
@@ -14,6 +27,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.MapCpq();
 
 app.MapGet("/vlastovka", () => Results.Content("""
     <!DOCTYPE html>

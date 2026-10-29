@@ -18,11 +18,16 @@
 - Docker běží ve Windows container módu
 - Na serveru je použit Windows Dockerfile (windowsservercore-ltsc2022)
 - Projekt je naklonovaný v: C:\PHMTRANS
-- Image se staví z Dockerfile.windows:
+- Image se staví z Dockerfile.windows jen při změně kódu nebo Dockerfile:
   docker build -f Dockerfile.windows -t phmtrans .
-- Kontejner se publikuje na portu 8089 (uvnitř image zůstává 8080):
-  docker run -d -p 8089:8080 --name phmtrans phmtrans
-- Aplikace je dostupná na: http://185.219.164.45:8089/weatherforecast
+- Kontejner se publikuje na portu 8089 a čte wwwroot ze složky projektu:
+  docker run -d -p 8089:8080 --name phmtrans -v C:\PHMTRANS\wwwroot:C:\app\wwwroot phmtrans
+- Aplikace je dostupná na: http://185.219.164.45:8089/
+
+## Pohoda mServer
+- Adresa: http://185.219.164.45:444
+- XML se posílá na /xml, stav je na /status
+- Uživatel, heslo a IČO nejsou v gitu. Na serveru se předají jako Pohoda__Username, Pohoda__Password a Pohoda__Ico
 
 ## Důležité soubory
 - Dockerfile (lokální verze = Linux)
@@ -33,4 +38,5 @@
 ## Workflow
 1. Vývoj a změny v Cursoru na Windows PC
 2. Commit + push na GitHub
-3. Na serveru: git pull → docker build -f Dockerfile.windows -t phmtrans . → restartovat kontejner
+3. Změna stránky ve wwwroot: na serveru jen git pull, bez sestavení Dockeru
+4. Změna kódu aplikace: na serveru git pull, pak docker build a nový kontejner s připojenou složkou wwwroot
