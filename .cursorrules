@@ -25,7 +25,7 @@
 - Aplikace je dostupná na: http://185.219.164.45:8089/
 
 ## Pohoda mServer
-- Adresa: http://185.219.164.45:444
+- Adresa: http://185.219.164.45:444/xml
 - XML se posílá na /xml, stav je na /status
 - Uživatel, heslo a IČO nejsou v gitu. Na serveru se předají jako Pohoda__Username, Pohoda__Password a Pohoda__Ico
 

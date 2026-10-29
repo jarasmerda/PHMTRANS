@@ -34,6 +34,20 @@ public sealed class PohodaMServerClient(
         return ReadStocks(body);
     }
 
+    public async Task<IReadOnlyList<IssuedInvoice>> ListIssuedInvoicesAsync(
+        DateOnly from,
+        DateOnly to,
+        CancellationToken cancellationToken)
+    {
+        EnsureUser();
+        if (string.IsNullOrWhiteSpace(_options.Ico))
+            throw new PohodaException("V nastavení chybí Pohoda:Ico.");
+
+        var xml = IssuedInvoiceExport.CreateRequest(_options, from, to);
+        var body = await PostXmlAsync(Windows1250.GetBytes(xml), cancellationToken);
+        return IssuedInvoiceExport.Read(body);
+    }
+
     public async Task<PohodaXmlResponse> ForwardXmlAsync(byte[] xml, CancellationToken cancellationToken)
     {
         EnsureUser();

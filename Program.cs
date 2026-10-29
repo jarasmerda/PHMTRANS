@@ -1,4 +1,5 @@
 using System.Text;
+using PHMTRANS.Bi;
 using PHMTRANS.Cpq;
 using PHMTRANS.Pohoda;
 
@@ -9,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.Configure<PohodaOptions>(builder.Configuration.GetSection(PohodaOptions.SectionName));
 builder.Services.AddHttpClient<PohodaMServerClient>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>
     {
         var pohoda = services.GetRequiredService<Microsoft.Extensions.Options.IOptions<PohodaOptions>>().Value;
@@ -25,6 +27,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.MapBi();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapCpq();
