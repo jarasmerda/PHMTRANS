@@ -1,6 +1,6 @@
 :root {
   --navy: #1a3c78;
-  --gold: #c5811a;
+  --gold: #b6ff00;
   --ink: #1c2430;
   --muted: #5b6778;
   --line: #e4e8f0;
@@ -121,7 +121,10 @@ button {
   cursor: pointer;
 }
 
-button[data-range] { background: var(--gold); }
+button[data-range] {
+  background: var(--gold);
+  color: #14210a;
+}
 
 #message {
   color: var(--alert);
