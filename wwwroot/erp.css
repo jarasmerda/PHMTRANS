@@ -1,6 +1,6 @@
 :root {
   --navy: #1a3c78;
-  --gold: #b6ff00;
+  --gold: #c6a56a;
   --ink: #1c2430;
   --muted: #5b6778;
   --line: #e4e8f0;
@@ -123,7 +123,7 @@ button {
 
 button[data-range] {
   background: var(--gold);
-  color: #14210a;
+  color: #2c2416;
 }
 
 #message {
