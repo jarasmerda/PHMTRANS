@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Přihlášení – PHM Trans</title>
+  <link rel="stylesheet" href="/erp.css?v=2">
+</head>
+<body>
+  <main class="login-card">
+    <p class="brand"><span>PHM</span> TRANS</p>
+    <h1>Přihlášení</h1>
+    <form id="login">
+      <label>Uživatel Pohody <input id="username" name="username" autocomplete="username" required></label>
+      <label>Heslo <input id="password" name="password" type="password" autocomplete="current-password" required></label>
+      <p id="message" hidden></p>
+      <button type="submit">Přihlásit</button>
+    </form>
+  </main>
+  <script>
+    const form = document.querySelector("#login");
+    const message = document.querySelector("#message");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      message.hidden = true;
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: document.querySelector("#username").value,
+          password: document.querySelector("#password").value
+        })
+      });
+      if (response.ok) {
+        location.href = "/";
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      message.hidden = false;
+      message.textContent = data.message || "Přihlášení se nepodařilo.";
+    });
+  </script>
+</body>
+</html>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vydané faktury – PHM Trans</title>
-  <link rel="stylesheet" href="/erp.css?v=1">
+  <link rel="stylesheet" href="/erp.css?v=2">
 </head>
 <body>
   <header>
@@ -12,7 +12,10 @@
       <p class="brand"><span>PHM</span> TRANS</p>
       <h1>Vydané faktury</h1>
     </div>
-    <a class="home" href="https://www.phmtrans.cz/">Rozcestník</a>
+    <div class="header-actions">
+      <a class="home" href="https://www.phmtrans.cz/">Rozcestník</a>
+      <button type="button" id="logout">Odhlásit</button>
+    </div>
   </header>
   <form id="range">
     <label>Od <input id="from" name="from" type="date" required></label>
@@ -53,6 +56,6 @@
       </table>
     </div>
   </section>
-  <script src="/erp.js?v=1"></script>
+  <script src="/erp.js?v=2"></script>
 </body>
 </html>

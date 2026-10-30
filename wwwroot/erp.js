@@ -41,6 +41,10 @@ async function load(event) {
   document.querySelector("#table-wrap").hidden = true;
 
   const response = await fetch(`/api/bi/issued-invoices?from=${fromInput.value}&to=${toInput.value}`);
+  if (response.status === 401) {
+    location.href = "/login.html";
+    return;
+  }
   const data = await response.json();
   if (!response.ok) {
     showMessage(data.message || "Faktury se nepodařilo načíst.");
@@ -79,6 +83,11 @@ async function load(event) {
   }).join("") || `<tr><td colspan="8">V tomto období není žádná vydaná faktura.</td></tr>`;
   document.querySelector("#table-wrap").hidden = false;
 }
+
+document.querySelector("#logout").addEventListener("click", async () => {
+  await fetch("/api/logout", { method: "POST" });
+  location.href = "/login.html";
+});
 
 setRange("year");
 document.querySelector("#range").addEventListener("submit", load);

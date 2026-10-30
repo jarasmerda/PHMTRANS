@@ -48,6 +48,27 @@ public sealed class PohodaMServerClient(
         return IssuedInvoiceExport.Read(body);
     }
 
+    public async Task<bool> CredentialsAreValidAsync(string username, string password, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            return false;
+
+        var xml = $"""<?xml version="1.0" encoding="Windows-1250"?><dat:dataPack xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd" version="2.0" id="login" ico="{_options.Ico}" application="{_options.Application}" note="login"></dat:dataPack>""";
+        using var request = new HttpRequestMessage(HttpMethod.Post, "xml");
+        ApplyCommonHeaders(request);
+        request.Headers.TryAddWithoutValidation("STW-Authorization", BasicHeader(username.Trim(), password));
+        request.Content = new ByteArrayContent(Windows1250.GetBytes(xml));
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/xml");
+
+        using var response = await SendAsync(request, cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            return false;
+        if (!response.IsSuccessStatusCode)
+            throw new PohodaException($"mServer vrátil {(int)response.StatusCode}.");
+
+        return true;
+    }
+
     public async Task<PohodaXmlResponse> ForwardXmlAsync(byte[] xml, CancellationToken cancellationToken)
     {
         EnsureUser();
@@ -87,7 +108,7 @@ public sealed class PohodaMServerClient(
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "xml");
         ApplyCommonHeaders(request);
-        request.Headers.TryAddWithoutValidation("STW-Authorization", AuthorizationHeader());
+        request.Headers.TryAddWithoutValidation("STW-Authorization", BasicHeader(_options.Username, _options.Password));
         request.Content = new ByteArrayContent(xml);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/xml");
         return request;
@@ -120,9 +141,9 @@ public sealed class PohodaMServerClient(
             throw new PohodaException("V nastavení chybí Pohoda:Username.");
     }
 
-    private string AuthorizationHeader()
+    private static string BasicHeader(string username, string password)
     {
-        var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}"));
+        var token = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
         return $"Basic {token}";
     }
 

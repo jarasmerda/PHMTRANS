@@ -44,7 +44,13 @@ h1 { font-size: 1.7rem; }
 
 h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
 
-.home {
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.home, .header-actions button {
   color: #fff;
   background: var(--navy);
   text-decoration: none;
@@ -52,6 +58,32 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
   padding: 0.55rem 0.9rem;
   font-weight: 700;
 }
+
+.header-actions button {
+  background: transparent;
+  color: var(--navy);
+  border: 1px solid #d7deea;
+}
+
+.login-card {
+  width: min(420px, calc(100% - 2rem));
+  margin: 8vh auto 0;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.4rem;
+}
+
+.login-card form {
+  width: auto;
+  display: grid;
+  margin: 0;
+  padding: 1rem 0 0;
+}
+
+.login-card input { width: 100%; }
+
+.login-card button { width: 100%; }
 
 form {
   display: flex;
