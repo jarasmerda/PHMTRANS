@@ -4,3 +4,8 @@ GET {{PHMTRANS_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+GET {{PHMTRANS_HostAddress}}/health
+Accept: application/json
+
+###

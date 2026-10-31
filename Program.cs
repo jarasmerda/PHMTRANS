@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -68,6 +69,16 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapCpq();
 
+app.MapGet("/health", () =>
+{
+    var assembly = Assembly.GetEntryAssembly();
+    var version = assembly?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? assembly?.GetName().Version?.ToString()
+        ?? "unknown";
+
+    return new HealthResponse("ok", version, DateTime.UtcNow);
+});
+
 app.MapGet("/vlastovka", () => Results.Content("""
     <!DOCTYPE html>
     <html lang="cs">
@@ -106,6 +117,8 @@ app.MapGet("/weatherforecast", () =>
 .WithName("GetWeatherForecast");
 
 app.Run();
+
+record HealthResponse(string Status, string Version, DateTime TimeUtc);
 
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
