@@ -5,6 +5,8 @@ Accept: application/json
 
 ###
 
+# status, version, timeUtc, and the Git branch captured at build time.
+# GIT_BRANCH overrides the branch when it is set in the environment.
 GET {{PHMTRANS_HostAddress}}/health
 Accept: application/json
 

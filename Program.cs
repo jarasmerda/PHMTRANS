@@ -76,7 +76,7 @@ app.MapGet("/health", () =>
         ?? assembly?.GetName().Version?.ToString()
         ?? "unknown";
 
-    return new HealthResponse("ok", version, DateTime.UtcNow);
+    return new HealthResponse("ok", version, DateTime.UtcNow, ReadGitBranch(assembly));
 });
 
 app.MapGet("/vlastovka", () => Results.Content("""
@@ -116,9 +116,23 @@ app.MapGet("/weatherforecast", () =>
 })
 .WithName("GetWeatherForecast");
 
+static string ReadGitBranch(Assembly? assembly)
+{
+    var fromEnvironment = Environment.GetEnvironmentVariable("GIT_BRANCH");
+    if (!string.IsNullOrWhiteSpace(fromEnvironment))
+        return fromEnvironment.Trim();
+
+    var fromAssembly = assembly?
+        .GetCustomAttributes<AssemblyMetadataAttribute>()
+        .FirstOrDefault(attribute => attribute.Key == "GitBranch")
+        ?.Value;
+
+    return string.IsNullOrWhiteSpace(fromAssembly) ? "unknown" : fromAssembly.Trim();
+}
+
 app.Run();
 
-record HealthResponse(string Status, string Version, DateTime TimeUtc);
+record HealthResponse(string Status, string Version, DateTime TimeUtc, string Branch);
 
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {

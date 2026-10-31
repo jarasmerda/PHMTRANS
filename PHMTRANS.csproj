@@ -10,4 +10,31 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
   </ItemGroup>
 
+  <!-- Bakes the Git branch into AssemblyMetadata GitBranch. Override with -p:GitBranch=... when .git is unavailable. -->
+  <Target Name="ResolveGitBranch" BeforeTargets="GetAssemblyAttributes">
+    <PropertyGroup>
+      <GitBranch Condition="'$(GitBranch)' != ''">$(GitBranch.Trim())</GitBranch>
+    </PropertyGroup>
+
+    <Exec Command="git rev-parse --abbrev-ref HEAD"
+          ConsoleToMSBuild="true"
+          IgnoreExitCode="true"
+          ContinueOnError="true"
+          StandardOutputImportance="low"
+          Condition="'$(GitBranch)' == ''">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitBranchFromGit" />
+      <Output TaskParameter="ExitCode" PropertyName="GitBranchExitCode" />
+    </Exec>
+
+    <PropertyGroup>
+      <GitBranchFromGit Condition="'$(GitBranchFromGit)' != ''">$(GitBranchFromGit.Trim())</GitBranchFromGit>
+      <GitBranch Condition="'$(GitBranch)' == '' and '$(GitBranchExitCode)' == '0' and '$(GitBranchFromGit)' != ''">$(GitBranchFromGit)</GitBranch>
+      <GitBranch Condition="'$(GitBranch)' == ''">unknown</GitBranch>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <AssemblyMetadata Include="GitBranch" Value="$(GitBranch)" />
+    </ItemGroup>
+  </Target>
+
 </Project>
