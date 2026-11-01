@@ -49,6 +49,8 @@ public static class DispatchEndpoints
         api.MapGet("/drivers", GetDrivers);
         api.MapGet("/trips", GetTrips);
         api.MapPost("/trips", CreateTrip);
+        api.MapPut("/trips/{id}", UpdateTrip);
+        api.MapPatch("/trips/{id}", UpdateTrip);
         api.MapPost("/trips/{id}/assign", AssignTrip);
         api.MapPost("/trips/{id}/status", ChangeStatus);
     }
@@ -85,6 +87,13 @@ public static class DispatchEndpoints
 
     private static Task<IResult> CreateTrip(NewTripRequest request, IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.AddTripAsync(request, cancellationToken)));
+
+    private static Task<IResult> UpdateTrip(
+        string id,
+        UpdateTripRequest request,
+        IDispatchStore store,
+        CancellationToken cancellationToken) =>
+        Execute(async () => ToResult(await store.UpdateTripAsync(id, request, cancellationToken)));
 
     private static Task<IResult> AssignTrip(
         string id,

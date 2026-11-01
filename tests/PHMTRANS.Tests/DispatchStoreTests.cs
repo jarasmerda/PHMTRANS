@@ -162,6 +162,126 @@ public sealed class DispatchStoreTests
     }
 
     [Fact]
+    public async Task Update_saves_vehicle_driver_and_promotes_a_new_trip()
+    {
+        var snapshot = await _store.ReadAsync(CancellationToken.None);
+        var trip = snapshot.Trips.Single(item => item.Status == DispatchStatuses.Nova);
+        var vehicle = snapshot.Vehicles[0];
+        var driver = snapshot.Drivers[1];
+        var when = trip.PlannedStart.AddHours(2);
+
+        var result = await _store.UpdateTripAsync(trip.Id, new UpdateTripRequest(
+            "Z-edit",
+            "  Zákazník po úpravě  ",
+            "Sklad Kralupy",
+            "ČS Liberec",
+            "nafta",
+            when,
+            "nová poznámka",
+            vehicle.Id,
+            driver.Id,
+            trip.Status), CancellationToken.None);
+        var updated = Assert.IsType<DispatchMutation.Success>(result).Trip;
+
+        Assert.Equal(trip.Code, updated.Code);
+        Assert.Equal(DispatchStatuses.Prirazena, updated.Status);
+        Assert.Equal(vehicle.Id, updated.VehicleId);
+        Assert.Equal(driver.Id, updated.DriverId);
+        Assert.Equal("Zákazník po úpravě", updated.Customer);
+        Assert.Equal("Z-edit", updated.OrderCode);
+        Assert.Equal("Sklad Kralupy", updated.LoadingPlace);
+        Assert.Equal("ČS Liberec", updated.UnloadingPlace);
+        Assert.Equal("nová poznámka", updated.Note);
+        Assert.Equal(when, updated.PlannedStart);
+
+        var again = await _store.ReadAsync(CancellationToken.None);
+        var stored = again.Trips.Single(item => item.Id == trip.Id);
+        Assert.Equal(DispatchStatuses.Prirazena, stored.Status);
+        Assert.Equal(driver.Id, stored.DriverId);
+        Assert.Equal("Zákazník po úpravě", stored.Customer);
+    }
+
+    [Fact]
+    public async Task Update_clears_one_side_and_returns_assigned_trip_to_new()
+    {
+        var snapshot = await _store.ReadAsync(CancellationToken.None);
+        var trip = snapshot.Trips.Single(item => item.Status == DispatchStatuses.Prirazena);
+
+        var result = await _store.UpdateTripAsync(trip.Id, Copy(trip) with { DriverId = "  " }, CancellationToken.None);
+        var updated = Assert.IsType<DispatchMutation.Success>(result).Trip;
+
+        Assert.Equal(DispatchStatuses.Nova, updated.Status);
+        Assert.Null(updated.DriverId);
+        Assert.Equal(trip.VehicleId, updated.VehicleId);
+        Assert.Equal(trip.Code, updated.Code);
+    }
+
+    [Fact]
+    public async Task Update_keeps_status_of_a_trip_already_on_the_road()
+    {
+        var snapshot = await _store.ReadAsync(CancellationToken.None);
+        var trip = snapshot.Trips.Single(item => item.Status == DispatchStatuses.NaCeste);
+        var otherVehicle = snapshot.Vehicles.Single(vehicle => vehicle.Id == "veh-3");
+
+        var result = await _store.UpdateTripAsync(
+            trip.Id,
+            Copy(trip) with { VehicleId = otherVehicle.Id, Status = trip.Status },
+            CancellationToken.None);
+        var updated = Assert.IsType<DispatchMutation.Success>(result).Trip;
+
+        Assert.Equal(DispatchStatuses.NaCeste, updated.Status);
+        Assert.Equal(otherVehicle.Id, updated.VehicleId);
+        Assert.Equal(trip.DriverId, updated.DriverId);
+    }
+
+    [Fact]
+    public async Task Update_keeps_an_explicit_status_and_rejects_unknown_values()
+    {
+        var snapshot = await _store.ReadAsync(CancellationToken.None);
+        var trip = snapshot.Trips.Single(item => item.Status == DispatchStatuses.Nova);
+
+        var cancelled = await _store.UpdateTripAsync(
+            trip.Id,
+            Copy(trip) with { VehicleId = snapshot.Vehicles[0].Id, DriverId = snapshot.Drivers[0].Id, Status = DispatchStatuses.Zrusena },
+            CancellationToken.None);
+        var updated = Assert.IsType<DispatchMutation.Success>(cancelled).Trip;
+        Assert.Equal(DispatchStatuses.Zrusena, updated.Status);
+        Assert.Equal(snapshot.Vehicles[0].Id, updated.VehicleId);
+
+        var unknown = await _store.UpdateTripAsync(trip.Id, Copy(trip) with { Status = "Hotovo" }, CancellationToken.None);
+        Assert.Equal(DispatchStatuses.UnknownMessage, Assert.IsType<DispatchMutation.Rejected>(unknown).Message);
+        var after = await _store.ReadAsync(CancellationToken.None);
+        Assert.Equal(DispatchStatuses.Zrusena, after.Trips.Single(item => item.Id == trip.Id).Status);
+    }
+
+    [Fact]
+    public async Task Update_rejects_unknown_ids_and_a_missing_trip()
+    {
+        var before = await _store.ReadAsync(CancellationToken.None);
+        var trip = before.Trips.Single(item => item.Status == DispatchStatuses.Nova);
+
+        var vehicle = await _store.UpdateTripAsync(trip.Id, Copy(trip) with { VehicleId = "veh-missing" }, CancellationToken.None);
+        Assert.Equal("Neznámé vozidlo.", Assert.IsType<DispatchMutation.Rejected>(vehicle).Message);
+
+        var driver = await _store.UpdateTripAsync(trip.Id, Copy(trip) with { DriverId = "drv-missing" }, CancellationToken.None);
+        Assert.Equal("Neznámý řidič.", Assert.IsType<DispatchMutation.Rejected>(driver).Message);
+
+        var missing = await _store.UpdateTripAsync("trip-missing", Copy(trip), CancellationToken.None);
+        Assert.IsType<DispatchMutation.NotFound>(missing);
+
+        var emptyCustomer = await _store.UpdateTripAsync(trip.Id, Copy(trip) with { Customer = " " }, CancellationToken.None);
+        Assert.Equal("Vyplňte zákazníka.", Assert.IsType<DispatchMutation.Rejected>(emptyCustomer).Message);
+
+        var after = await _store.ReadAsync(CancellationToken.None);
+        var stored = after.Trips.Single(item => item.Id == trip.Id);
+        Assert.Equal(trip.Customer, stored.Customer);
+        Assert.Equal(trip.VehicleId, stored.VehicleId);
+        Assert.Equal(trip.DriverId, stored.DriverId);
+        Assert.Equal(DispatchStatuses.Nova, stored.Status);
+        Assert.Equal(before.Trips.Count, after.Trips.Count);
+    }
+
+    [Fact]
     public void New_trip_json_binds_optional_vehicle_and_driver()
     {
         var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
@@ -178,6 +298,44 @@ public sealed class DispatchStoreTests
         Assert.Equal("veh-1", assigned!.VehicleId);
         Assert.Equal("drv-1", assigned.DriverId);
     }
+
+    [Fact]
+    public void Update_trip_json_binds_vehicle_driver_and_status()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var parsed = JsonSerializer.Deserialize<UpdateTripRequest>(
+            """
+            {
+              "customer":"A",
+              "loadingPlace":"B",
+              "unloadingPlace":"C",
+              "plannedStart":"2026-11-02T06:00:00Z",
+              "vehicleId":"veh-2",
+              "driverId":"",
+              "status":"Nová"
+            }
+            """,
+            options);
+
+        Assert.NotNull(parsed);
+        Assert.Equal("veh-2", parsed.VehicleId);
+        Assert.Equal("", parsed.DriverId);
+        Assert.Equal("Nová", parsed.Status);
+        Assert.Null(parsed.OrderCode);
+    }
+
+    private static UpdateTripRequest Copy(DispatchTrip trip) =>
+        new(
+            trip.OrderCode,
+            trip.Customer,
+            trip.LoadingPlace,
+            trip.UnloadingPlace,
+            trip.Cargo,
+            trip.PlannedStart,
+            trip.Note,
+            trip.VehicleId,
+            trip.DriverId,
+            trip.Status);
 }
 
 public sealed class DispatchPageTests
@@ -196,7 +354,12 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=3", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=4", html, StringComparison.Ordinal);
+        Assert.Contains(">Upravit</button>", js, StringComparison.Ordinal);
+        Assert.Contains("Uložit změny", js, StringComparison.Ordinal);
+        Assert.Contains("data-field=\"vehicle\"", js, StringComparison.Ordinal);
+        Assert.Contains("data-field=\"driver\"", js, StringComparison.Ordinal);
+        Assert.Contains("}, \"PUT\")", js, StringComparison.Ordinal);
         Assert.Contains("cache: \"no-store\"", js, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/vehicles", js, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/drivers", js, StringComparison.Ordinal);
@@ -255,9 +418,14 @@ public sealed class DispatchSqlGuardTests
         var created = await Assert.ThrowsAsync<DispatchStoreException>(() => store.AddTripAsync(
             new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now, null),
             CancellationToken.None));
+        var updated = await Assert.ThrowsAsync<DispatchStoreException>(() => store.UpdateTripAsync(
+            "trip-1",
+            new UpdateTripRequest(null, "Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now, null, "veh-1", "drv-1"),
+            CancellationToken.None));
 
         Assert.Contains("ConnectionStrings:Dispatch", read.Message, StringComparison.Ordinal);
         Assert.Equal(read.Message, created.Message);
+        Assert.Equal(read.Message, updated.Message);
         await store.TryInitializeAsync(CancellationToken.None);
     }
 

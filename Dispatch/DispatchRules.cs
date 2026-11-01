@@ -35,6 +35,51 @@ public static class DispatchRules
         return new DispatchMutation.Success(trip);
     }
 
+    public static DispatchMutation UpdateTrip(DispatchDocument document, string id, UpdateTripRequest request, DateTimeOffset now)
+    {
+        var index = IndexOf(document, id);
+        if (index < 0)
+            return new DispatchMutation.NotFound();
+
+        var error = ValidateTripFields(
+            request.Customer,
+            request.LoadingPlace,
+            request.UnloadingPlace,
+            request.Cargo,
+            request.OrderCode,
+            request.Note,
+            request.PlannedStart);
+        if (error is not null)
+            return new DispatchMutation.Rejected(error);
+
+        var vehicleId = BlankToNull(request.VehicleId);
+        var driverId = BlankToNull(request.DriverId);
+        var assignmentError = ValidateAssignment(document, vehicleId, driverId);
+        if (assignmentError is not null)
+            return new DispatchMutation.Rejected(assignmentError);
+
+        var current = document.Trips[index];
+        if (!TryResolveStatus(current.Status, request.Status, vehicleId, driverId, out var status, out var statusError))
+            return new DispatchMutation.Rejected(statusError!);
+
+        var updated = current with
+        {
+            OrderCode = Optional(request.OrderCode, 40),
+            Customer = request.Customer!.Trim(),
+            LoadingPlace = request.LoadingPlace!.Trim(),
+            UnloadingPlace = request.UnloadingPlace!.Trim(),
+            Cargo = Optional(request.Cargo, 80) ?? "",
+            PlannedStart = request.PlannedStart!.Value,
+            Status = status,
+            VehicleId = vehicleId,
+            DriverId = driverId,
+            Note = Optional(request.Note, 500),
+            UpdatedAt = now
+        };
+        document.Trips[index] = updated;
+        return new DispatchMutation.Success(updated);
+    }
+
     public static DispatchMutation Assign(
         DispatchDocument document,
         string id,
@@ -106,29 +151,74 @@ public static class DispatchRules
         return status;
     }
 
-    private static string? ValidateNewTrip(NewTripRequest request)
+    private static string? ValidateNewTrip(NewTripRequest request) =>
+        ValidateTripFields(
+            request.Customer,
+            request.LoadingPlace,
+            request.UnloadingPlace,
+            request.Cargo,
+            request.OrderCode,
+            request.Note,
+            request.PlannedStart);
+
+    private static string? ValidateTripFields(
+        string? customer,
+        string? loadingPlace,
+        string? unloadingPlace,
+        string? cargo,
+        string? orderCode,
+        string? note,
+        DateTimeOffset? plannedStart)
     {
-        if (string.IsNullOrWhiteSpace(request.Customer))
+        if (string.IsNullOrWhiteSpace(customer))
             return "Vyplňte zákazníka.";
-        if (request.Customer.Trim().Length > 160)
+        if (customer.Trim().Length > 160)
             return "Zákazník může mít nejvýše 160 znaků.";
-        if (string.IsNullOrWhiteSpace(request.LoadingPlace))
+        if (string.IsNullOrWhiteSpace(loadingPlace))
             return "Vyplňte místo nakládky.";
-        if (request.LoadingPlace.Trim().Length > 160)
+        if (loadingPlace.Trim().Length > 160)
             return "Místo nakládky může mít nejvýše 160 znaků.";
-        if (string.IsNullOrWhiteSpace(request.UnloadingPlace))
+        if (string.IsNullOrWhiteSpace(unloadingPlace))
             return "Vyplňte místo vykládky.";
-        if (request.UnloadingPlace.Trim().Length > 160)
+        if (unloadingPlace.Trim().Length > 160)
             return "Místo vykládky může mít nejvýše 160 znaků.";
-        if (Optional(request.Cargo, 80) is null && !string.IsNullOrWhiteSpace(request.Cargo))
+        if (Optional(cargo, 80) is null && !string.IsNullOrWhiteSpace(cargo))
             return "Náklad může mít nejvýše 80 znaků.";
-        if (Optional(request.OrderCode, 40) is null && !string.IsNullOrWhiteSpace(request.OrderCode))
+        if (Optional(orderCode, 40) is null && !string.IsNullOrWhiteSpace(orderCode))
             return "Zakázka může mít nejvýše 40 znaků.";
-        if (Optional(request.Note, 500) is null && !string.IsNullOrWhiteSpace(request.Note))
+        if (Optional(note, 500) is null && !string.IsNullOrWhiteSpace(note))
             return "Poznámka může mít nejvýše 500 znaků.";
-        if (request.PlannedStart is null)
+        if (plannedStart is null)
             return "Vyplňte termín jízdy.";
         return null;
+    }
+
+    private static bool TryResolveStatus(
+        string current,
+        string? requested,
+        string? vehicleId,
+        string? driverId,
+        out string status,
+        out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(requested) || string.Equals(requested.Trim(), current, StringComparison.Ordinal))
+        {
+            status = StatusAfterAssignment(current, vehicleId, driverId);
+            error = null;
+            return true;
+        }
+
+        var selected = requested.Trim();
+        if (!DispatchStatuses.IsKnown(selected))
+        {
+            status = current;
+            error = DispatchStatuses.UnknownMessage;
+            return false;
+        }
+
+        status = selected;
+        error = null;
+        return true;
     }
 
     private static string? Optional(string? value, int max)

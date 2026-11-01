@@ -84,6 +84,18 @@ public sealed record NewTripRequest(
     string? VehicleId = null,
     string? DriverId = null);
 
+public sealed record UpdateTripRequest(
+    string? OrderCode,
+    string? Customer,
+    string? LoadingPlace,
+    string? UnloadingPlace,
+    string? Cargo,
+    DateTimeOffset? PlannedStart,
+    string? Note,
+    string? VehicleId = null,
+    string? DriverId = null,
+    string? Status = null);
+
 public sealed record AssignTripRequest(string? VehicleId, string? DriverId);
 
 public sealed record ChangeStatusRequest(string? Status);
