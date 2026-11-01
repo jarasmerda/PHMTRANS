@@ -116,9 +116,9 @@ async function load() {
   let driversResponse;
   try {
     [boardResponse, vehiclesResponse, driversResponse] = await Promise.all([
-      fetch("/api/dispatch/board"),
-      fetch("/api/dispatch/vehicles"),
-      fetch("/api/dispatch/drivers")
+      fetch("/api/dispatch/board", { cache: "no-store" }),
+      fetch("/api/dispatch/vehicles", { cache: "no-store" }),
+      fetch("/api/dispatch/drivers", { cache: "no-store" })
     ]);
   } catch {
     if (current !== requestSeq) return;

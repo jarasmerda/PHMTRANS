@@ -196,7 +196,8 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=3", html, StringComparison.Ordinal);
+        Assert.Contains("cache: \"no-store\"", js, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/vehicles", js, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/drivers", js, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", js, StringComparison.Ordinal);
