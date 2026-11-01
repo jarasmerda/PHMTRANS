@@ -52,6 +52,17 @@ function statusOptions(selected) {
     `<option${status === selected ? " selected" : ""}>${text(status)}</option>`).join("");
 }
 
+function vehicleLabel(item) {
+  return `${item.plate} · ${item.label}`;
+}
+
+function fillTripForm(vehicleList, driverList) {
+  const vehicleSelect = document.querySelector("#vehicle");
+  const driverSelect = document.querySelector("#driver");
+  vehicleSelect.innerHTML = options(vehicleList, vehicleSelect.value, "— nepřiřazeno —", vehicleLabel);
+  driverSelect.innerHTML = options(driverList, driverSelect.value, "— nepřiřazeno —", (item) => item.name, (item) => item.phone || "");
+}
+
 function count(data, status) {
   const found = (data.counts ?? []).find((item) => item.status === status);
   return found ? found.count : 0;
@@ -88,7 +99,7 @@ function render(data) {
       <td>${text(trip.customer)}${trip.note ? `<br><span class="route-to">${text(trip.note)}</span>` : ""}</td>
       <td>${text(trip.loadingPlace)}<br><span class="route-to">→ ${text(trip.unloadingPlace)}</span></td>
       <td>${text(trip.cargo)}</td>
-      <td><select data-field="vehicle" aria-label="Vozidlo ${text(trip.code)}">${options(vehicles, trip.vehicleId, "Nepřiřazeno", (item) => `${item.plate} · ${item.label}`)}</select></td>
+      <td><select data-field="vehicle" aria-label="Vozidlo ${text(trip.code)}">${options(vehicles, trip.vehicleId, "Nepřiřazeno", vehicleLabel)}</select></td>
       <td><select data-field="driver" aria-label="Řidič ${text(trip.code)}">${options(drivers, trip.driverId, "Nepřiřazeno", (item) => item.name, (item) => item.phone || "")}</select></td>
       <td><select data-field="status" aria-label="Stav ${text(trip.code)}">${statusOptions(trip.status)}</select></td>
       <td><button type="button" data-save="${text(trip.id)}">Uložit</button></td>
@@ -100,27 +111,41 @@ function render(data) {
 async function load() {
   const current = ++requestSeq;
   showMessage("Načítám jízdy…");
-  let response;
+  let boardResponse;
+  let vehiclesResponse;
+  let driversResponse;
   try {
-    response = await fetch("/api/dispatch/board");
+    [boardResponse, vehiclesResponse, driversResponse] = await Promise.all([
+      fetch("/api/dispatch/board"),
+      fetch("/api/dispatch/vehicles"),
+      fetch("/api/dispatch/drivers")
+    ]);
   } catch {
     if (current !== requestSeq) return;
     showMessage("Jízdy se nepodařilo načíst.");
     return;
   }
   if (current !== requestSeq) return;
-  if (response.status === 401) {
+  if (boardResponse.status === 401 || vehiclesResponse.status === 401 || driversResponse.status === 401) {
     location.href = "/login.html";
     return;
   }
-  const data = await response.json().catch(() => ({}));
+  const data = await boardResponse.json().catch(() => ({}));
+  const vehicleData = await vehiclesResponse.json().catch(() => null);
+  const driverData = await driversResponse.json().catch(() => null);
   if (current !== requestSeq) return;
-  if (!response.ok) {
+  if (!boardResponse.ok) {
     showMessage(data.message || "Jízdy se nepodařilo načíst.");
     return;
   }
-  showMessage("");
+  const catalogsOk = vehiclesResponse.ok && driversResponse.ok && Array.isArray(vehicleData) && Array.isArray(driverData);
+  if (catalogsOk) {
+    data.vehicles = vehicleData;
+    data.drivers = driverData;
+  }
+  showMessage(catalogsOk ? "" : ((vehicleData && vehicleData.message) || (driverData && driverData.message) || "Vozidla a řidiče se nepodařilo načíst."));
   render(data);
+  fillTripForm(data.vehicles ?? [], data.drivers ?? []);
 }
 
 async function send(url, body) {
@@ -206,11 +231,15 @@ document.querySelector("#create").addEventListener("submit", async (event) => {
     unloadingPlace: document.querySelector("#unloading").value,
     cargo: document.querySelector("#cargo").value,
     plannedStart,
-    note: document.querySelector("#note").value
+    note: document.querySelector("#note").value,
+    vehicleId: document.querySelector("#vehicle").value,
+    driverId: document.querySelector("#driver").value
   });
   saving = false;
   if (!created) return;
   event.target.reset();
+  document.querySelector("#vehicle").value = "";
+  document.querySelector("#driver").value = "";
   document.querySelector("#planned").value = defaultPlanned();
   showMessage("");
   await load();

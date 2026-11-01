@@ -11,6 +11,12 @@ public static class DispatchRules
         if (error is not null)
             return new DispatchMutation.Rejected(error);
 
+        var vehicleId = BlankToNull(request.VehicleId);
+        var driverId = BlankToNull(request.DriverId);
+        var assignmentError = ValidateAssignment(document, vehicleId, driverId);
+        if (assignmentError is not null)
+            return new DispatchMutation.Rejected(assignmentError);
+
         var trip = new DispatchTrip(
             NewId(document.Trips),
             NextCode(document.Trips, now),
@@ -20,9 +26,9 @@ public static class DispatchRules
             request.UnloadingPlace!.Trim(),
             Optional(request.Cargo, 80) ?? "",
             request.PlannedStart!.Value,
-            DispatchStatuses.Nova,
-            null,
-            null,
+            StatusAfterAssignment(DispatchStatuses.Nova, vehicleId, driverId),
+            vehicleId,
+            driverId,
             Optional(request.Note, 500),
             now);
         document.Trips.Add(trip);
@@ -43,24 +49,16 @@ public static class DispatchRules
         if (index < 0)
             return new DispatchMutation.NotFound();
 
-        if (vehicleId is not null && document.Vehicles.All(vehicle => vehicle.Id != vehicleId))
-            return new DispatchMutation.Rejected("Neznámé vozidlo.");
-        if (driverId is not null && document.Drivers.All(driver => driver.Id != driverId))
-            return new DispatchMutation.Rejected("Neznámý řidič.");
+        var assignmentError = ValidateAssignment(document, vehicleId, driverId);
+        if (assignmentError is not null)
+            return new DispatchMutation.Rejected(assignmentError);
 
         var trip = document.Trips[index];
-        var status = trip.Status;
-        var complete = vehicleId is not null && driverId is not null;
-        if (complete && status == DispatchStatuses.Nova)
-            status = DispatchStatuses.Prirazena;
-        else if (!complete && status == DispatchStatuses.Prirazena)
-            status = DispatchStatuses.Nova;
-
         var updated = trip with
         {
             VehicleId = vehicleId,
             DriverId = driverId,
-            Status = status,
+            Status = StatusAfterAssignment(trip.Status, vehicleId, driverId),
             UpdatedAt = now
         };
         document.Trips[index] = updated;
@@ -87,6 +85,25 @@ public static class DispatchRules
         };
         document.Trips[index] = updated;
         return new DispatchMutation.Success(updated);
+    }
+
+    private static string? ValidateAssignment(DispatchDocument document, string? vehicleId, string? driverId)
+    {
+        if (vehicleId is not null && document.Vehicles.All(vehicle => vehicle.Id != vehicleId))
+            return "Neznámé vozidlo.";
+        if (driverId is not null && document.Drivers.All(driver => driver.Id != driverId))
+            return "Neznámý řidič.";
+        return null;
+    }
+
+    private static string StatusAfterAssignment(string status, string? vehicleId, string? driverId)
+    {
+        var complete = vehicleId is not null && driverId is not null;
+        if (complete && status == DispatchStatuses.Nova)
+            return DispatchStatuses.Prirazena;
+        if (!complete && status == DispatchStatuses.Prirazena)
+            return DispatchStatuses.Nova;
+        return status;
     }
 
     private static string? ValidateNewTrip(NewTripRequest request)

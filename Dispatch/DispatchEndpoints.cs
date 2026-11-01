@@ -45,6 +45,8 @@ public static class DispatchEndpoints
         // ještě před tímto middleware, protože UseAuthorization je registrované dřív.
         var api = app.MapGroup("/api/dispatch");
         api.MapGet("/board", GetBoard);
+        api.MapGet("/vehicles", GetVehicles);
+        api.MapGet("/drivers", GetDrivers);
         api.MapGet("/trips", GetTrips);
         api.MapPost("/trips", CreateTrip);
         api.MapPost("/trips/{id}/assign", AssignTrip);
@@ -57,6 +59,12 @@ public static class DispatchEndpoints
             var snapshot = await store.ReadAsync(cancellationToken);
             return Results.Ok(ToBoard(snapshot));
         });
+
+    private static Task<IResult> GetVehicles(IDispatchStore store, CancellationToken cancellationToken) =>
+        Execute(async () => Results.Ok(ToBoard(await store.ReadAsync(cancellationToken)).Vehicles));
+
+    private static Task<IResult> GetDrivers(IDispatchStore store, CancellationToken cancellationToken) =>
+        Execute(async () => Results.Ok(ToBoard(await store.ReadAsync(cancellationToken)).Drivers));
 
     private static Task<IResult> GetTrips(string? status, IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
