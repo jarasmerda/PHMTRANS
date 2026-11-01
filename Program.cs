@@ -8,17 +8,17 @@ using PHMTRANS.Pohoda;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
-var builder = WebApplication.CreateBuilder(args);
+var siteWebRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "wwwroot"));
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    WebRootPath = Directory.Exists(siteWebRoot) ? siteWebRoot : null
+});
 
 builder.Host.UseWindowsService();
 
 if (!builder.Environment.IsDevelopment())
-{
     builder.WebHost.UseUrls("http://*:8089");
-    var siteWebRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "wwwroot"));
-    if (Directory.Exists(siteWebRoot))
-        builder.WebHost.UseWebRoot(siteWebRoot);
-}
 
 builder.Services.AddOpenApi();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
