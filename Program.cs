@@ -10,6 +10,16 @@ Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Host.UseWindowsService();
+
+if (!builder.Environment.IsDevelopment())
+{
+    builder.WebHost.UseUrls("http://*:8089");
+    var siteWebRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "wwwroot"));
+    if (Directory.Exists(siteWebRoot))
+        builder.WebHost.UseWebRoot(siteWebRoot);
+}
+
 builder.Services.AddOpenApi();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
