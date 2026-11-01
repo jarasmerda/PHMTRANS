@@ -234,10 +234,73 @@ public sealed class PohodaMServerClient(
 
     private static string Decode(byte[] bytes, string? charset)
     {
-        var encoding = charset?.Contains("1250", StringComparison.OrdinalIgnoreCase) == true
-            ? Windows1250
-            : Encoding.UTF8;
-        return encoding.GetString(bytes);
+        var declared = XmlDeclaredEncoding(bytes);
+        if (declared is not null && !IsUtf8Name(declared))
+            return EncodingFor(declared).GetString(bytes);
+
+        if (IsWindows1250Name(charset) || !IsValidUtf8(bytes))
+            return Windows1250.GetString(bytes);
+
+        return Encoding.UTF8.GetString(bytes);
+    }
+
+    private static string? XmlDeclaredEncoding(byte[] bytes)
+    {
+        var length = Math.Min(bytes.Length, 240);
+        var head = Encoding.ASCII.GetString(bytes, 0, length);
+        const string marker = "encoding=";
+        var start = head.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+            return null;
+
+        var index = start + marker.Length;
+        while (index < head.Length && char.IsWhiteSpace(head[index]))
+            index++;
+        if (index >= head.Length || head[index] is not ('"' or '\''))
+            return null;
+
+        var quote = head[index];
+        var end = head.IndexOf(quote, index + 1);
+        if (end <= index + 1)
+            return null;
+
+        return head[(index + 1)..end].Trim();
+    }
+
+    private static bool IsUtf8Name(string name) =>
+        name.Equals("utf-8", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("utf8", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWindows1250Name(string? name) =>
+        name?.Contains("1250", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static Encoding EncodingFor(string name)
+    {
+        if (IsWindows1250Name(name))
+            return Windows1250;
+
+        try
+        {
+            return Encoding.GetEncoding(name);
+        }
+        catch (ArgumentException)
+        {
+            return Windows1250;
+        }
+    }
+
+    private static bool IsValidUtf8(byte[] bytes)
+    {
+        try
+        {
+            var strict = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+            strict.GetString(bytes);
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            return false;
+        }
     }
 
     private static string Trim(string value)
