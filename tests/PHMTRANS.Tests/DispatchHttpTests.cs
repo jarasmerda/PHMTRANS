@@ -77,6 +77,78 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal(DispatchStatuses.Prirazena, assignedJson.RootElement.GetProperty("status").GetString());
     }
 
+    [Fact]
+    public async Task Vehicles_and_drivers_can_be_chosen_when_a_trip_is_created()
+    {
+        using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var anonymous = await client.SendAsync(Request("/api/dispatch/vehicles", "disp.phmtrans.cz", user: false));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        var vehicles = await client.SendAsync(Request("/api/dispatch/vehicles", "disp.phmtrans.cz", user: true));
+        Assert.Equal(HttpStatusCode.OK, vehicles.StatusCode);
+        using var vehicleJson = JsonDocument.Parse(await vehicles.Content.ReadAsStringAsync());
+        Assert.Contains(vehicleJson.RootElement.EnumerateArray(), item => item.GetProperty("plate").GetString() == "1A2 3456");
+
+        var drivers = await client.SendAsync(Request("/api/dispatch/drivers", "disp.phmtrans.cz", user: true));
+        Assert.Equal(HttpStatusCode.OK, drivers.StatusCode);
+        using var driverJson = JsonDocument.Parse(await drivers.Content.ReadAsStringAsync());
+        Assert.Contains(driverJson.RootElement.EnumerateArray(), item => item.GetProperty("name").GetString() == "Jan Novák");
+
+        var create = new HttpRequestMessage(HttpMethod.Post, "/api/dispatch/trips")
+        {
+            Content = new StringContent(
+                """
+                {
+                  "customer": "Zákazník HTTP",
+                  "loadingPlace": "Sklad",
+                  "unloadingPlace": "ČS",
+                  "cargo": "nafta",
+                  "plannedStart": "2026-11-02T06:00:00Z",
+                  "vehicleId": "veh-1",
+                  "driverId": "drv-1"
+                }
+                """,
+                System.Text.Encoding.UTF8,
+                "application/json")
+        };
+        create.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
+        var created = await client.SendAsync(create);
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        using var createdJson = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        Assert.Equal("veh-1", createdJson.RootElement.GetProperty("vehicleId").GetString());
+        Assert.Equal("drv-1", createdJson.RootElement.GetProperty("driverId").GetString());
+        Assert.Equal(DispatchStatuses.Prirazena, createdJson.RootElement.GetProperty("status").GetString());
+
+        var board = await client.SendAsync(Request("/api/dispatch/board", "disp.phmtrans.cz", user: true));
+        using var boardJson = JsonDocument.Parse(await board.Content.ReadAsStringAsync());
+        var stored = boardJson.RootElement.GetProperty("trips").EnumerateArray()
+            .Single(item => item.GetProperty("customer").GetString() == "Zákazník HTTP");
+        Assert.Equal("veh-1", stored.GetProperty("vehicleId").GetString());
+        Assert.Equal("drv-1", stored.GetProperty("driverId").GetString());
+        Assert.Equal(DispatchStatuses.Prirazena, stored.GetProperty("status").GetString());
+
+        var rejected = new HttpRequestMessage(HttpMethod.Post, "/api/dispatch/trips")
+        {
+            Content = new StringContent(
+                """
+                {
+                  "customer": "Zákazník HTTP",
+                  "loadingPlace": "Sklad",
+                  "unloadingPlace": "ČS",
+                  "plannedStart": "2026-11-02T06:00:00Z",
+                  "vehicleId": "veh-missing"
+                }
+                """,
+                System.Text.Encoding.UTF8,
+                "application/json")
+        };
+        rejected.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
+        var rejectedResponse = await client.SendAsync(rejected);
+        Assert.Equal(HttpStatusCode.BadRequest, rejectedResponse.StatusCode);
+        Assert.Contains("Neznámé vozidlo", await rejectedResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
     private static HttpRequestMessage Request(string path, string? host, bool user)
     {
         var message = new HttpRequestMessage(HttpMethod.Get, path);

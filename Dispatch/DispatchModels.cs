@@ -80,7 +80,9 @@ public sealed record NewTripRequest(
     string? UnloadingPlace,
     string? Cargo,
     DateTimeOffset? PlannedStart,
-    string? Note);
+    string? Note,
+    string? VehicleId = null,
+    string? DriverId = null);
 
 public sealed record AssignTripRequest(string? VehicleId, string? DriverId);
 

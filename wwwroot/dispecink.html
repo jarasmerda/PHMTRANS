@@ -91,10 +91,20 @@
       <label>Vykládka <input id="unloading" required maxlength="160"></label>
       <label>Náklad <input id="cargo" maxlength="80" placeholder="motorová nafta"></label>
       <label>Termín <input id="planned" type="datetime-local" required></label>
+      <label>Vozidlo
+        <select id="vehicle">
+          <option value="">— nepřiřazeno —</option>
+        </select>
+      </label>
+      <label>Řidič
+        <select id="driver">
+          <option value="">— nepřiřazeno —</option>
+        </select>
+      </label>
       <label>Poznámka <input id="note" maxlength="500"></label>
       <button type="submit">Přidat jízdu</button>
     </form>
   </section>
-  <script src="/dispecink.js?v=1"></script>
+  <script src="/dispecink.js?v=3"></script>
 </body>
 </html>

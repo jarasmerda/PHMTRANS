@@ -48,6 +48,13 @@ public static class DispatchSchema
             );
             CREATE UNIQUE INDEX UX_Disp_Trip_Code ON dbo.Disp_Trip (Code);
         END;
+
+        -- Doplnění sloupců na už existující Disp_Trip. Řádky ani cizí tabulky se nemění.
+        IF COL_LENGTH(N'dbo.Disp_Trip', N'VehicleId') IS NULL
+            ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL;
+
+        IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL
+            ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL;
         """;
 
     public static async Task EnsureAsync(string connectionString, CancellationToken cancellationToken)

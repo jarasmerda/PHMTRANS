@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using PHMTRANS.Dispatch;
@@ -105,13 +106,126 @@ public sealed class DispatchStoreTests
         var year = DateTime.Now.Year;
         Assert.Equal(year == 2026 ? "J2026-0145" : $"J{year}-0001", trip.Code);
         Assert.Equal(DispatchStatuses.Nova, trip.Status);
+        Assert.Null(trip.VehicleId);
+        Assert.Null(trip.DriverId);
+    }
+
+    [Fact]
+    public async Task New_trip_stores_optional_vehicle_and_driver_and_promotes_when_both_are_set()
+    {
+        var snapshot = await _store.ReadAsync(CancellationToken.None);
+        var vehicle = snapshot.Vehicles[0];
+        var driver = snapshot.Drivers[1];
+        var when = DateTimeOffset.Now;
+
+        var blank = await _store.AddTripAsync(
+            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, when, null, " ", ""),
+            CancellationToken.None);
+        var unassigned = Assert.IsType<DispatchMutation.Success>(blank).Trip;
+        Assert.Null(unassigned.VehicleId);
+        Assert.Null(unassigned.DriverId);
+        Assert.Equal(DispatchStatuses.Nova, unassigned.Status);
+
+        var onlyVehicle = await _store.AddTripAsync(
+            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", "nafta", when, null, vehicle.Id, null),
+            CancellationToken.None);
+        var partial = Assert.IsType<DispatchMutation.Success>(onlyVehicle).Trip;
+        Assert.Equal(vehicle.Id, partial.VehicleId);
+        Assert.Null(partial.DriverId);
+        Assert.Equal(DispatchStatuses.Nova, partial.Status);
+
+        var both = await _store.AddTripAsync(
+            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", "nafta", when, null, vehicle.Id, driver.Id),
+            CancellationToken.None);
+        var assigned = Assert.IsType<DispatchMutation.Success>(both).Trip;
+        Assert.Equal(DispatchStatuses.Prirazena, assigned.Status);
+        Assert.Equal(vehicle.Id, assigned.VehicleId);
+        Assert.Equal(driver.Id, assigned.DriverId);
+
+        var again = await _store.ReadAsync(CancellationToken.None);
+        var stored = again.Trips.Single(trip => trip.Id == assigned.Id);
+        Assert.Equal(DispatchStatuses.Prirazena, stored.Status);
+        Assert.Equal(driver.Id, stored.DriverId);
+
+        var unknownVehicle = await _store.AddTripAsync(
+            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, when, null, "veh-missing", driver.Id),
+            CancellationToken.None);
+        Assert.Equal("Neznámé vozidlo.", Assert.IsType<DispatchMutation.Rejected>(unknownVehicle).Message);
+
+        var unknownDriver = await _store.AddTripAsync(
+            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, when, null, vehicle.Id, "drv-missing"),
+            CancellationToken.None);
+        Assert.Equal("Neznámý řidič.", Assert.IsType<DispatchMutation.Rejected>(unknownDriver).Message);
+
+        var afterRejects = await _store.ReadAsync(CancellationToken.None);
+        Assert.Equal(again.Trips.Count, afterRejects.Trips.Count);
+    }
+
+    [Fact]
+    public void New_trip_json_binds_optional_vehicle_and_driver()
+    {
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var omitted = JsonSerializer.Deserialize<NewTripRequest>(
+            """{"customer":"A","loadingPlace":"B","unloadingPlace":"C","plannedStart":"2026-11-02T06:00:00Z"}""",
+            options);
+        Assert.NotNull(omitted);
+        Assert.Null(omitted.VehicleId);
+        Assert.Null(omitted.DriverId);
+
+        var assigned = JsonSerializer.Deserialize<NewTripRequest>(
+            """{"customer":"A","loadingPlace":"B","unloadingPlace":"C","plannedStart":"2026-11-02T06:00:00Z","vehicleId":"veh-1","driverId":"drv-1"}""",
+            options);
+        Assert.Equal("veh-1", assigned!.VehicleId);
+        Assert.Equal("drv-1", assigned.DriverId);
+    }
+}
+
+public sealed class DispatchPageTests
+{
+    [Fact]
+    public void New_trip_form_offers_vehicle_and_driver_and_the_table_names_them()
+    {
+        var root = FindWwwRoot();
+        var html = File.ReadAllText(Path.Combine(root, "dispecink.html"));
+        var js = File.ReadAllText(Path.Combine(root, "dispecink.js"));
+
+        Assert.Contains("<th>Vozidlo</th>", html, StringComparison.Ordinal);
+        Assert.Contains("<th>Řidič</th>", html, StringComparison.Ordinal);
+        Assert.Contains("<label>Vozidlo", html, StringComparison.Ordinal);
+        Assert.Contains("<label>Řidič", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
+        Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=3", html, StringComparison.Ordinal);
+        Assert.Contains("cache: \"no-store\"", js, StringComparison.Ordinal);
+        Assert.Contains("/api/dispatch/vehicles", js, StringComparison.Ordinal);
+        Assert.Contains("/api/dispatch/drivers", js, StringComparison.Ordinal);
+        Assert.Contains("— nepřiřazeno —", js, StringComparison.Ordinal);
+        Assert.Contains("vehicleId: document.querySelector(\"#vehicle\").value", js, StringComparison.Ordinal);
+        Assert.Contains("driverId: document.querySelector(\"#driver\").value", js, StringComparison.Ordinal);
+        Assert.Contains("item.plate} · ${item.label}", js, StringComparison.Ordinal);
+        Assert.Contains("item.name", js, StringComparison.Ordinal);
+    }
+
+    private static string FindWwwRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var wwwroot = Path.Combine(dir.FullName, "wwwroot");
+            if (File.Exists(Path.Combine(wwwroot, "dispecink.html")))
+                return wwwroot;
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Nenalezen obsah aplikace.");
     }
 }
 
 public sealed class DispatchSqlGuardTests
 {
     [Fact]
-    public void Schema_script_only_creates_missing_dispatch_tables()
+    public void Schema_script_creates_missing_tables_and_adds_missing_trip_columns()
     {
         var script = DispatchSchema.Script;
 
@@ -119,12 +233,17 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("dbo.Disp_Driver", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Trip", script, StringComparison.Ordinal);
         Assert.Equal(3, Count(script, "IF OBJECT_ID"));
+        Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'VehicleId') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
+        Assert.Equal(2, Count(script, "ALTER TABLE"));
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("ALTER ", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE ", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Smerco_", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Pohoda", script, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
