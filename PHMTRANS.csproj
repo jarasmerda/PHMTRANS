@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.14" />
   </ItemGroup>
 
   <!-- Bakes the Git branch into AssemblyMetadata GitBranch. Override with -p:GitBranch=... when .git is unavailable. -->

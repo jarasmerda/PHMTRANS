@@ -15,28 +15,25 @@
 - Výchozí endpoint: /weatherforecast
 
 ## Server (Windows Server)
-- Docker běží ve Windows container módu
-- Na serveru je použit Windows Dockerfile (windowsservercore-ltsc2022)
+- Docker na serveru není potřeba. Aplikace běží jako služba Windows přes nainstalovaný .NET SDK 10.
 - Projekt je naklonovaný v: C:\PHMTRANS
-- Image se staví z Dockerfile.windows jen při změně kódu nebo Dockerfile:
-  docker build -f Dockerfile.windows -t phmtrans .
-- Kontejner se publikuje na portu 8089 a čte wwwroot ze složky projektu:
-  docker run -d -p 8089:8080 --name phmtrans -v C:\PHMTRANS\wwwroot:C:\app\wwwroot phmtrans
+- Publikace: dotnet publish -c Release -o C:\PHMTRANS\app
+- Služba poslouchá na portu 8089 a stránky bere z C:\PHMTRANS\wwwroot
+- Údaje k Pohodě jsou v C:\PHMTRANS\app\appsettings.Production.json (soubor není v gitu)
 - Aplikace je dostupná na: http://185.219.164.45:8089/
 
 ## Pohoda mServer
 - Adresa: http://185.219.164.45:444/xml
 - XML se posílá na /xml, stav je na /status
-- Uživatel, heslo a IČO nejsou v gitu. Na serveru se předají jako Pohoda__Username, Pohoda__Password a Pohoda__Ico
+- Uživatel, heslo a IČO nejsou v gitu. Na serveru jsou v appsettings.Production.json ve vlastnostech Pohoda:Username, Pohoda:Password a Pohoda:Ico
 
 ## Důležité soubory
-- Dockerfile (lokální verze = Linux)
-- Dockerfile.windows (server = Windows Server Core ltsc2022)
-- .dockerignore
-- Program.cs (výchozí Web API šablona)
+- Program.cs
+- appsettings.json
+- appsettings.Production.json jen na serveru, mimo git
 
 ## Workflow
 1. Vývoj a změny v Cursoru na Windows PC
 2. Commit + push na GitHub
-3. Změna stránky ve wwwroot: na serveru jen git pull, bez sestavení Dockeru
-4. Změna kódu aplikace: na serveru git pull, pak docker build a nový kontejner s připojenou složkou wwwroot
+3. Změna stránky ve wwwroot: na serveru jen git pull, bez publikace
+4. Změna kódu aplikace: na serveru git pull, zastavit službu, dotnet publish, službu znovu spustit
