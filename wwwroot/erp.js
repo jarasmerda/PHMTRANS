@@ -5,7 +5,9 @@ const text = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
 const dateFormat = new Intl.DateTimeFormat("cs-CZ");
 const fromInput = document.querySelector("#from");
 const toInput = document.querySelector("#to");
+const customerInput = document.querySelector("#customer");
 const message = document.querySelector("#message");
+let requestSeq = 0;
 
 const today = new Date();
 const iso = (date) => date.toISOString().slice(0, 10);
@@ -33,23 +35,79 @@ function pill(status) {
   return `<span class="pill ${kind}">${text(status)}</span>`;
 }
 
-async function load(event) {
-  event?.preventDefault();
-  showMessage("Načítám faktury z Pohody…");
-  document.querySelector("#cards").hidden = true;
-  document.querySelector("#chart-wrap").hidden = true;
-  document.querySelector("#table-wrap").hidden = true;
+function customerNames(data) {
+  if (Array.isArray(data.customers))
+    return data.customers.map((name) => String(name ?? "").trim()).filter((name) => name.length > 0);
 
-  const response = await fetch(`/api/bi/issued-invoices?from=${fromInput.value}&to=${toInput.value}`);
+  const names = [];
+  const seen = new Set();
+  for (const invoice of data.invoices ?? []) {
+    const name = String(invoice.customer ?? "").trim();
+    const key = name.toLocaleLowerCase("cs-CZ");
+    if (name.length === 0 || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  names.sort((left, right) => left.localeCompare(right, "cs-CZ"));
+  return names;
+}
+
+function fillCustomers(names) {
+  const selected = customerInput.value;
+  customerInput.replaceChildren(new Option("Všichni odběratelé", ""));
+  for (const name of names)
+    customerInput.add(new Option(name, name));
+
+  if (selected && names.includes(selected)) {
+    customerInput.value = selected;
+    return false;
+  }
+
+  customerInput.value = "";
+  return selected.length > 0;
+}
+
+async function load(event, refresh = false) {
+  event?.preventDefault();
+  const current = ++requestSeq;
+  if (refresh) {
+    showMessage("Načítám faktury z Pohody…");
+    document.querySelector("#cards").hidden = true;
+    document.querySelector("#chart-wrap").hidden = true;
+    document.querySelector("#table-wrap").hidden = true;
+  } else {
+    showMessage("Filtruji faktury…");
+  }
+
+  const params = new URLSearchParams({ from: fromInput.value, to: toInput.value, refresh: refresh ? "true" : "false" });
+  if (customerInput.value)
+    params.set("customer", customerInput.value);
+
+  let response;
+  try {
+    response = await fetch(`/api/bi/issued-invoices?${params}`);
+  } catch {
+    if (current !== requestSeq) return;
+    showMessage("Faktury se nepodařilo načíst.");
+    return;
+  }
+  if (current !== requestSeq) return;
   if (response.status === 401) {
     location.href = "/login.html";
     return;
   }
   const data = await response.json();
+  if (current !== requestSeq) return;
   if (!response.ok) {
     showMessage(data.message || "Faktury se nepodařilo načíst.");
     return;
   }
+
+  if (fillCustomers(customerNames(data))) {
+    await load(null, false);
+    return;
+  }
+  if (current !== requestSeq) return;
 
   showMessage("");
   document.querySelector("#count").textContent = data.count;
@@ -80,7 +138,9 @@ async function load(event) {
       <td class="num">${money.format(remaining)}</td>
       <td>${pill(invoice.status)}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="8">V tomto období není žádná vydaná faktura.</td></tr>`;
+  }).join("") || `<tr><td colspan="8">${customerInput.value
+    ? "Pro vybraného odběratele v tomto období není žádná vydaná faktura."
+    : "V tomto období není žádná vydaná faktura."}</td></tr>`;
   document.querySelector("#table-wrap").hidden = false;
 }
 
@@ -90,11 +150,12 @@ document.querySelector("#logout").addEventListener("click", async () => {
 });
 
 setRange("year");
-document.querySelector("#range").addEventListener("submit", load);
+document.querySelector("#range").addEventListener("submit", (event) => load(event, true));
 document.querySelectorAll("[data-range]").forEach((button) => {
   button.addEventListener("click", () => {
     setRange(button.dataset.range);
-    load();
+    load(null, true);
   });
 });
-load();
+customerInput.addEventListener("change", () => load(null, false));
+load(null, true);

@@ -121,16 +121,26 @@ label {
   font-weight: 700;
 }
 
-input, button {
+input, select, button {
   font: inherit;
   border-radius: 10px;
 }
 
-input {
+input, select {
   border: 1px solid var(--border);
   background: var(--surface);
   padding: 0.45rem 0.55rem;
   color: var(--text);
+}
+
+select {
+  min-width: min(16rem, 100%);
+  max-width: 24rem;
+}
+
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 button {
