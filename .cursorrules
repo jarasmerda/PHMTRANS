@@ -28,6 +28,7 @@
 - Uživatel, heslo a IČO nejsou v gitu. Na serveru jsou v appsettings.Production.json ve vlastnostech Pohoda:Username, Pohoda:Password a Pohoda:Ico
 
 ## Důležité soubory
+- PREHLED.md je podklad aktuálního nastavení pro další úpravy
 - Program.cs
 - appsettings.json
 - appsettings.Production.json jen na serveru, mimo git
