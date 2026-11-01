@@ -42,6 +42,9 @@ public static class BiEndpoints
         app.MapGet("/api/bi/issued-invoices", async (
             DateOnly? from,
             DateOnly? to,
+            string? customer,
+            bool? refresh,
+            IssuedInvoiceCache cache,
             PohodaMServerClient pohoda,
             CancellationToken cancellationToken) =>
         {
@@ -53,8 +56,14 @@ public static class BiEndpoints
 
             try
             {
-                var invoices = await pohoda.ListIssuedInvoicesAsync(start, end, cancellationToken);
-                return Results.Ok(CreateReport(start, end, invoices));
+                var invoices = await cache.GetOrLoadAsync(
+                    start,
+                    end,
+                    refresh ?? true,
+                    token => pohoda.ListIssuedInvoicesAsync(start, end, token),
+                    cancellationToken);
+                var selected = string.IsNullOrWhiteSpace(customer) ? null : customer.Trim();
+                return Results.Ok(CreateReport(start, end, invoices, selected));
             }
             catch (PohodaException exception)
             {
@@ -70,23 +79,29 @@ public static class BiEndpoints
             || name.Equals("erp.phmtrans.cz", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IssuedInvoiceReport CreateReport(DateOnly from, DateOnly to, IReadOnlyList<IssuedInvoice> invoices)
+    private static IssuedInvoiceReport CreateReport(
+        DateOnly from,
+        DateOnly to,
+        IReadOnlyList<IssuedInvoice> invoices,
+        string? customer)
     {
-        var total = invoices.Sum(invoice => invoice.Total);
-        var paid = invoices.Sum(invoice => invoice.Paid);
-        var unpaid = invoices.Sum(invoice => Math.Max(0, invoice.Total - invoice.Paid));
-        var overdue = invoices
+        var customers = InvoiceCustomerFilter.Names(invoices);
+        var filtered = InvoiceCustomerFilter.Apply(invoices, customer);
+        var total = filtered.Sum(invoice => invoice.Total);
+        var paid = filtered.Sum(invoice => invoice.Paid);
+        var unpaid = filtered.Sum(invoice => Math.Max(0, invoice.Total - invoice.Paid));
+        var overdue = filtered
             .Where(invoice => invoice.Status == "Po splatnosti")
             .Sum(invoice => Math.Max(0, invoice.Total - invoice.Paid));
 
         var months = new List<InvoiceMonth>();
         for (var cursor = new DateOnly(from.Year, from.Month, 1); cursor <= to; cursor = cursor.AddMonths(1))
         {
-            var inMonth = invoices.Where(invoice => invoice.Date is { } date && date.Year == cursor.Year && date.Month == cursor.Month).ToArray();
+            var inMonth = filtered.Where(invoice => invoice.Date is { } date && date.Year == cursor.Year && date.Month == cursor.Month).ToArray();
             months.Add(new InvoiceMonth($"{cursor.Year:0000}-{cursor.Month:00}", inMonth.Sum(invoice => invoice.Total), inMonth.Length));
         }
 
-        return new IssuedInvoiceReport(from, to, invoices.Count, total, paid, unpaid, overdue, months, invoices);
+        return new IssuedInvoiceReport(from, to, filtered.Count, total, paid, unpaid, overdue, months, filtered, customers, customer);
     }
 }
 
@@ -101,4 +116,6 @@ public sealed record IssuedInvoiceReport(
     decimal Unpaid,
     decimal Overdue,
     IReadOnlyList<InvoiceMonth> Months,
-    IReadOnlyList<IssuedInvoice> Invoices);
+    IReadOnlyList<IssuedInvoice> Invoices,
+    IReadOnlyList<string> Customers,
+    string? CustomerFilter);

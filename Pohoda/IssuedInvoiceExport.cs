@@ -75,9 +75,7 @@ public static class IssuedInvoiceExport
         if (number.Length == 0)
             number = Text(header, "ids");
 
-        var customer = Text(header, "company");
-        if (customer.Length == 0)
-            customer = Text(header, "name");
+        var customer = CustomerName(header);
 
         var total = HomeTotal(invoice);
         var paid = PaidAmount(invoice);
@@ -124,6 +122,17 @@ public static class IssuedInvoiceExport
         if (due is not null && due.Value < DateOnly.FromDateTime(DateTime.Today))
             return "Po splatnosti";
         return "Neuhrazeno";
+    }
+
+    private static string CustomerName(XElement header)
+    {
+        var partner = header.Elements().FirstOrDefault(element => element.Name.LocalName == "partnerIdentity");
+        var source = partner is null
+            ? header
+            : partner.Elements().FirstOrDefault(element => element.Name.LocalName == "address") ?? partner;
+
+        var company = Text(source, "company");
+        return company.Length > 0 ? company : Text(source, "name");
     }
 
     private static string Text(XElement root, string localName) =>
