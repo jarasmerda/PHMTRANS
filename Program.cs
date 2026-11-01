@@ -53,7 +53,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 builder.Services.Configure<PohodaOptions>(builder.Configuration.GetSection(PohodaOptions.SectionName));
 builder.Services.AddSingleton<IssuedInvoiceCache>();
-builder.Services.AddSingleton<DispatchStore>();
+builder.Services.AddSingleton<SqlDispatchStore>();
+builder.Services.AddSingleton<IDispatchStore>(sp => sp.GetRequiredService<SqlDispatchStore>());
+builder.Services.AddHostedService<DispatchSchemaInitializer>();
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>

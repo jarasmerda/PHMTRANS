@@ -14,8 +14,8 @@ Nový modul kopíruje existující řezy, nepřidává novou hostitelskou aplika
 | Host se bere z `X-Forwarded-Host`, jinak z `Request.Host` | Stejně. `erp.phmtrans.cz` a `www.erp.phmtrans.cz` dál řeší jen BI middleware |
 | Cookie `phmtrans-auth`, 12 hodin, posuvná, login přes mServer | Stejný `POST /api/login` a `POST /api/logout`. Heslo dispečera se proti Pohodě jen ověří |
 | Stránka `erp.html` + `erp.js` + proměnné v `erp.css` | `dispecink.html` + `dispecink.js` linkují `erp.css` a nepřepisují ho |
-| `IssuedInvoiceCache` jako jeden singleton se zámkem | `DispatchStore` jako singleton se zámkem |
-| Data CPQ v `Data/` vedle obsahu, mimo git | JSON dispečinku je taky mimo git a je označený jako dočasný |
+| `IssuedInvoiceCache` jako jeden singleton | `SqlDispatchStore` jako singleton nad SQL Serverem |
+| Hesla Pohody jen v proměnných počítače | Connection string dispečinku jen v `ConnectionStrings__Dispatch`, v gitu je prázdný |
 
 ERP filtr odběratelů (`InvoiceCustomerFilter`), přehled faktur a CPQ se tímto modulem nemění. Cookie nemá `Domain=.phmtrans.cz`, takže přihlášení na ERP a na dispečinku jsou dvě samostatné session se stejnými údaji Pohody. Rozšíření cookie na celou doménu by změnilo chování ERP, proto tu není.
 
@@ -23,7 +23,7 @@ ERP filtr odběratelů (`InvoiceCustomerFilter`), přehled faktur a CPQ se tímt
 
 - **Zakázka** je obchodní požadavek zákazníka. Později to bude přijatá objednávka Pohody. V datech je na jízdě volitelné `orderCode`.
 - **Jízda** je jeden výkon: odkud, kam, termín, vozidlo, řidič a stav. První verze pracuje s jízdou. Jedna zakázka může později mít víc jízd (překládka, druhý závoz). Teď je vztah 1:1 a obě čísla mohou být vyplněná nezávisle.
-- **Vozidlo** a **řidič** jsou číselníky. V první verzi jsou součástí stejného JSON souboru, bez samostatné administrace.
+- **Vozidlo** a **řidič** jsou číselníky v tabulkách `Disp_Vehicle` a `Disp_Driver`. Deska je jen čte a přiřazuje. Nový řádek se zatím vkládá do SQL, samostatná správa v aplikaci není.
 
 ## První verze
 
@@ -35,18 +35,18 @@ Umí tohle:
 - přiřazení vozidla a řidiče z číselníku
 - ruční změnu stavu
 - kořen `disp.phmtrans.cz` a `www.disp.phmtrans.cz` otevře desku (ERP host se nemění)
-- úložiště je JSON soubor. V odpovědi API je `storage: "temporary-json"` a věta, že to není databáze
+- úložiště je SQL Server, tabulky `Disp_*`. V odpovědi API je `storage: "sql"`. Do Pohody se nezapisuje
 
-Záměrně v první verzi není: mapa, GPS, notifikace, import objednávek, zápis faktury, správa vozového parku, účty řidičů, historie stavů.
+Záměrně v první verzi není: mapa, GPS, notifikace, import objednávek, zápis faktury, správa vozového parku v UI, účty řidičů, historie stavů.
 
-Ukázkové jízdy vzniknou jen když soubor ještě neexistuje. Poznámka u nich říká, že jsou ukázkové. Smazání souboru ukázku založí znovu.
+Chybějící `ConnectionStrings:Dispatch` aplikaci neshodí. ERP běží dál a dispečink vrátí text, že connection string není nastavený. Prázdná databáze nemá ukázkové jízdy.
 
 ## Obrazovka
 
 `/dispecink.html`
 
 - hlavička ve stejném tvaru jako ERP: značka PHM TRANS, odkaz Rozcestník na `https://www.phmtrans.cz/`, odhlášení
-- věta o dočasném úložišti z API
+- věta z API, že data jsou v SQL a do Pohody se nezapisuje
 - pět karet: Nové, Přiřazené, Na cestě, Vyložené, Zrušené
 - filtr stavu a obnovení
 - tabulka jízd: kód jízdy, zakázka, termín, zákazník, trasa, náklad, výběr vozidla, výběr řidiče, výběr stavu, Uložit
@@ -82,7 +82,7 @@ Když dispečer stav ve výběru změní, uloží se ta vybraná hodnota a autom
 
 ## Datový model
 
-Cílová podoba. V první verzi jsou v souboru jen vozidla, řidiči a jízdy. Ostatní entity jsou smlouva pro další fáze, aby se JSON nemusel lámat znovu od nuly. Pole, která verze 1 neukládá, jsou označená.
+Cílová podoba. V SQL jsou teď vozidla, řidiči a jízdy. Ostatní entity jsou smlouva pro další fáze, nové sloupce se doplní migrací, ne přepsáním cizí tabulky. Pole, která verze 1 neukládá, jsou označená.
 
 ### Vozidlo
 
@@ -163,36 +163,32 @@ Všechno pod `/api/dispatch` vyžaduje cookie. Bez ní je `401` a JSON `{ "messa
 }
 ```
 
-Neznámá jízda je `404`. Neznámé vozidlo, řidič nebo stav je `400` s `{ "message" }`. Poškozený JSON je `500` a soubor se nepřepisuje ukázkou.
+Neznámá jízda je `404`. Neznámé vozidlo, řidič nebo stav je `400` s `{ "message" }`. Nedostupný SQL Server nebo chybějící connection string je `500` s českým `{ "message" }`. `storage` je vždy `"sql"`.
 
 Kód jízdy je `J{rok}-{čtyři číslice}`. Čítač je nejvyšší známé číslo v daném roce plus jedna. Rok se bere z času serveru.
 
-## Dočasné úložiště
+## SQL úložiště
 
-Třída `DispatchStore`. Na disku je jeden soubor `store.json` ve tvaru:
+Třída `SqlDispatchStore`, přístup přes `Microsoft.Data.SqlClient` a Dapper. Databáze je `Smerco_26950430_2026` na `192.168.1.54\POHODASQL`. Je samostatná pro dispečink. Účet v connection stringu nemá být v jiných databázích a aplikace do Pohody nezapisuje.
 
-```json
-{
-  "version": 1,
-  "notice": "Dočasné úložiště…",
-  "vehicles": [],
-  "drivers": [],
-  "trips": []
-}
+Connection string je jen `ConnectionStrings:Dispatch`. Na serveru je to proměnná počítače `ConnectionStrings__Dispatch`. V `appsettings.json` je prázdný řetězec, heslo v gitu není.
+
+Při startu služby se na pozadí spustí idempotentní skript. Když connection string chybí nebo SQL neodpoví, start ERP pokračuje a chyba se jen zaloguje. Další požadavek na dispečink schéma zkusí znovu.
+
+Skript zakládá tabulku jen když `OBJECT_ID` je prázdné. Nemá `DROP`, `DELETE`, `ALTER` ani `UPDATE` a neobsahuje jméno databáze, takže nepřepne kontext na jinou databázi.
+
+| Tabulka | Sloupce |
+| --- | --- |
+| `dbo.Disp_Vehicle` | `Id nvarchar(64)` PK, `Plate nvarchar(32)`, `Label nvarchar(160)` |
+| `dbo.Disp_Driver` | `Id nvarchar(64)` PK, `Name nvarchar(160)`, `Phone nvarchar(40)` NULL |
+| `dbo.Disp_Trip` | `Id` PK, `Code nvarchar(20)` unique, `OrderCode nvarchar(40)` NULL, `Customer`, `LoadingPlace`, `UnloadingPlace` po `nvarchar(160)`, `Cargo nvarchar(80)`, `PlannedStart datetimeoffset(3)`, `Status nvarchar(20)`, `VehicleId` a `DriverId` NULL s cizím klíčem na číselník, `Note nvarchar(500)` NULL, `UpdatedAt datetimeoffset(3)` |
+
+Zápis jízdy bere aplikační zámek `PHMTRANS_Disp` v transakci, ať dva požadavky nevyrobí stejný kód. Číselníky deska nemění. Vozidlo a řidič se vloží ručně, například:
+
+```sql
+INSERT INTO dbo.Disp_Vehicle (Id, Plate, Label) VALUES (N'veh-1', N'1A2 3456', N'Cisterna MAN 32 m³');
+INSERT INTO dbo.Disp_Driver (Id, Name, Phone) VALUES (N'drv-1', N'Jan Novák', N'+420 601 000 001');
 ```
-
-`version` větší než 1 služba odmítne načíst, ať novější soubor nezničí starší program.
-
-Volitelný klíč `Dispatch:StorePath` (nebo stejně pojmenovaná proměnná konfigurace) soubor přesune jinam. V gitu nastavený není.
-
-Cesta:
-
-- Produkce, když vedle složky procesu leží `wwwroot` (dnes `C:\PHMTRANS\app` a `C:\PHMTRANS\wwwroot`): `C:\PHMTRANS\Data\dispatch\store.json`. Běžný `dotnet publish` do `C:\PHMTRANS\app` ten soubor nemaže.
-- `dotnet run` a obraz bez sousedního `wwwroot`: `{ContentRoot}/Data/dispatch/store.json`. V repozitáři je `Data/dispatch/` v `.gitignore`.
-
-Soubor je dočasný i když publish přežije. Není to databáze, není v záloze Pohody a drží ho jeden proces služby. Zápis je pod zámkem, nejdřív do `store.json.tmp`, pak přesun. Ruční úprava za běhu služby se dalším uložením přepíše.
-
-Až bude fáze trvalých dat, stejné endpointy zůstanou a vymění se jen `DispatchStore` za SQL. Stránka se tím nemá měnit.
 
 ## Napojení na ERP a Pohodu
 
@@ -211,7 +207,7 @@ ERP stránka faktur se kvůli tomu nemění. Proklik z jízdy na fakturu může 
 
 ## Mapa
 
-Samostatný krok po trvalých datech. Nemá smysl kreslit mapu nad ukázkovým JSON bez souřadnic.
+Samostatný krok. Deska souřadnice vozidel neukládá.
 
 - stránka `/dispecink-mapa.html` vedle desky, stejná cookie
 - podkladové dlaždice (OpenStreetMap nebo firemní podklad, až bude licence)
@@ -232,18 +228,18 @@ Pořadí, až bude komu je posílat:
 3. SMS nebo zpráva řidiči na `phone`. Odeslání přes poskytovatele, šablona v češtině, u jízdy záznam události.
 4. Prohlížečové notifikace jen jako doplněk, ne jako jediný kanál. Dispečink bývá otevřený pořád, ale záložka uspaná notifikaci neunese.
 
-Notifikace nesmí odejít z ukázkových dat. Kanál se zapne až nad trvalým úložištěm a vypínačem v nastavení služby.
+Kanál se zapne až vypínačem v nastavení služby, ne sám od sebe při uložení jízdy.
 
 ## Fáze
 
-1. **Deska.** Tento stav repozitáře: jízdy, přiřazení, stavy, cookie, hostitel, dočasný JSON.
-2. **Trvalá data.** SQL (na Windows serveru rozumně SQL Server, nebo SQLite kdyby měla stačit jedna služba). Správa vozidel a řidičů, `active`, historie stavů. Endpointy desky zůstanou.
+1. **Deska.** Jízdy, přiřazení, stavy, cookie, hostitel. Data jsou v SQL, tabulky `Disp_*`.
+2. **Správa číselníků.** Obrazovka pro vozidla a řidiče, `active`, historie stavů. Endpointy desky zůstanou.
 3. **Pohoda.** Import přijatých objednávek, našeptávač partnera, číslo vydané faktury na jízdě. Pořád bez automatického vystavení faktury.
 4. **Mapa a poloha.** Stránka mapy, body vozidel, později geokódování nakládky a vykládky.
 5. **Notifikace.** Nejdřív zvýraznění na desce, pak mail, pak SMS řidiči.
 6. **Pohled řidiče.** Úzká stránka, jen jeho jízdy, přechod `Přiřazená` → `Na cestě` → `Vyložená`, odeslání polohy. Dispečer dál smí stav přepsat.
 
-Fáze 2 je podmínka pro 3 až 6. JSON se nemá rozšiřovat o GPS frontu.
+Fáze 2 je podmínka pro pohodlnou správu parku. Mapa a notifikace potřebují další sloupce, ne další JSON.
 
 ## Nasazení `disp.phmtrans.cz`
 
@@ -281,4 +277,40 @@ IIS a DNS:
 - Když IIS neslouží jako celý ARR, ale kořen webu je `C:\PHMTRANS\wwwroot`, platí pravidla ve `wwwroot/web.config`: pro hostitele `disp.phmtrans.cz` se `/` přepíše na `dispecink.html` a `/api/*` se pošle na `http://127.0.0.1:8089/api/*`. Pravidla ERP se nemění.
 - Prázdný jiný web IIS na tom samém hostiteli bude dál vracet 404, dokud se vazba nepřehodí.
 
-Soubor jízd po prvním přihlášeném načtení desky: `C:\PHMTRANS\Data\dispatch\store.json`. Do publikace nepatří a v gitu není.
+## Připojení SQL
+
+Heslo nepatří do gitu. V `appsettings.json` je `ConnectionStrings:Dispatch` prázdné. Služba bere proměnnou počítače `ConnectionStrings__Dispatch`. Bez ní `/health` zůstane v pořádku a deska po přihlášení řekne, že connection string chybí.
+
+Účet jen pro databázi `Smerco_26950430_2026`, ne pro zbytek instance a ne `sysadmin`. Heslo v příkazu vyměnit:
+
+```sql
+CREATE LOGIN [phmtrans_dispatch] WITH PASSWORD = N'heslo-jen-na-serveru', CHECK_POLICY = ON;
+GO
+USE [Smerco_26950430_2026];
+GO
+CREATE USER [phmtrans_dispatch] FOR LOGIN [phmtrans_dispatch];
+ALTER ROLE db_datareader ADD MEMBER [phmtrans_dispatch];
+ALTER ROLE db_datawriter ADD MEMBER [phmtrans_dispatch];
+ALTER ROLE db_ddladmin ADD MEMBER [phmtrans_dispatch];
+```
+
+`db_ddladmin` je jen v téhle databázi, aby služba při startu založila chybějící `Disp_*`. Jiné databáze na instanci účet nevidí, dokud se v nich nezaloží uživatel. To se dělat nemá.
+
+TCP pro pojmenovanou instanci `POHODASQL`:
+
+1. SQL Server Configuration Manager → Protocols for POHODASQL → TCP/IP → Enabled.
+2. U TCP/IP, záložka IP Addresses, u IPAll doplnit pevný port (třeba 1433, když je volný) a vymazat dynamický port.
+3. Služba SQL Server Browser zapnutá a Automatic, jinak se `server\POHODASQL` bez portu nerozjede. UDP 1434.
+4. Restart služby SQL Server (POHODASQL).
+5. Firewall na `192.168.1.54`: příchozí TCP na zvolený port a UDP 1434, ze serveru, kde běží služba PHMTRANS.
+
+Proměnná se nastavuje z vyvýšeného PowerShellu. Služba Windows ji uvidí až po restartu. `Encrypt=True` a `TrustServerCertificate=True` patří k internímu SQL bez důvěryhodného certifikátu. Heslo se středníkem se v connection stringu dává do složených závorek.
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+  'ConnectionStrings__Dispatch',
+  'Server=192.168.1.54\POHODASQL;Database=Smerco_26950430_2026;User ID=phmtrans_dispatch;Password=heslo-jen-na-serveru;Encrypt=True;TrustServerCertificate=True;',
+  'Machine')
+```
+
+Po nastavení proměnné teprve zastavit službu, publikovat a spustit. `/health` musí být v pořádku i když SQL ještě nejede. Po přihlášení deska buď ukáže jízdy, nebo českou chybu připojení. Vozidla a řidiči v prázdné databázi nejsou, vloží se do `Disp_Vehicle` a `Disp_Driver`. Tabulky založí sama služba.

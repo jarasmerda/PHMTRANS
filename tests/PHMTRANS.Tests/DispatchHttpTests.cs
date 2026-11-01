@@ -56,8 +56,9 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         var data = await client.SendAsync(Request("/api/dispatch/board", "disp.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, data.StatusCode);
         using var json = JsonDocument.Parse(await data.Content.ReadAsStringAsync());
-        Assert.Equal(DispatchStore.StorageKind, json.RootElement.GetProperty("storage").GetString());
-        Assert.Contains("Dočasné", json.RootElement.GetProperty("storageNote").GetString(), StringComparison.Ordinal);
+        Assert.Equal(DispatchStorage.Kind, json.RootElement.GetProperty("storage").GetString());
+        Assert.Equal("sql", json.RootElement.GetProperty("storage").GetString());
+        Assert.Contains("Pohody", json.RootElement.GetProperty("storageNote").GetString(), StringComparison.Ordinal);
         Assert.True(json.RootElement.GetProperty("trips").GetArrayLength() >= 5);
 
         var trip = json.RootElement.GetProperty("trips").EnumerateArray()
@@ -89,11 +90,66 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
 
 public sealed class DispatchApp : WebApplicationFactory<Program>
 {
-    private readonly string _storeDirectory = Directory.CreateTempSubdirectory("phmtrans-dispatch-http").FullName;
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseSetting("Dispatch:StorePath", Path.Combine(_storeDirectory, "store.json"));
+        builder.UseContentRoot(FindContentRoot());
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddAuthentication().AddScheme<AuthenticationSchemeOptions, TestAuthHandler>("Test", _ => { });
+            services.PostConfigure<AuthenticationOptions>(options =>
+            {
+                options.DefaultAuthenticateScheme = "Test";
+                options.DefaultChallengeScheme = "Test";
+            });
+            foreach (var descriptor in services.Where(item => item.ServiceType == typeof(IDispatchStore)).ToList())
+                services.Remove(descriptor);
+            services.AddSingleton<IDispatchStore, MemoryDispatchStore>();
+        });
+    }
+
+    private static string FindContentRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "wwwroot", "dispecink.html")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Nenalezen obsah aplikace.");
+    }
+}
+
+public sealed class DispatchWithoutDatabaseTests : IClassFixture<DispatchBareApp>
+{
+    private readonly DispatchBareApp _app;
+
+    public DispatchWithoutDatabaseTests(DispatchBareApp app) => _app = app;
+
+    [Fact]
+    public async Task Health_stays_up_and_dispatch_explains_the_missing_connection_string()
+    {
+        using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var health = await client.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.OK, health.StatusCode);
+
+        var anonymous = await client.GetAsync("/api/dispatch/board");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        var board = new HttpRequestMessage(HttpMethod.Get, "/api/dispatch/board");
+        board.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
+        var response = await client.SendAsync(board);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Contains("ConnectionStrings:Dispatch", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+}
+
+public sealed class DispatchBareApp : WebApplicationFactory<Program>
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
         builder.UseContentRoot(FindContentRoot());
         builder.ConfigureTestServices(services =>
         {
@@ -117,13 +173,6 @@ public sealed class DispatchApp : WebApplicationFactory<Program>
         }
 
         throw new InvalidOperationException("Nenalezen obsah aplikace.");
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-        if (disposing && Directory.Exists(_storeDirectory))
-            Directory.Delete(_storeDirectory, recursive: true);
     }
 }
 

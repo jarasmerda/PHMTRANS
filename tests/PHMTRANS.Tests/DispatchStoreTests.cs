@@ -1,31 +1,19 @@
-using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging.Abstractions;
 using PHMTRANS.Dispatch;
 using Xunit;
 
 namespace PHMTRANS.Tests;
 
-public sealed class DispatchStoreTests : IDisposable
+public sealed class DispatchStoreTests
 {
-    private readonly string _root = Directory.CreateTempSubdirectory("phmtrans-dispatch").FullName;
-    private readonly DispatchStore _store;
-
-    public DispatchStoreTests()
-    {
-        var environment = new TestHostEnvironment(_root);
-        _store = new DispatchStore(environment, new ConfigurationBuilder().Build(), NullLogger<DispatchStore>.Instance);
-    }
+    private readonly MemoryDispatchStore _store = new();
 
     [Fact]
-    public async Task Seed_is_temporary_and_covers_every_status()
+    public async Task Seed_covers_every_status()
     {
         var snapshot = await _store.ReadAsync(CancellationToken.None);
-        var file = StoreFile();
 
-        Assert.StartsWith(_root, file, StringComparison.Ordinal);
-        Assert.Contains("Dočasné úložiště", await File.ReadAllTextAsync(file), StringComparison.Ordinal);
         Assert.Equal(3, snapshot.Vehicles.Count);
         Assert.Equal(3, snapshot.Drivers.Count);
         Assert.Equal(DispatchStatuses.All.Count, snapshot.Trips.Select(trip => trip.Status).Distinct().Count());
@@ -76,7 +64,7 @@ public sealed class DispatchStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Unknown_vehicle_is_rejected_and_file_stays()
+    public async Task Unknown_vehicle_is_rejected_and_state_stays()
     {
         var before = await _store.ReadAsync(CancellationToken.None);
         var trip = before.Trips.Single(item => item.Status == DispatchStatuses.Nova);
@@ -90,7 +78,7 @@ public sealed class DispatchStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Status_change_is_reloaded_from_disk()
+    public async Task Status_change_is_visible_on_the_next_read()
     {
         var snapshot = await _store.ReadAsync(CancellationToken.None);
         var trip = snapshot.Trips.Single(item => item.Status == DispatchStatuses.Zrusena);
@@ -98,8 +86,7 @@ public sealed class DispatchStoreTests : IDisposable
         var result = await _store.SetStatusAsync(trip.Id, DispatchStatuses.Nova, CancellationToken.None);
         Assert.IsType<DispatchMutation.Success>(result);
 
-        var reloaded = new DispatchStore(new TestHostEnvironment(_root), new ConfigurationBuilder().Build(), NullLogger<DispatchStore>.Instance);
-        var again = await reloaded.ReadAsync(CancellationToken.None);
+        var again = await _store.ReadAsync(CancellationToken.None);
         Assert.Equal(DispatchStatuses.Nova, again.Trips.Single(item => item.Id == trip.Id).Status);
     }
 
@@ -119,32 +106,52 @@ public sealed class DispatchStoreTests : IDisposable
         Assert.Equal(year == 2026 ? "J2026-0145" : $"J{year}-0001", trip.Code);
         Assert.Equal(DispatchStatuses.Nova, trip.Status);
     }
+}
 
+public sealed class DispatchSqlGuardTests
+{
     [Fact]
-    public async Task Corrupt_file_is_not_replaced_by_seed()
+    public void Schema_script_only_creates_missing_dispatch_tables()
     {
-        await _store.ReadAsync(CancellationToken.None);
-        var file = StoreFile();
-        await File.WriteAllTextAsync(file, "{");
+        var script = DispatchSchema.Script;
 
-        var exception = await Assert.ThrowsAsync<DispatchStoreException>(() => _store.ReadAsync(CancellationToken.None));
-
-        Assert.Contains("načíst", exception.Message, StringComparison.Ordinal);
-        Assert.Equal("{", await File.ReadAllTextAsync(file));
+        Assert.Contains("dbo.Disp_Vehicle", script, StringComparison.Ordinal);
+        Assert.Contains("dbo.Disp_Driver", script, StringComparison.Ordinal);
+        Assert.Contains("dbo.Disp_Trip", script, StringComparison.Ordinal);
+        Assert.Equal(3, Count(script, "IF OBJECT_ID"));
+        Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DELETE", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ALTER ", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE ", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Smerco_", script, StringComparison.OrdinalIgnoreCase);
     }
 
-    public void Dispose() => Directory.Delete(_root, recursive: true);
-
-    private string StoreFile() =>
-        Directory.EnumerateFiles(_root, "store.json", SearchOption.AllDirectories).Single();
-
-    private sealed class TestHostEnvironment(string root) : IWebHostEnvironment
+    [Fact]
+    public async Task Missing_connection_string_does_not_open_sql_and_explains_the_gap()
     {
-        public string EnvironmentName { get; set; } = "Development";
-        public string ApplicationName { get; set; } = "PHMTRANS.Tests";
-        public string ContentRootPath { get; set; } = root;
-        public string WebRootPath { get; set; } = root;
-        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
-        public IFileProvider WebRootFileProvider { get; set; } = new NullFileProvider();
+        var store = new SqlDispatchStore(new ConfigurationBuilder().Build(), NullLogger<SqlDispatchStore>.Instance);
+
+        var read = await Assert.ThrowsAsync<DispatchStoreException>(() => store.ReadAsync(CancellationToken.None));
+        var created = await Assert.ThrowsAsync<DispatchStoreException>(() => store.AddTripAsync(
+            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now, null),
+            CancellationToken.None));
+
+        Assert.Contains("ConnectionStrings:Dispatch", read.Message, StringComparison.Ordinal);
+        Assert.Equal(read.Message, created.Message);
+        await store.TryInitializeAsync(CancellationToken.None);
+    }
+
+    private static int Count(string text, string value)
+    {
+        var count = 0;
+        var start = 0;
+        while ((start = text.IndexOf(value, start, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            start += value.Length;
+        }
+
+        return count;
     }
 }

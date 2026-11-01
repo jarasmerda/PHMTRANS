@@ -1,0 +1,222 @@
+using Dapper;
+using Microsoft.Data.SqlClient;
+
+namespace PHMTRANS.Dispatch;
+
+public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDispatchStore> logger) : IDispatchStore
+{
+    private readonly string? _connectionString = configuration.GetConnectionString("Dispatch");
+    private readonly SemaphoreSlim _schemaGate = new(1, 1);
+    private int _schemaReady;
+
+    public async Task TryInitializeAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_connectionString))
+        {
+            logger.LogWarning("ConnectionStrings:Dispatch není nastavené. Dispečink data neuloží, ERP běží dál.");
+            return;
+        }
+
+        try
+        {
+            await EnsureReadyAsync(cancellationToken);
+            logger.LogInformation("Schéma dispečinku (tabulky Disp_*) je připravené.");
+        }
+        catch (DispatchStoreException)
+        {
+            // EnsureReadyAsync už chybu zapsalo. Start služby kvůli tomu nesmí spadnout.
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Schéma dispečinku se nepodařilo založit. ERP běží dál.");
+        }
+    }
+
+    public Task<DispatchSnapshot> ReadAsync(CancellationToken cancellationToken) =>
+        InConnection(async (connection, _, token) =>
+        {
+            var document = await LoadAsync(connection, transaction: null, token);
+            return DispatchRules.Snapshot(document);
+        }, cancellationToken);
+
+    public Task<DispatchMutation> AddTripAsync(NewTripRequest request, CancellationToken cancellationToken) =>
+        ChangeAsync((document, now) => DispatchRules.AddTrip(document, request, now), cancellationToken);
+
+    public Task<DispatchMutation> AssignAsync(
+        string id,
+        string? vehicleId,
+        string? driverId,
+        CancellationToken cancellationToken) =>
+        ChangeAsync((document, now) => DispatchRules.Assign(document, id, vehicleId, driverId, now), cancellationToken);
+
+    public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
+        ChangeAsync((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
+
+    private async Task<DispatchMutation> ChangeAsync(
+        Func<DispatchDocument, DateTimeOffset, DispatchMutation> change,
+        CancellationToken cancellationToken) =>
+        await InConnection(async (connection, transaction, token) =>
+        {
+            await TakeLockAsync(connection, transaction!, token);
+            var document = await LoadAsync(connection, transaction, token);
+            var known = document.Trips.Select(trip => trip.Id).ToHashSet(StringComparer.Ordinal);
+            var mutation = change(document, DateTimeOffset.Now);
+            if (mutation is not DispatchMutation.Success success)
+                return mutation;
+
+            if (known.Contains(success.Trip.Id))
+                await UpdateTripAsync(connection, transaction!, success.Trip, token);
+            else
+                await InsertTripAsync(connection, transaction!, success.Trip, token);
+
+            await transaction!.CommitAsync(token);
+            return mutation;
+        }, cancellationToken, transaction: true);
+
+    private async Task<T> InConnection<T>(
+        Func<SqlConnection, SqlTransaction?, CancellationToken, Task<T>> action,
+        CancellationToken cancellationToken,
+        bool transaction = false)
+    {
+        await EnsureReadyAsync(cancellationToken);
+        try
+        {
+            await using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync(cancellationToken);
+            if (!transaction)
+                return await action(connection, null, cancellationToken);
+
+            await using var dbTransaction = await connection.BeginTransactionAsync(cancellationToken);
+            var sqlTransaction = (SqlTransaction)dbTransaction;
+            var result = await action(connection, sqlTransaction, cancellationToken);
+            return result;
+        }
+        catch (DispatchStoreException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is SqlException or InvalidOperationException or TimeoutException or ArgumentException)
+        {
+            logger.LogError(exception, "Dispečink se nepřipojil k SQL Serveru.");
+            throw new DispatchStoreException(DispatchStorage.UnavailableMessage, exception);
+        }
+    }
+
+    private async Task EnsureReadyAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_connectionString))
+            throw new DispatchStoreException(DispatchStorage.MissingConnectionMessage);
+
+        if (Volatile.Read(ref _schemaReady) == 1)
+            return;
+
+        await _schemaGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_schemaReady == 1)
+                return;
+
+            await DispatchSchema.EnsureAsync(_connectionString, cancellationToken);
+            Volatile.Write(ref _schemaReady, 1);
+        }
+        catch (DispatchStoreException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception, "Dispečink se nepřipojil k SQL Serveru.");
+            throw new DispatchStoreException(DispatchStorage.UnavailableMessage, exception);
+        }
+        finally
+        {
+            _schemaGate.Release();
+        }
+    }
+
+    private static async Task TakeLockAsync(SqlConnection connection, SqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        var result = await connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            """
+            DECLARE @result int;
+            EXEC @result = sp_getapplock
+                @Resource = N'PHMTRANS_Disp',
+                @LockMode = N'Exclusive',
+                @LockOwner = N'Transaction',
+                @LockTimeout = 15000;
+            SELECT @result;
+            """,
+            transaction: transaction,
+            cancellationToken: cancellationToken));
+        if (result < 0)
+            throw new DispatchStoreException("Dispečink právě ukládá jinou změnu, zkuste to znovu.");
+    }
+
+    private static async Task<DispatchDocument> LoadAsync(
+        SqlConnection connection,
+        SqlTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var vehicles = (await connection.QueryAsync<DispatchVehicle>(Command(
+            "SELECT Id, Plate, Label FROM dbo.Disp_Vehicle", transaction, cancellationToken))).AsList();
+        var drivers = (await connection.QueryAsync<DispatchDriver>(Command(
+            "SELECT Id, Name, Phone FROM dbo.Disp_Driver", transaction, cancellationToken))).AsList();
+        var trips = (await connection.QueryAsync<DispatchTrip>(Command(
+            """
+            SELECT Id, Code, OrderCode, Customer, LoadingPlace, UnloadingPlace, Cargo,
+                   PlannedStart, Status, VehicleId, DriverId, Note, UpdatedAt
+            FROM dbo.Disp_Trip
+            """,
+            transaction,
+            cancellationToken))).AsList();
+        return new DispatchDocument { Vehicles = vehicles, Drivers = drivers, Trips = trips };
+    }
+
+    private static Task<int> InsertTripAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        DispatchTrip trip,
+        CancellationToken cancellationToken) =>
+        connection.ExecuteAsync(Command(
+            """
+            INSERT INTO dbo.Disp_Trip
+                (Id, Code, OrderCode, Customer, LoadingPlace, UnloadingPlace, Cargo, PlannedStart, Status, VehicleId, DriverId, Note, UpdatedAt)
+            VALUES
+                (@Id, @Code, @OrderCode, @Customer, @LoadingPlace, @UnloadingPlace, @Cargo, @PlannedStart, @Status, @VehicleId, @DriverId, @Note, @UpdatedAt)
+            """,
+            transaction,
+            cancellationToken,
+            trip));
+
+    private static Task<int> UpdateTripAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        DispatchTrip trip,
+        CancellationToken cancellationToken) =>
+        connection.ExecuteAsync(Command(
+            """
+            UPDATE dbo.Disp_Trip
+            SET OrderCode = @OrderCode,
+                Customer = @Customer,
+                LoadingPlace = @LoadingPlace,
+                UnloadingPlace = @UnloadingPlace,
+                Cargo = @Cargo,
+                PlannedStart = @PlannedStart,
+                Status = @Status,
+                VehicleId = @VehicleId,
+                DriverId = @DriverId,
+                Note = @Note,
+                UpdatedAt = @UpdatedAt
+            WHERE Id = @Id
+            """,
+            transaction,
+            cancellationToken,
+            trip));
+
+    private static CommandDefinition Command(
+        string sql,
+        SqlTransaction? transaction,
+        CancellationToken cancellationToken,
+        object? parameters = null) =>
+        new(sql, parameters, transaction, cancellationToken: cancellationToken);
+}
