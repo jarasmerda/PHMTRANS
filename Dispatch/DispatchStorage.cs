@@ -20,6 +20,8 @@ public interface IDispatchStore
 
     Task<DispatchMutation> AddTripAsync(NewTripRequest request, CancellationToken cancellationToken);
 
+    Task<DispatchMutation> UpdateTripAsync(string id, UpdateTripRequest request, CancellationToken cancellationToken);
+
     Task<DispatchMutation> AssignAsync(string id, string? vehicleId, string? driverId, CancellationToken cancellationToken);
 
     Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken);

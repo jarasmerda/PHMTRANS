@@ -10,6 +10,7 @@ let requestSeq = 0;
 let saving = false;
 let vehicles = [];
 let drivers = [];
+let board = null;
 
 function showMessage(value) {
   message.hidden = !value;
@@ -31,6 +32,12 @@ function defaultPlanned() {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function toLocalInput(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function plannedIso(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
@@ -38,13 +45,17 @@ function plannedIso(value) {
 
 function options(items, selected, emptyLabel, labelOf, titleOf) {
   const head = `<option value="">${text(emptyLabel)}</option>`;
+  const known = items.some((item) => item.id === selected);
+  const extra = selected && !known
+    ? `<option value="${text(selected)}" selected>${text(selected)}</option>`
+    : "";
   const body = items.map((item) => {
     const title = titleOf ? titleOf(item) : "";
     const selectedAttr = item.id === selected ? " selected" : "";
     const titleAttr = title ? ` title="${text(title)}"` : "";
     return `<option value="${text(item.id)}"${selectedAttr}${titleAttr}>${text(labelOf(item))}</option>`;
   }).join("");
-  return head + body;
+  return head + extra + body;
 }
 
 function statusOptions(selected) {
@@ -54,6 +65,16 @@ function statusOptions(selected) {
 
 function vehicleLabel(item) {
   return `${item.plate} · ${item.label}`;
+}
+
+function vehicleText(id) {
+  const item = vehicles.find((vehicle) => vehicle.id === id);
+  return item ? vehicleLabel(item) : (id || "Nepřiřazeno");
+}
+
+function driverText(id) {
+  const item = drivers.find((driver) => driver.id === id);
+  return item ? item.name : (id || "Nepřiřazeno");
 }
 
 function fillTripForm(vehicleList, driverList) {
@@ -80,9 +101,48 @@ function applyFilter() {
   empty.textContent = selected ? "V tomto stavu není žádná jízda." : "Zatím není žádná jízda.";
 }
 
+function displayRow(trip) {
+  const note = trip.note ? `<br><span class="route-to">${text(trip.note)}</span>` : "";
+  return `<tr data-id="${text(trip.id)}" data-status="${text(trip.status)}">
+      <td>${text(trip.code)}</td>
+      <td>${text(trip.orderCode || "—")}</td>
+      <td>${formatDate(trip.plannedStart)}</td>
+      <td>${text(trip.customer)}${note}</td>
+      <td>${text(trip.loadingPlace)}<br><span class="route-to">→ ${text(trip.unloadingPlace)}</span></td>
+      <td>${text(trip.cargo)}</td>
+      <td>${text(vehicleText(trip.vehicleId))}</td>
+      <td>${text(driverText(trip.driverId))}</td>
+      <td>${text(trip.status)}</td>
+      <td><button type="button" data-edit="${text(trip.id)}">Upravit</button></td>
+    </tr>`;
+}
+
+function editCells(trip) {
+  return `<td>${text(trip.code)}</td>
+      <td><input data-field="orderCode" maxlength="40" aria-label="Zakázka ${text(trip.code)}" value="${text(trip.orderCode || "")}"></td>
+      <td><input data-field="planned" type="datetime-local" required aria-label="Termín ${text(trip.code)}" value="${text(toLocalInput(trip.plannedStart))}"></td>
+      <td><div class="stack">
+        <input data-field="customer" required maxlength="160" aria-label="Zákazník ${text(trip.code)}" value="${text(trip.customer)}">
+        <input data-field="note" maxlength="500" placeholder="Poznámka" aria-label="Poznámka ${text(trip.code)}" value="${text(trip.note || "")}">
+      </div></td>
+      <td><div class="stack">
+        <input data-field="loading" required maxlength="160" placeholder="Nakládka" aria-label="Nakládka ${text(trip.code)}" value="${text(trip.loadingPlace)}">
+        <input data-field="unloading" required maxlength="160" placeholder="Vykládka" aria-label="Vykládka ${text(trip.code)}" value="${text(trip.unloadingPlace)}">
+      </div></td>
+      <td><input data-field="cargo" maxlength="80" aria-label="Náklad ${text(trip.code)}" value="${text(trip.cargo || "")}"></td>
+      <td><select data-field="vehicle" aria-label="Vozidlo ${text(trip.code)}">${options(vehicles, trip.vehicleId, "Nepřiřazeno", vehicleLabel)}</select></td>
+      <td><select data-field="driver" aria-label="Řidič ${text(trip.code)}">${options(drivers, trip.driverId, "Nepřiřazeno", (item) => item.name, (item) => item.phone || "")}</select></td>
+      <td><select data-field="status" aria-label="Stav ${text(trip.code)}">${statusOptions(trip.status)}</select></td>
+      <td><div class="edit-actions">
+        <button type="button" data-save="${text(trip.id)}">Uložit změny</button>
+        <button type="button" class="ghost" data-cancel="${text(trip.id)}">Zrušit</button>
+      </div></td>`;
+}
+
 function render(data) {
   vehicles = data.vehicles ?? [];
   drivers = data.drivers ?? [];
+  board = data;
   document.querySelector("#storage").hidden = false;
   document.querySelector("#storage").textContent = data.storageNote || "";
   document.querySelector("#count-nova").textContent = count(data, "Nová");
@@ -92,20 +152,25 @@ function render(data) {
   document.querySelector("#count-zrusena").textContent = count(data, "Zrušená");
   document.querySelector("#cards").hidden = false;
 
-  rows.innerHTML = (data.trips ?? []).map((trip) => `<tr data-id="${text(trip.id)}" data-status="${text(trip.status)}">
-      <td>${text(trip.code)}</td>
-      <td>${text(trip.orderCode || "—")}</td>
-      <td>${formatDate(trip.plannedStart)}</td>
-      <td>${text(trip.customer)}${trip.note ? `<br><span class="route-to">${text(trip.note)}</span>` : ""}</td>
-      <td>${text(trip.loadingPlace)}<br><span class="route-to">→ ${text(trip.unloadingPlace)}</span></td>
-      <td>${text(trip.cargo)}</td>
-      <td><select data-field="vehicle" aria-label="Vozidlo ${text(trip.code)}">${options(vehicles, trip.vehicleId, "Nepřiřazeno", vehicleLabel)}</select></td>
-      <td><select data-field="driver" aria-label="Řidič ${text(trip.code)}">${options(drivers, trip.driverId, "Nepřiřazeno", (item) => item.name, (item) => item.phone || "")}</select></td>
-      <td><select data-field="status" aria-label="Stav ${text(trip.code)}">${statusOptions(trip.status)}</select></td>
-      <td><button type="button" data-save="${text(trip.id)}">Uložit</button></td>
-    </tr>`).join("");
+  rows.innerHTML = (data.trips ?? []).map(displayRow).join("");
   document.querySelector("#table-wrap").hidden = false;
   applyFilter();
+}
+
+function beginEdit(id) {
+  if (saving || !board) return;
+  const trip = (board.trips ?? []).find((item) => item.id === id);
+  if (!trip) return;
+  render(board);
+  const row = rows.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+  if (!row) return;
+  row.hidden = false;
+  row.innerHTML = editCells(trip);
+  row.querySelector("[data-field=customer]")?.focus();
+}
+
+function field(row, name) {
+  return row.querySelector(`[data-field="${name}"]`).value;
 }
 
 async function load() {
@@ -148,11 +213,11 @@ async function load() {
   fillTripForm(data.vehicles ?? [], data.drivers ?? []);
 }
 
-async function send(url, body) {
+async function send(url, body, method = "POST") {
   let response;
   try {
     response = await fetch(url, {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
@@ -176,28 +241,42 @@ async function saveRow(id) {
   if (saving) return;
   const row = rows.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
   if (!row) return;
-  const status = row.querySelector("[data-field=status]").value;
+  const status = field(row, "status");
   if (status === "Zrušená" && row.dataset.status !== "Zrušená" && !window.confirm("Označit jízdu jako zrušenou?"))
     return;
-
-  saving = true;
-  const vehicleId = row.querySelector("[data-field=vehicle]").value;
-  const driverId = row.querySelector("[data-field=driver]").value;
-  const userChangedStatus = status !== row.dataset.status;
-  const assigned = await send(`/api/dispatch/trips/${encodeURIComponent(id)}/assign`, { vehicleId, driverId });
-  if (!assigned) {
-    saving = false;
+  if (!field(row, "customer").trim()) {
+    showMessage("Vyplňte zákazníka.");
     return;
   }
-  if (userChangedStatus && status !== assigned.status) {
-    const changed = await send(`/api/dispatch/trips/${encodeURIComponent(id)}/status`, { status });
-    if (!changed) {
-      saving = false;
-      await load();
-      return;
-    }
+  if (!field(row, "loading").trim()) {
+    showMessage("Vyplňte místo nakládky.");
+    return;
   }
+  if (!field(row, "unloading").trim()) {
+    showMessage("Vyplňte místo vykládky.");
+    return;
+  }
+  const plannedStart = plannedIso(field(row, "planned"));
+  if (!plannedStart) {
+    showMessage("Vyplňte termín jízdy.");
+    return;
+  }
+
+  saving = true;
+  const updated = await send(`/api/dispatch/trips/${encodeURIComponent(id)}`, {
+    customer: field(row, "customer"),
+    orderCode: field(row, "orderCode"),
+    loadingPlace: field(row, "loading"),
+    unloadingPlace: field(row, "unloading"),
+    cargo: field(row, "cargo"),
+    plannedStart,
+    note: field(row, "note"),
+    vehicleId: field(row, "vehicle"),
+    driverId: field(row, "driver"),
+    status
+  }, "PUT");
   saving = false;
+  if (!updated) return;
   showMessage("");
   await load();
 }
@@ -210,8 +289,18 @@ document.querySelector("#logout").addEventListener("click", async () => {
 document.querySelector("#reload").addEventListener("click", () => load());
 statusInput.addEventListener("change", applyFilter);
 rows.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-save]");
-  if (button) saveRow(button.dataset.save);
+  const save = event.target.closest("[data-save]");
+  if (save) {
+    saveRow(save.dataset.save);
+    return;
+  }
+  const edit = event.target.closest("[data-edit]");
+  if (edit) {
+    beginEdit(edit.dataset.edit);
+    return;
+  }
+  const cancel = event.target.closest("[data-cancel]");
+  if (cancel && board) render(board);
 });
 
 document.querySelector("#planned").value = defaultPlanned();

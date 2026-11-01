@@ -42,6 +42,9 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
     public Task<DispatchMutation> AddTripAsync(NewTripRequest request, CancellationToken cancellationToken) =>
         ChangeAsync((document, now) => DispatchRules.AddTrip(document, request, now), cancellationToken);
 
+    public Task<DispatchMutation> UpdateTripAsync(string id, UpdateTripRequest request, CancellationToken cancellationToken) =>
+        ChangeAsync((document, now) => DispatchRules.UpdateTrip(document, id, request, now), cancellationToken);
+
     public Task<DispatchMutation> AssignAsync(
         string id,
         string? vehicleId,

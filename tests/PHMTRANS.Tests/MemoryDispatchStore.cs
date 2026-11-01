@@ -23,6 +23,9 @@ public sealed class MemoryDispatchStore : IDispatchStore
     public Task<DispatchMutation> AddTripAsync(NewTripRequest request, CancellationToken cancellationToken) =>
         Change((document, now) => DispatchRules.AddTrip(document, request, now), cancellationToken);
 
+    public Task<DispatchMutation> UpdateTripAsync(string id, UpdateTripRequest request, CancellationToken cancellationToken) =>
+        Change((document, now) => DispatchRules.UpdateTrip(document, id, request, now), cancellationToken);
+
     public Task<DispatchMutation> AssignAsync(string id, string? vehicleId, string? driverId, CancellationToken cancellationToken) =>
         Change((document, now) => DispatchRules.Assign(document, id, vehicleId, driverId, now), cancellationToken);
 

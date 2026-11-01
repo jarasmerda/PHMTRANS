@@ -8,9 +8,17 @@
   <style>
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
     .route-to { color: var(--text-secondary); font-size: 0.82rem; }
-    #trips { min-width: 68rem; }
-    #rows select { min-width: 7.5rem; max-width: 12rem; width: 100%; }
+    #trips { min-width: 76rem; }
+    #rows input, #rows select { min-width: 7.5rem; max-width: 14rem; width: 100%; }
+    #rows input:focus, #rows select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #rows .stack, #rows .edit-actions { display: flex; flex-direction: column; gap: 0.35rem; }
     #rows button { white-space: nowrap; }
+    #rows button.ghost {
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    #rows button.ghost:hover { background: var(--table-header); color: var(--button-hover); }
     #create-wrap {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -105,6 +113,6 @@
       <button type="submit">Přidat jízdu</button>
     </form>
   </section>
-  <script src="/dispecink.js?v=3"></script>
+  <script src="/dispecink.js?v=4"></script>
 </body>
 </html>
