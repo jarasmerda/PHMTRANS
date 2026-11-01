@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM – PHM Trans</title>
+  <link rel="stylesheet" href="/erp.css?v=5">
+  <style>
+    .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
+    .route-to { color: var(--text-secondary); font-size: 0.82rem; }
+    .tabs {
+      width: min(1180px, calc(100% - 2rem));
+      margin: 0.2rem auto 0.8rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+    .tabs button[aria-current="page"] { background: var(--button); color: var(--surface); }
+    .tabs button[aria-current="false"] {
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    .tabs button:hover { background: var(--button-hover); color: var(--surface); }
+    .cards { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
+    .cards article.ok strong { color: #1d6b32; }
+    .cards article[data-open-tab] { cursor: pointer; }
+    .cards article[data-open-tab]:hover { border-color: var(--accent); }
+    #customers { min-width: 72rem; }
+    #contacts { min-width: 56rem; }
+    #opportunities, #recent-opportunities-table { min-width: 64rem; }
+    #activities, #recent-activities-table { min-width: 70rem; }
+    #customer-rows input, #customer-rows select,
+    #contact-rows input, #contact-rows select,
+    #opportunity-rows input, #opportunity-rows select,
+    #activity-rows input, #activity-rows select, #activity-rows textarea {
+      min-width: 7.5rem;
+      max-width: 16rem;
+      width: 100%;
+    }
+    #customer-rows input:focus, #customer-rows select:focus,
+    #contact-rows input:focus, #contact-rows select:focus,
+    #opportunity-rows input:focus, #opportunity-rows select:focus,
+    #activity-rows input:focus, #activity-rows select:focus, #activity-rows textarea:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .stack, .edit-actions { display: flex; flex-direction: column; gap: 0.35rem; }
+    #customer-rows button, #contact-rows button, #opportunity-rows button, #activity-rows button { white-space: nowrap; }
+    button.ghost {
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    button.ghost:hover { background: var(--table-header); color: var(--button-hover); }
+    .panel-card, .create-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem;
+    }
+    .create-wrap form, .panel-card form {
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    .panel-card label { margin-bottom: 0.8rem; }
+    textarea {
+      font: inherit;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0.45rem 0.55rem;
+      color: var(--text);
+      min-width: min(18rem, 100%);
+      max-width: 32rem;
+      min-height: 4.5rem;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="brand"><span>PHM</span> TRANS</p>
+      <h1>CRM</h1>
+    </div>
+    <div class="header-actions">
+      <a class="home" href="https://www.phmtrans.cz/">Rozcestník</a>
+      <button type="button" id="logout">Odhlásit</button>
+    </div>
+  </header>
+  <section id="storage" class="note" hidden></section>
+  <p id="message" hidden></p>
+  <form id="reload-bar">
+    <button type="button" id="reload">Obnovit</button>
+  </form>
+  <nav class="tabs" aria-label="Části CRM">
+    <button type="button" data-tab="prehled" aria-current="page">Přehled</button>
+    <button type="button" data-tab="zakaznici" aria-current="false">Zákazníci</button>
+    <button type="button" data-tab="prilezitosti" aria-current="false">Příležitosti</button>
+    <button type="button" data-tab="aktivity" aria-current="false">Aktivity</button>
+  </nav>
+
+  <div data-panel="prehled">
+    <section class="cards" id="cards" hidden>
+      <article data-open-tab="zakaznici" role="button" tabindex="0"><span>Zákazníci</span><strong id="count-customers">0</strong></article>
+      <article data-open-tab="prilezitosti" data-stage="" role="button" tabindex="0"><span>Příležitosti</span><strong id="count-opportunities">0</strong></article>
+      <article data-open-tab="aktivity" data-activity-kind="" role="button" tabindex="0"><span>Aktivity</span><strong id="count-activities">0</strong></article>
+      <article data-open-tab="prilezitosti" data-stage="Nový" role="button" tabindex="0"><span>Nový</span><strong id="count-novy">0</strong></article>
+      <article data-open-tab="prilezitosti" data-stage="V jednání" role="button" tabindex="0"><span>V jednání</span><strong id="count-jednani">0</strong></article>
+      <article data-open-tab="prilezitosti" data-stage="Nabídka" role="button" tabindex="0"><span>Nabídka</span><strong id="count-nabidka">0</strong></article>
+      <article class="ok" data-open-tab="prilezitosti" data-stage="Vyhráno" role="button" tabindex="0"><span>Vyhráno</span><strong id="count-vyhrano">0</strong></article>
+      <article class="alert" data-open-tab="prilezitosti" data-stage="Prohráno" role="button" tabindex="0"><span>Prohráno</span><strong id="count-prohrano">0</strong></article>
+    </section>
+    <section class="cards" id="kind-cards" hidden>
+      <article data-open-tab="aktivity" data-activity-kind="Hovor" role="button" tabindex="0"><span>Hovory</span><strong id="count-hovor">0</strong></article>
+      <article data-open-tab="aktivity" data-activity-kind="Schůzka" role="button" tabindex="0"><span>Schůzky</span><strong id="count-schuzka">0</strong></article>
+      <article data-open-tab="aktivity" data-activity-kind="Poznámka" role="button" tabindex="0"><span>Poznámky</span><strong id="count-poznamka">0</strong></article>
+    </section>
+    <section class="panel-card" id="recent-opportunities" hidden>
+      <h2>Naposledy změněné příležitosti</h2>
+      <div class="table-scroll">
+        <table id="recent-opportunities-table">
+          <thead>
+            <tr>
+              <th>Kód</th>
+              <th>Zákazník</th>
+              <th>Název</th>
+              <th class="num">Částka</th>
+              <th>Fáze</th>
+            </tr>
+          </thead>
+          <tbody id="recent-opportunity-rows"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel-card" id="recent-activities" hidden>
+      <h2>Poslední aktivity</h2>
+      <div class="table-scroll">
+        <table id="recent-activities-table">
+          <thead>
+            <tr>
+              <th>Kdy</th>
+              <th>Druh</th>
+              <th>Zákazník</th>
+              <th>Předmět</th>
+            </tr>
+          </thead>
+          <tbody id="recent-activity-rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div data-panel="zakaznici" hidden>
+    <form id="customer-filter">
+      <label>Druh
+        <select id="filter-kind">
+          <option value="">Všechny druhy</option>
+          <option>Firma</option>
+          <option>Osoba</option>
+        </select>
+      </label>
+    </form>
+    <section class="panel-card" id="customer-table" hidden>
+      <h2>Zákazníci</h2>
+      <div class="table-scroll">
+        <table id="customers">
+          <thead>
+            <tr>
+              <th>Kód</th>
+              <th>Druh</th>
+              <th>Název</th>
+              <th>Kontakt</th>
+              <th>Adresa</th>
+              <th>IČO</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="customer-rows"></tbody>
+        </table>
+      </div>
+      <p id="customer-empty" hidden></p>
+    </section>
+    <section class="create-wrap">
+      <h2>Nový zákazník</h2>
+      <form id="customer-create">
+        <label>Druh
+          <select id="customer-kind">
+            <option selected>Firma</option>
+            <option>Osoba</option>
+          </select>
+        </label>
+        <label>Název <input id="customer-name" required maxlength="160" placeholder="firma nebo jméno"></label>
+        <label>IČO <input id="customer-ico" maxlength="16" inputmode="numeric"></label>
+        <label>E-mail <input id="customer-email" type="email" maxlength="160"></label>
+        <label>Telefon <input id="customer-phone" type="tel" maxlength="40"></label>
+        <label>Ulice <input id="customer-street" maxlength="160"></label>
+        <label>Město <input id="customer-city" maxlength="80"></label>
+        <label>PSČ <input id="customer-zip" maxlength="16"></label>
+        <label>Stát <input id="customer-country" maxlength="80" value="Česká republika"></label>
+        <label>Poznámka <input id="customer-note" maxlength="500"></label>
+        <button type="submit">Přidat zákazníka</button>
+      </form>
+    </section>
+    <section class="panel-card" id="contact-table" hidden>
+      <h2>Kontakty</h2>
+      <label>Zákazník
+        <select id="contact-filter">
+          <option value="">Všichni zákazníci</option>
+        </select>
+      </label>
+      <div class="table-scroll">
+        <table id="contacts">
+          <thead>
+            <tr>
+              <th>Jméno</th>
+              <th>Funkce</th>
+              <th>E-mail</th>
+              <th>Telefon</th>
+              <th>Poznámka</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="contact-rows"></tbody>
+        </table>
+      </div>
+      <p id="contact-empty" hidden></p>
+    </section>
+    <section class="create-wrap">
+      <h2>Nový kontakt</h2>
+      <form id="contact-create">
+        <label>Zákazník
+          <select id="contact-customer" required>
+            <option value="">— vyberte zákazníka —</option>
+          </select>
+        </label>
+        <label>Jméno <input id="contact-name" required maxlength="160"></label>
+        <label>Funkce <input id="contact-role" maxlength="80"></label>
+        <label>E-mail <input id="contact-email" type="email" maxlength="160"></label>
+        <label>Telefon <input id="contact-phone" type="tel" maxlength="40"></label>
+        <label>Poznámka <input id="contact-note" maxlength="500"></label>
+        <button type="submit">Přidat kontakt</button>
+      </form>
+    </section>
+  </div>
+
+  <div data-panel="prilezitosti" hidden>
+    <form id="opportunity-filter">
+      <label>Fáze
+        <select id="filter-stage">
+          <option value="">Všechny fáze</option>
+          <option>Nový</option>
+          <option>V jednání</option>
+          <option>Nabídka</option>
+          <option>Vyhráno</option>
+          <option>Prohráno</option>
+        </select>
+      </label>
+    </form>
+    <section class="panel-card" id="opportunity-table" hidden>
+      <h2>Příležitosti</h2>
+      <div class="table-scroll">
+        <table id="opportunities">
+          <thead>
+            <tr>
+              <th>Kód</th>
+              <th>Zákazník</th>
+              <th>Název</th>
+              <th class="num">Částka</th>
+              <th>Předpoklad</th>
+              <th>Fáze</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="opportunity-rows"></tbody>
+        </table>
+      </div>
+      <p id="opportunity-empty" hidden></p>
+    </section>
+    <section class="create-wrap">
+      <h2>Nová příležitost</h2>
+      <form id="opportunity-create">
+        <label>Zákazník
+          <select id="opp-customer" required>
+            <option value="">— vyberte zákazníka —</option>
+          </select>
+        </label>
+        <label>Název <input id="opp-title" required maxlength="160"></label>
+        <label>Fáze
+          <select id="opp-stage">
+            <option selected>Nový</option>
+            <option>V jednání</option>
+            <option>Nabídka</option>
+            <option>Vyhráno</option>
+            <option>Prohráno</option>
+          </select>
+        </label>
+        <label>Částka (Kč) <input id="opp-amount" type="number" min="0" step="0.01"></label>
+        <label>Předpoklad <input id="opp-close" type="date"></label>
+        <label>Poznámka <input id="opp-note" maxlength="500"></label>
+        <button type="submit">Přidat příležitost</button>
+      </form>
+    </section>
+  </div>
+
+  <div data-panel="aktivity" hidden>
+    <form id="activity-filter">
+      <label>Druh
+        <select id="filter-activity">
+          <option value="">Všechny druhy</option>
+          <option>Hovor</option>
+          <option>Schůzka</option>
+          <option>Poznámka</option>
+        </select>
+      </label>
+    </form>
+    <section class="panel-card" id="activity-table" hidden>
+      <h2>Aktivity</h2>
+      <div class="table-scroll">
+        <table id="activities">
+          <thead>
+            <tr>
+              <th>Kód</th>
+              <th>Kdy</th>
+              <th>Druh</th>
+              <th>Zákazník</th>
+              <th>Příležitost</th>
+              <th>Předmět</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="activity-rows"></tbody>
+        </table>
+      </div>
+      <p id="activity-empty" hidden></p>
+    </section>
+    <section class="create-wrap">
+      <h2>Nová aktivita</h2>
+      <form id="activity-create">
+        <label>Druh
+          <select id="act-kind">
+            <option selected>Hovor</option>
+            <option>Schůzka</option>
+            <option>Poznámka</option>
+          </select>
+        </label>
+        <label>Kdy <input id="act-when" type="datetime-local" required></label>
+        <label>Zákazník
+          <select id="act-customer">
+            <option value="">— bez zákazníka —</option>
+          </select>
+        </label>
+        <label>Příležitost
+          <select id="act-opportunity">
+            <option value="">— bez příležitosti —</option>
+          </select>
+        </label>
+        <label>Předmět <input id="act-subject" required maxlength="160"></label>
+        <label>Text <textarea id="act-body" maxlength="1000"></textarea></label>
+        <button type="submit">Přidat aktivitu</button>
+      </form>
+    </section>
+  </div>
+  <script src="/crm.js?v=1"></script>
+</body>
+</html>
