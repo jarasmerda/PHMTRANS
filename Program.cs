@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using PHMTRANS.Bi;
 using PHMTRANS.Cpq;
+using PHMTRANS.Crm;
 using PHMTRANS.Dispatch;
 using PHMTRANS.Pohoda;
 
@@ -56,6 +57,9 @@ builder.Services.AddSingleton<IssuedInvoiceCache>();
 builder.Services.AddSingleton<SqlDispatchStore>();
 builder.Services.AddSingleton<IDispatchStore>(sp => sp.GetRequiredService<SqlDispatchStore>());
 builder.Services.AddHostedService<DispatchSchemaInitializer>();
+builder.Services.AddSingleton<SqlCrmStore>();
+builder.Services.AddSingleton<ICrmStore>(sp => sp.GetRequiredService<SqlCrmStore>());
+builder.Services.AddHostedService<CrmSchemaInitializer>();
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>
@@ -80,6 +84,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapErpAuth();
 app.MapDispatch();
+app.MapCrm();
 app.MapBi();
 app.UseDefaultFiles();
 app.UseStaticFiles();
