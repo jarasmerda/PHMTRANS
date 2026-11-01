@@ -49,7 +49,7 @@ public sealed class DispatchDocument
 {
     public int Version { get; set; } = 1;
 
-    public string Notice { get; set; } = DispatchStore.StorageNote;
+    public string Notice { get; set; } = DispatchStorage.Note;
 
     public List<DispatchVehicle> Vehicles { get; set; } = [];
 

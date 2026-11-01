@@ -51,14 +51,14 @@ public static class DispatchEndpoints
         api.MapPost("/trips/{id}/status", ChangeStatus);
     }
 
-    private static Task<IResult> GetBoard(DispatchStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> GetBoard(IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
             var snapshot = await store.ReadAsync(cancellationToken);
             return Results.Ok(ToBoard(snapshot));
         });
 
-    private static Task<IResult> GetTrips(string? status, DispatchStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> GetTrips(string? status, IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
             if (!string.IsNullOrWhiteSpace(status) && !DispatchStatuses.IsKnown(status.Trim()))
@@ -75,20 +75,20 @@ public static class DispatchEndpoints
             return Results.Ok(trips);
         });
 
-    private static Task<IResult> CreateTrip(NewTripRequest request, DispatchStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> CreateTrip(NewTripRequest request, IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.AddTripAsync(request, cancellationToken)));
 
     private static Task<IResult> AssignTrip(
         string id,
         AssignTripRequest request,
-        DispatchStore store,
+        IDispatchStore store,
         CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.AssignAsync(id, request.VehicleId, request.DriverId, cancellationToken)));
 
     private static Task<IResult> ChangeStatus(
         string id,
         ChangeStatusRequest request,
-        DispatchStore store,
+        IDispatchStore store,
         CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.SetStatusAsync(id, request.Status, cancellationToken)));
 
@@ -123,7 +123,7 @@ public static class DispatchEndpoints
             .ToArray();
         var vehicles = snapshot.Vehicles.OrderBy(vehicle => vehicle.Plate, Czech).ToArray();
         var drivers = snapshot.Drivers.OrderBy(driver => driver.Name, Czech).ToArray();
-        return new DispatchBoard(DispatchStore.StorageKind, DispatchStore.StorageNote, counts, trips, vehicles, drivers);
+        return new DispatchBoard(DispatchStorage.Kind, DispatchStorage.Note, counts, trips, vehicles, drivers);
     }
 
     private static bool IsDispatchHost(string host)
