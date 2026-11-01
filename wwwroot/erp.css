@@ -1,9 +1,14 @@
 :root {
-  --navy: #1a3c78;
-  --gold: #c6a56a;
-  --ink: #1c2430;
-  --muted: #5b6778;
-  --line: #e4e8f0;
+  --bg: #F8FAFC;
+  --surface: #FFFFFF;
+  --text: #1E293B;
+  --text-secondary: #64748B;
+  --accent: #2563EB;
+  --button: #2563EB;
+  --button-hover: #1D4ED8;
+  --border: #E2E8F0;
+  --table-header: #F1F5F9;
+  --table-stripe: #F8FAFC;
   --alert: #8a2a1a;
 }
 
@@ -11,8 +16,8 @@
 
 body {
   margin: 0;
-  background: #f6f7f9;
-  color: var(--ink);
+  background: var(--bg);
+  color: var(--text);
   font-family: "Segoe UI", Arial, sans-serif;
 }
 
@@ -33,10 +38,10 @@ header {
   margin: 0;
   letter-spacing: 0.08em;
   font-weight: 800;
-  color: var(--navy);
+  color: var(--text);
 }
 
-.brand span { color: var(--gold); }
+.brand span { color: var(--accent); }
 
 h1, h2 { margin: 0.15rem 0 0; }
 
@@ -51,25 +56,34 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
 }
 
 .home, .header-actions button {
-  color: #fff;
-  background: var(--navy);
+  color: var(--surface);
+  background: var(--button);
   text-decoration: none;
   border-radius: 999px;
   padding: 0.55rem 0.9rem;
   font-weight: 700;
 }
 
+.home:hover {
+  background: var(--button-hover);
+}
+
 .header-actions button {
-  background: transparent;
-  color: var(--navy);
-  border: 1px solid #d7deea;
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.header-actions button:hover {
+  background: var(--table-header);
+  color: var(--button-hover);
 }
 
 .login-card {
   width: min(420px, calc(100% - 2rem));
   margin: 8vh auto 0;
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 1.4rem;
 }
@@ -79,6 +93,8 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
   display: grid;
   margin: 0;
   padding: 1rem 0 0;
+  background: transparent;
+  border: 0;
 }
 
 .login-card input { width: 100%; }
@@ -90,13 +106,17 @@ form {
   flex-wrap: wrap;
   gap: 0.6rem;
   align-items: end;
-  padding: 1rem 0;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
 }
 
 label {
   display: grid;
   gap: 0.25rem;
-  color: var(--muted);
+  color: var(--text-secondary);
   font-size: 0.78rem;
   font-weight: 700;
 }
@@ -107,23 +127,23 @@ input, button {
 }
 
 input {
-  border: 1px solid #d7deea;
+  border: 1px solid var(--border);
+  background: var(--surface);
   padding: 0.45rem 0.55rem;
-  color: var(--ink);
+  color: var(--text);
 }
 
 button {
   border: 0;
-  background: var(--navy);
-  color: #fff;
+  background: var(--button);
+  color: var(--surface);
   font-weight: 700;
   padding: 0.5rem 0.8rem;
   cursor: pointer;
 }
 
-button[data-range] {
-  background: var(--gold);
-  color: #2c2416;
+button:hover {
+  background: var(--button-hover);
 }
 
 #message {
@@ -138,8 +158,8 @@ button[data-range] {
 }
 
 .cards article, #chart-wrap, #table-wrap {
-  background: #fff;
-  border: 1px solid var(--line);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 14px;
 }
 
@@ -147,7 +167,7 @@ button[data-range] {
 
 .cards span {
   display: block;
-  color: var(--muted);
+  color: var(--text-secondary);
   font-size: 0.78rem;
   font-weight: 700;
 }
@@ -177,16 +197,22 @@ section { margin-bottom: 1rem; }
   display: block;
   height: 0.7rem;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--gold), var(--navy));
+  background: linear-gradient(90deg, var(--accent), var(--button-hover));
 }
 
 .table-scroll { overflow-x: auto; }
 
 table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
 
-th, td { padding: 0.55rem 0.45rem; border-bottom: 1px solid var(--line); text-align: left; }
+th, td { padding: 0.55rem 0.45rem; border-bottom: 1px solid var(--border); text-align: left; }
 
-th { color: var(--muted); font-size: 0.75rem; }
+th {
+  background: var(--table-header);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+tbody tr:nth-child(even) { background: var(--table-stripe); }
 
 .num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -196,8 +222,8 @@ th { color: var(--muted); font-size: 0.75rem; }
   padding: 0.15rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 700;
-  background: #eef2f8;
-  color: var(--navy);
+  background: var(--table-header);
+  color: var(--accent);
 }
 
 .pill.warn { background: #f8ece8; color: var(--alert); }
