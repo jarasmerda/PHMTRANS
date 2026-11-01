@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
 using PHMTRANS.Bi;
 using PHMTRANS.Cpq;
+using PHMTRANS.Dispatch;
 using PHMTRANS.Pohoda;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -52,6 +53,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 });
 builder.Services.Configure<PohodaOptions>(builder.Configuration.GetSection(PohodaOptions.SectionName));
 builder.Services.AddSingleton<IssuedInvoiceCache>();
+builder.Services.AddSingleton<DispatchStore>();
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>
@@ -75,6 +77,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapErpAuth();
+app.MapDispatch();
 app.MapBi();
 app.UseDefaultFiles();
 app.UseStaticFiles();
@@ -149,3 +152,5 @@ record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
+
+public partial class Program;

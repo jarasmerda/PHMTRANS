@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dispečink – PHM Trans</title>
+  <link rel="stylesheet" href="/erp.css?v=5">
+  <style>
+    .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
+    .route-to { color: var(--text-secondary); font-size: 0.82rem; }
+    #trips { min-width: 68rem; }
+    #rows select { min-width: 7.5rem; max-width: 12rem; width: 100%; }
+    #rows button { white-space: nowrap; }
+    #create-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem;
+    }
+    #create-wrap form {
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="brand"><span>PHM</span> TRANS</p>
+      <h1>Dispečink</h1>
+    </div>
+    <div class="header-actions">
+      <a class="home" href="https://www.phmtrans.cz/">Rozcestník</a>
+      <button type="button" id="logout">Odhlásit</button>
+    </div>
+  </header>
+  <section id="storage" class="note" hidden></section>
+  <p id="message" hidden></p>
+  <form id="filter">
+    <label>Stav
+      <select id="status">
+        <option value="">Všechny stavy</option>
+        <option>Nová</option>
+        <option>Přiřazená</option>
+        <option>Na cestě</option>
+        <option>Vyložená</option>
+        <option>Zrušená</option>
+      </select>
+    </label>
+    <button type="button" id="reload">Obnovit</button>
+  </form>
+  <section class="cards" id="cards" hidden>
+    <article><span>Nové</span><strong id="count-nova">0</strong></article>
+    <article><span>Přiřazené</span><strong id="count-prirazena">0</strong></article>
+    <article><span>Na cestě</span><strong id="count-naceste">0</strong></article>
+    <article><span>Vyložené</span><strong id="count-vylozena">0</strong></article>
+    <article><span>Zrušené</span><strong id="count-zrusena">0</strong></article>
+  </section>
+  <section id="table-wrap" hidden>
+    <h2>Jízdy</h2>
+    <div class="table-scroll">
+      <table id="trips">
+        <thead>
+          <tr>
+            <th>Jízda</th>
+            <th>Zakázka</th>
+            <th>Termín</th>
+            <th>Zákazník</th>
+            <th>Trasa</th>
+            <th>Náklad</th>
+            <th>Vozidlo</th>
+            <th>Řidič</th>
+            <th>Stav</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p id="empty" hidden></p>
+  </section>
+  <section id="create-wrap">
+    <h2>Nová jízda</h2>
+    <form id="create">
+      <label>Zákazník <input id="customer" required maxlength="160"></label>
+      <label>Zakázka <input id="order-code" maxlength="40"></label>
+      <label>Nakládka <input id="loading" required maxlength="160"></label>
+      <label>Vykládka <input id="unloading" required maxlength="160"></label>
+      <label>Náklad <input id="cargo" maxlength="80" placeholder="motorová nafta"></label>
+      <label>Termín <input id="planned" type="datetime-local" required></label>
+      <label>Poznámka <input id="note" maxlength="500"></label>
+      <button type="submit">Přidat jízdu</button>
+    </form>
+  </section>
+  <script src="/dispecink.js?v=1"></script>
+</body>
+</html>
