@@ -555,7 +555,7 @@ public sealed class SqlOrderStore(
                 """,
                 transaction,
                 cancellationToken,
-                new { order.Id }));
+                new { OrderId = order.Id }));
         }
 
         if (target is null)
