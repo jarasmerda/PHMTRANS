@@ -69,6 +69,42 @@ public sealed class PohodaMServerClient(
         return true;
     }
 
+    public async Task<IReadOnlyList<PohodaCustomer>> FindCustomersAsync(string company, CancellationToken cancellationToken)
+    {
+        EnsureUser();
+        if (string.IsNullOrWhiteSpace(_options.Ico))
+            throw new PohodaException("V nastavení chybí Pohoda:Ico.");
+
+        var xml = AddressBookExport.CreateRequest(_options, company.Trim());
+        var body = await PostXmlAsync(Windows1250.GetBytes(xml), cancellationToken);
+        return AddressBookExport.Read(body);
+    }
+
+    public async Task<PohodaXmlResponse> ImportXmlAsync(string xml, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_options.Ico))
+            throw new PohodaException("V nastavení chybí Pohoda:Ico.");
+
+        var (username, password) = _options.ResolveWriteCredentials();
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            throw new PohodaException("V nastavení chybí přihlašovací údaje pro zápis do Pohody.");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "xml");
+        ApplyCommonHeaders(request);
+        request.Headers.TryAddWithoutValidation("STW-Authorization", BasicHeader(username, password));
+        var bytes = Windows1250.GetBytes(xml);
+        request.Content = new ByteArrayContent(bytes);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/xml");
+
+        using var response = await SendAsync(request, cancellationToken);
+        var responseBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        var body = Decode(responseBytes, response.Content.Headers.ContentType?.CharSet);
+        if (!response.IsSuccessStatusCode)
+            throw new PohodaException($"mServer vrátil {(int)response.StatusCode}: {Trim(body)}");
+
+        return new PohodaXmlResponse((int)response.StatusCode, body);
+    }
+
     public async Task<PohodaXmlResponse> ForwardXmlAsync(byte[] xml, CancellationToken cancellationToken)
     {
         EnsureUser();

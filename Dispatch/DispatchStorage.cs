@@ -5,7 +5,7 @@ public static class DispatchStorage
     public const string Kind = "sql";
 
     public const string Note =
-        "Jízdy, vozidla a řidiči jsou v SQL Serveru (tabulky Disp_*). Do Pohody se nezapisuje.";
+        "Jízdy, vozidla, řidiči a zakázky jsou v SQL Serveru (tabulky Disp_*). Zápis zakázek do Pohody řídí Pohoda:SyncMode (výchozí Live).";
 
     public const string MissingConnectionMessage =
         "Dispečink nemá nastavené ConnectionStrings:Dispatch. Účetnictví běží dál, jízdy se neukládají.";

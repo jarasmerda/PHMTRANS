@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dispečink – PHM Trans</title>
-  <link rel="stylesheet" href="/erp.css?v=16">
+  <link rel="stylesheet" href="/erp.css?v=17">
   <style>
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
     .route-to { color: var(--text-secondary); font-size: 0.82rem; }
@@ -19,7 +19,7 @@
       border: 1px solid var(--accent);
     }
     #rows button.ghost:hover { background: var(--button); color: var(--on-button); }
-    #create-wrap {
+    #create-wrap, #order-create-wrap, #order-detail {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -31,6 +31,37 @@
       padding: 0;
       border: 0;
       background: transparent;
+    }
+    .view-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .view-tabs button[aria-current="page"] { background: var(--ink); color: #fff; }
+    #order-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    #orders, #versions, #queue { min-width: 64rem; }
+    #order-create, #order-edit {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: 0.7rem;
+      align-items: end;
+      width: 100%;
+      margin: 0;
+    }
+    #order-create .wide, #order-edit .wide { grid-column: 1 / -1; }
+    .order-actions, .picker { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.7rem 0; }
+    .picker { flex-direction: column; align-items: stretch; }
+    .picker button { text-align: left; }
+    pre.xml {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.8rem;
+      max-height: 24rem;
+      overflow: auto;
+      font-size: 0.78rem;
+    }
+    #order-message, #queue-message { color: var(--alert); font-weight: 700; }
+    @media (max-width: 900px) {
+      #order-cards { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -52,74 +83,197 @@
       <button type="button" id="logout">Odhlásit</button>
     </div>
   </header>
-  <section id="storage" class="note" hidden></section>
-  <p id="message" hidden></p>
-  <form id="filter">
-    <label>Stav
-      <select id="status">
-        <option value="">Všechny stavy</option>
-        <option>Nová</option>
-        <option>Přiřazená</option>
-        <option>Na cestě</option>
-        <option>Vyložená</option>
-        <option>Zrušená</option>
-      </select>
-    </label>
-    <button type="button" id="reload">Obnovit</button>
-  </form>
-  <section class="cards" id="cards" hidden>
-    <article><span>Nové</span><strong id="count-nova">0</strong></article>
-    <article><span>Přiřazené</span><strong id="count-prirazena">0</strong></article>
-    <article><span>Na cestě</span><strong id="count-naceste">0</strong></article>
-    <article><span>Vyložené</span><strong id="count-vylozena">0</strong></article>
-    <article><span>Zrušené</span><strong id="count-zrusena">0</strong></article>
+  <section class="view-tabs" aria-label="Pohledy dispečinku">
+    <button type="button" id="tab-trips" aria-current="page">Jízdy</button>
+    <button type="button" id="tab-orders" class="ghost">Zakázky</button>
+    <button type="button" id="tab-queue" class="ghost">Fronta Pohody</button>
   </section>
-  <section id="table-wrap" hidden>
-    <h2>Jízdy</h2>
-    <div class="table-scroll">
-      <table id="trips">
-        <thead>
-          <tr>
-            <th>Jízda</th>
-            <th>Zakázka</th>
-            <th>Termín</th>
-            <th>Zákazník</th>
-            <th>Trasa</th>
-            <th>Náklad</th>
-            <th>Vozidlo</th>
-            <th>Řidič</th>
-            <th>Stav</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-    <p id="empty" hidden></p>
-  </section>
-  <section id="create-wrap">
-    <h2>Nová jízda</h2>
-    <form id="create">
-      <label>Zákazník <input id="customer" required maxlength="160"></label>
-      <label>Zakázka <input id="order-code" maxlength="40"></label>
-      <label>Nakládka <input id="loading" required maxlength="160"></label>
-      <label>Vykládka <input id="unloading" required maxlength="160"></label>
-      <label>Náklad <input id="cargo" maxlength="80" placeholder="motorová nafta"></label>
-      <label>Termín <input id="planned" type="datetime-local" required></label>
-      <label>Vozidlo
-        <select id="vehicle">
-          <option value="">— nepřiřazeno —</option>
+  <div id="trips-view">
+    <section id="storage" class="note" hidden></section>
+    <p id="message" hidden></p>
+    <form id="filter">
+      <label>Stav
+        <select id="status">
+          <option value="">Všechny stavy</option>
+          <option>Nová</option>
+          <option>Přiřazená</option>
+          <option>Na cestě</option>
+          <option>Vyložená</option>
+          <option>Zrušená</option>
         </select>
       </label>
-      <label>Řidič
-        <select id="driver">
-          <option value="">— nepřiřazeno —</option>
-        </select>
-      </label>
-      <label>Poznámka <input id="note" maxlength="500"></label>
-      <button type="submit">Přidat jízdu</button>
+      <button type="button" id="reload">Obnovit</button>
     </form>
-  </section>
-  <script src="/dispecink.js?v=4"></script>
+    <section class="cards" id="cards" hidden>
+      <article><span>Nové</span><strong id="count-nova">0</strong></article>
+      <article><span>Přiřazené</span><strong id="count-prirazena">0</strong></article>
+      <article><span>Na cestě</span><strong id="count-naceste">0</strong></article>
+      <article><span>Vyložené</span><strong id="count-vylozena">0</strong></article>
+      <article><span>Zrušené</span><strong id="count-zrusena">0</strong></article>
+    </section>
+    <section id="table-wrap" hidden>
+      <h2>Jízdy</h2>
+      <div class="table-scroll">
+        <table id="trips">
+          <thead>
+            <tr>
+              <th>Jízda</th>
+              <th>Zakázka</th>
+              <th>Termín</th>
+              <th>Zákazník</th>
+              <th>Trasa</th>
+              <th>Náklad</th>
+              <th>Vozidlo</th>
+              <th>Řidič</th>
+              <th>Stav</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p id="empty" hidden></p>
+    </section>
+    <section id="create-wrap">
+      <h2>Nová jízda</h2>
+      <form id="create">
+        <label>Zákazník <input id="customer" required maxlength="160"></label>
+        <label>Zakázka <input id="order-code" maxlength="40"></label>
+        <label>Nakládka <input id="loading" required maxlength="160"></label>
+        <label>Vykládka <input id="unloading" required maxlength="160"></label>
+        <label>Náklad <input id="cargo" maxlength="80" placeholder="motorová nafta"></label>
+        <label>Termín <input id="planned" type="datetime-local" required></label>
+        <label>Vozidlo
+          <select id="vehicle">
+            <option value="">— nepřiřazeno —</option>
+          </select>
+        </label>
+        <label>Řidič
+          <select id="driver">
+            <option value="">— nepřiřazeno —</option>
+          </select>
+        </label>
+        <label>Poznámka <input id="note" maxlength="500"></label>
+        <button type="submit">Přidat jízdu</button>
+      </form>
+    </section>
+  </div>
+  <div id="orders-view" hidden>
+    <p id="order-sync-note" class="note"></p>
+    <p id="order-message" hidden></p>
+    <form id="order-filter">
+      <label>Stav
+        <select id="order-status">
+          <option value="">Všechny stavy</option>
+          <option>Nová</option>
+          <option>Naplánovaná</option>
+          <option>Na cestě</option>
+          <option>Doručeno</option>
+          <option>K fakturaci</option>
+          <option>Vyfakturováno</option>
+        </select>
+      </label>
+      <button type="button" id="order-reload">Obnovit</button>
+    </form>
+    <section class="cards" id="order-cards" hidden>
+      <article><span>Nové</span><strong id="ocount-nova">0</strong></article>
+      <article><span>Naplánované</span><strong id="ocount-naplanovana">0</strong></article>
+      <article><span>Na cestě</span><strong id="ocount-naceste">0</strong></article>
+      <article><span>Doručené</span><strong id="ocount-doruceno">0</strong></article>
+      <article><span>K fakturaci</span><strong id="ocount-kfakturaci">0</strong></article>
+      <article><span>Vyfakturované</span><strong id="ocount-vyfakturovano">0</strong></article>
+    </section>
+    <section id="order-table-wrap" hidden>
+      <h2>Zakázky</h2>
+      <div class="table-scroll">
+        <table id="orders">
+          <thead>
+            <tr>
+              <th>Zakázka</th>
+              <th>Zákazník</th>
+              <th>Trasa</th>
+              <th>Nakládka</th>
+              <th>Náklad</th>
+              <th>Cena</th>
+              <th>Stav</th>
+              <th>Pohoda</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="order-rows"></tbody>
+        </table>
+      </div>
+      <p id="orders-empty" hidden></p>
+    </section>
+    <section id="order-detail" hidden>
+      <h2 id="order-detail-title">Zakázka</h2>
+      <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
+      <form id="order-edit"></form>
+      <div class="order-actions">
+        <button type="button" id="order-save">Uložit změny</button>
+        <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
+        <button type="button" id="order-invoice">Označit jako vyfakturované</button>
+        <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
+        <button type="button" id="order-close" class="ghost">Zavřít</button>
+      </div>
+      <h3>Historie verzí</h3>
+      <div class="table-scroll">
+        <table id="versions">
+          <thead>
+            <tr>
+              <th>Verze</th>
+              <th>Čas</th>
+              <th>Zákazník</th>
+              <th>Trasa</th>
+              <th>Termín</th>
+              <th>Náklad</th>
+              <th>Cena</th>
+              <th>Příplatky</th>
+              <th>Stav</th>
+            </tr>
+          </thead>
+          <tbody id="version-rows"></tbody>
+        </table>
+      </div>
+      <h3>Synchronizace do Pohody</h3>
+      <div id="order-sync"></div>
+    </section>
+    <section id="order-create-wrap">
+      <h2>Nová zakázka</h2>
+      <form id="order-create"></form>
+    </section>
+  </div>
+  <div id="queue-view" hidden>
+    <p id="queue-sync-note" class="note"></p>
+    <p id="queue-message" hidden></p>
+    <form id="queue-filter">
+      <button type="button" id="queue-reload">Obnovit</button>
+    </form>
+    <section id="queue-wrap">
+      <h2>Fronta synchronizace</h2>
+      <div class="table-scroll">
+        <table id="queue">
+          <thead>
+            <tr>
+              <th>Čas</th>
+              <th>Zakázka</th>
+              <th>Akce</th>
+              <th>Verze</th>
+              <th>Stav</th>
+              <th>Pokusy</th>
+              <th>Doklad</th>
+              <th>Chyba</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="queue-rows"></tbody>
+        </table>
+      </div>
+      <p id="queue-empty" hidden>Fronta je prázdná.</p>
+      <pre id="queue-xml" class="xml" hidden></pre>
+    </section>
+  </div>
+  <script src="/dispecink.js?v=5"></script>
+  <script src="/dispecink-orders.js?v=1"></script>
 </body>
 </html>

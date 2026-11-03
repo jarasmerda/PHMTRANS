@@ -1,0 +1,169 @@
+namespace PHMTRANS.Dispatch;
+
+public static class OrderStatuses
+{
+    public const string Nova = "Nová";
+    public const string Naplanovana = "Naplánovaná";
+    public const string NaCeste = "Na cestě";
+    public const string Doruceno = "Doručeno";
+    public const string KFakturaci = "K fakturaci";
+    public const string Vyfakturovano = "Vyfakturováno";
+
+    public const string UnknownMessage =
+        "Neznámý stav. Povolené jsou Nová, Naplánovaná, Na cestě, Doručeno, K fakturaci a Vyfakturováno.";
+
+    public static readonly IReadOnlyList<string> All =
+        [Nova, Naplanovana, NaCeste, Doruceno, KFakturaci, Vyfakturovano];
+
+    public static bool IsKnown(string status) => All.Contains(status);
+
+    public static bool IsConfirmed(string status) => status is KFakturaci or Vyfakturovano;
+
+    public static int Rank(string status) => status switch
+    {
+        Nova => 0,
+        Naplanovana => 1,
+        NaCeste => 2,
+        Doruceno => 3,
+        KFakturaci => 4,
+        Vyfakturovano => 5,
+        _ => 6
+    };
+}
+
+public static class OrderSyncActions
+{
+    public const string Create = "Create";
+    public const string Update = "Update";
+    public const string Correction = "Correction";
+}
+
+public static class OrderQueueStatuses
+{
+    public const string Pending = "Pending";
+    public const string Sent = "Sent";
+    public const string Failed = "Failed";
+    public const string DryRun = "DryRun";
+
+    public static bool IsOpen(string status) => status is Pending or DryRun;
+}
+
+public static class OrderSyncLimits
+{
+    public const int MaxAttempts = 6;
+
+    public static bool IsDue(DateTimeOffset? processedUtc, int attempts, DateTimeOffset now)
+    {
+        if (processedUtc is null || attempts <= 0)
+            return true;
+
+        var seconds = Math.Min(900d, 15d * Math.Pow(2d, attempts - 1));
+        return processedUtc.Value.AddSeconds(seconds) <= now;
+    }
+}
+
+public sealed record DispatchOrder(
+    string Id,
+    string Code,
+    int? CustomerPohodaId,
+    string CustomerName,
+    string LoadingPlace,
+    string UnloadingPlace,
+    DateOnly LoadingDate,
+    DateOnly UnloadingDate,
+    string FuelType,
+    decimal Liters,
+    decimal AgreedPrice,
+    decimal Surcharges,
+    string? Note,
+    string? CmrNumber,
+    string? VehicleId,
+    string? DriverId,
+    string? TripId,
+    string Status,
+    bool IsLocked,
+    int CurrentVersion,
+    int? PohodaOrderId,
+    string? PohodaOrderNumber,
+    string? PohodaInvoiceNumber,
+    int? LastSentVersion,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    string? LatestSyncStatus = null,
+    string? LatestSyncError = null);
+
+public sealed record OrderSaveRequest(
+    int? CustomerPohodaId,
+    string? CustomerName,
+    string? LoadingPlace,
+    string? UnloadingPlace,
+    DateOnly? LoadingDate,
+    DateOnly? UnloadingDate,
+    string? FuelType,
+    decimal? Liters,
+    decimal? AgreedPrice,
+    decimal? Surcharges,
+    string? Note,
+    string? CmrNumber,
+    string? VehicleId,
+    string? DriverId,
+    string? TripId,
+    string? Status,
+    string? PohodaInvoiceNumber);
+
+public sealed record OrderSyncEntry(
+    long Id,
+    string OrderId,
+    string OrderCode,
+    int? VersionFrom,
+    int VersionTo,
+    string Action,
+    string PayloadXml,
+    string Status,
+    int Attempts,
+    string? LastError,
+    DateTimeOffset CreatedUtc,
+    DateTimeOffset? ProcessedUtc,
+    string? PohodaDocNumber);
+
+public sealed record OrderStatusCount(string Status, int Count);
+
+public sealed record OrderListResponse(
+    string SyncMode,
+    string SyncNote,
+    IReadOnlyList<OrderStatusCount> Counts,
+    IReadOnlyList<DispatchOrder> Orders);
+
+public sealed record OrderDetailResponse(
+    DispatchOrder Order,
+    IReadOnlyList<DispatchOrder> Versions,
+    IReadOnlyList<OrderSyncEntry> Sync,
+    string SyncMode,
+    string SyncNote);
+
+public sealed record OrderBundle(
+    DispatchOrder Order,
+    IReadOnlyList<DispatchOrder> Versions,
+    IReadOnlyList<OrderSyncEntry> Sync);
+
+public sealed record PohodaImportResult(bool Ok, int? Id, string? Number, string? Error)
+{
+    public static PohodaImportResult Success(int? id, string? number) => new(true, id, number, null);
+
+    public static PohodaImportResult Failure(string error) => new(false, null, null, error);
+}
+
+public abstract record OrderMutation
+{
+    private OrderMutation()
+    {
+    }
+
+    public sealed record Success(DispatchOrder Order) : OrderMutation;
+
+    public sealed record NotFound : OrderMutation;
+
+    public sealed record Rejected(string Message) : OrderMutation;
+}
+
+public sealed class OrderStoreException(string message, Exception? inner = null) : Exception(message, inner);
