@@ -125,7 +125,7 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
         Assert.Equal(HttpStatusCode.OK, admin.StatusCode);
         Assert.Contains("Správa uživatelů", await admin.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var css = await client.SendAsync(Get("/ERP/erp.css?v=7", "intranet.phmtrans.cz"));
+        var css = await client.SendAsync(Get("/ERP/erp.css?v=8", "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, css.StatusCode);
         Assert.Contains("css", css.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
 
