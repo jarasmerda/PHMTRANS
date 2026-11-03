@@ -149,6 +149,34 @@ document.querySelector("#logout").addEventListener("click", async () => {
   location.href = "/login.html";
 });
 
+const erpSections = {
+  bi: "Vydané faktury",
+  "zpracovani-objednavek": "Zpracování objednávek",
+  "vytvareni-objednavek": "Vytváření objednávek",
+  "uctovani-faktur": "Účtování faktur"
+};
+
+function erpSectionId() {
+  const raw = decodeURIComponent(location.hash.replace(/^#/, "")).toLowerCase();
+  return Object.hasOwn(erpSections, raw) ? raw : "bi";
+}
+
+function showErpSection() {
+  const id = erpSectionId();
+  document.querySelectorAll("[data-erp-section]").forEach((panel) => {
+    panel.hidden = panel.dataset.erpSection !== id;
+  });
+  document.querySelectorAll(".erp-sections a").forEach((link) => {
+    const active = link.getAttribute("href") === `#${id}`;
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  document.title = `${erpSections[id]} – PHM Trans`;
+}
+
+window.addEventListener("hashchange", showErpSection);
+showErpSection();
+
 setRange("year");
 document.querySelector("#range").addEventListener("submit", (event) => load(event, true));
 document.querySelectorAll("[data-range]").forEach((button) => {
