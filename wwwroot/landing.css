@@ -2,7 +2,7 @@
    Písmo Barlow / Barlow Condensed je self-hosted (SIL OFL, wwwroot/landing/fonts/OFL.txt).
    Mobile-first: základ je úzký telefon, dál min-width 481 / 769 / 1025.
    Zábrany pro ≤480, ≤768 a ≤1024 jsou na konci souboru.
-   Kapka .drop-mark je obrys kapky z loga (nízká krytí, nesmí překrýt čtení). */
+   Kapka .drop-mark má barvy kapky z logo.png (zlato, světlý odlesk, tmavší okraj) a krytí vodoznaku. */
 
 @font-face {
   font-family: "Barlow";
@@ -207,7 +207,7 @@ body.landing .drop-mark {
   left: 46%;
   width: clamp(280px, 52vw, 640px);
   height: auto;
-  opacity: 0.065;
+  opacity: 0.14;
   pointer-events: none;
   user-select: none;
 }
@@ -974,7 +974,7 @@ body.landing .credits {
     left: auto;
     right: -8vw;
     width: 62vw;
-    opacity: 0.06;
+    opacity: 0.14;
   }
 
   body.landing .nav-toggle-btn {
@@ -1059,6 +1059,6 @@ body.landing .credits {
 
   body.landing .drop-mark {
     width: 70vw;
-    opacity: 0.055;
+    opacity: 0.14;
   }
 }
