@@ -43,6 +43,45 @@ body:not(.landing)::before {
   background: url("/landing/logo-drop.png") center / contain no-repeat;
 }
 
+@media (max-width: 1099px) {
+  body:not(.landing)::before {
+    display: none;
+  }
+}
+
+/* Kapka v pravém prázdném pruhu, obsah zůstává vlevo od ní. */
+@media (min-width: 1100px) {
+  body:not(.landing) {
+    --drop-w: min(34vw, 460px);
+  }
+
+  body:not(.landing)::before {
+    top: 5.25rem;
+    right: 1rem;
+    bottom: auto;
+    width: var(--drop-w);
+  }
+
+  body:not(.landing) header,
+  body:not(.landing) .erp-sections,
+  body:not(.landing) .section-title,
+  body:not(.landing) form,
+  body:not(.landing) section,
+  body:not(.landing) #message,
+  body:not(.landing) .tabs {
+    width: min(1180px, calc(100% - var(--drop-w) - 2.75rem));
+    margin-left: 1rem;
+    margin-right: calc(var(--drop-w) + 1.5rem);
+  }
+
+  body:not(.landing) header.login-bar,
+  body:not(.landing) .login-card {
+    width: min(420px, calc(100% - var(--drop-w) - 3rem));
+    margin-left: max(1rem, calc((100% - var(--drop-w) - 420px - 2.5rem) / 2));
+    margin-right: calc(var(--drop-w) + 1.25rem);
+  }
+}
+
 body:not(.landing) > * {
   position: relative;
   z-index: 1;
