@@ -322,7 +322,7 @@ public sealed class CrmStoreTests
 public sealed class CrmPageTests
 {
     [Fact]
-    public void Crm_page_uses_dispatch_styles_and_the_rozcestnik_already_links_it()
+    public void Crm_page_uses_shared_styles_and_links_the_other_modules()
     {
         var root = FindWwwRoot();
         var html = File.ReadAllText(Path.Combine(root, "crm.html"));
@@ -331,8 +331,15 @@ public sealed class CrmPageTests
         var webConfig = File.ReadAllText(Path.Combine(root, "web.config"));
 
         Assert.Contains("<h1>CRM</h1>", html, StringComparison.Ordinal);
-        Assert.Contains("erp.css?v=5", html, StringComparison.Ordinal);
+        Assert.Contains("erp.css?v=6", html, StringComparison.Ordinal);
         Assert.Contains("crm.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
+        Assert.Contains("https://erp.phmtrans.cz/", html, StringComparison.Ordinal);
+        Assert.Contains("https://disp.phmtrans.cz/", html, StringComparison.Ordinal);
+        Assert.Contains("aria-current=\"page\">CRM</span>", html, StringComparison.Ordinal);
+        Assert.Contains(">Odhlásit</button>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Rozcestník", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://www.phmtrans.cz/", html, StringComparison.Ordinal);
         Assert.Contains(">Přehled</button>", html, StringComparison.Ordinal);
         Assert.Contains(">Zákazníci</button>", html, StringComparison.Ordinal);
         Assert.Contains(">Příležitosti</button>", html, StringComparison.Ordinal);
@@ -348,7 +355,6 @@ public sealed class CrmPageTests
         Assert.Contains(">Hovor</option>", html, StringComparison.Ordinal);
         Assert.Contains(">Schůzka</option>", html, StringComparison.Ordinal);
         Assert.Contains(">Poznámka</option>", html, StringComparison.Ordinal);
-        Assert.Contains("https://www.phmtrans.cz/", html, StringComparison.Ordinal);
         Assert.Contains(">Upravit</button>", js, StringComparison.Ordinal);
         Assert.Contains("Uložit změny", js, StringComparison.Ordinal);
         Assert.Contains("Označit příležitost jako prohranou?", js, StringComparison.Ordinal);
