@@ -6,7 +6,7 @@
   <title>PHM TRANS – silniční nákladní doprava</title>
   <meta name="description" content="PHM TRANS zajišťuje vnitrostátní a mezinárodní kamionovou dopravu, přepravu pohonných hmot a spedici.">
   <link rel="stylesheet" href="/erp.css?v=6">
-  <link rel="stylesheet" href="/landing.css?v=1">
+  <link rel="stylesheet" href="/landing.css?v=2">
 </head>
 <body class="landing">
   <!--
@@ -14,155 +14,152 @@
     Texty k úpravě jsou označené komentářem UPRAVIT:
     #vozovy-park, #o-nas a kontaktní údaje v #kontakt ([telefon], [e-mail], [adresa]).
   -->
-  <div class="topbar">
-    <header>
-      <a class="brand" href="#uvod"><span>PHM</span> TRANS</a>
-      <div class="header-actions">
-        <nav class="module-links" aria-label="Intranet">
-          <span class="intranet-label">Intranet</span>
-          <a href="https://intranet.phmtrans.cz/ERP">ERP</a>
-          <a href="https://intranet.phmtrans.cz/Dispecink">Dispečink</a>
-          <a href="https://intranet.phmtrans.cz/CRM">CRM</a>
-        </nav>
-      </div>
-    </header>
-  </div>
+  <a class="skip-link" href="#uvod">Přeskočit na obsah</a>
 
-  <div class="hero-band">
+  <header class="site-header">
+    <a class="logo" href="#uvod">
+      <img src="/landing/logo-dark.png" srcset="/landing/logo-dark.png 640w" sizes="202px" width="640" height="152" alt="PHM TRANS">
+    </a>
+    <input class="nav-toggle" type="checkbox" id="nav-toggle">
+    <label class="nav-toggle-btn" for="nav-toggle">
+      <span class="burger" aria-hidden="true"></span>
+      <span class="nav-toggle-open">Menu</span>
+      <span class="nav-toggle-close">Zavřít</span>
+    </label>
+    <div class="nav-panel">
+      <nav class="site-nav" aria-label="Stránka">
+        <a href="#sluzby">Služby</a>
+        <a href="#vozovy-park">Vozový park</a>
+        <a href="#o-nas">O nás</a>
+        <a href="#kontakt">Kontakt</a>
+      </nav>
+      <nav class="module-links" aria-label="Intranet">
+        <span class="intranet-label">Intranet</span>
+        <a href="https://intranet.phmtrans.cz/ERP">ERP</a>
+        <a href="https://intranet.phmtrans.cz/Dispecink">Dispečink</a>
+        <a href="https://intranet.phmtrans.cz/CRM">CRM</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
     <section class="hero" id="uvod" aria-labelledby="hero-title">
-      <div class="hero-layout">
-        <div>
-          <p class="kicker">Autodoprava</p>
-          <h1 id="hero-title">Silniční nákladní doprava</h1>
-          <p class="lead">PHM TRANS zajišťuje vnitrostátní i mezinárodní kamionovou dopravu, přepravu pohonných hmot cisternami a spediční služby.</p>
-          <div class="landing-actions">
-            <a class="primary" href="#sluzby">Služby</a>
-            <a class="secondary" href="#kontakt">Kontakt</a>
-          </div>
-        </div>
-        <div class="hero-art" aria-hidden="true">
-          <svg viewBox="0 0 460 240">
-            <rect x="0" y="0" width="460" height="240" rx="18" fill="#F8FAFC"/>
-            <rect x="24" y="168" width="412" height="10" rx="5" fill="#E2E8F0"/>
-            <rect x="36" y="188" width="48" height="6" rx="3" fill="#CBD5E1"/>
-            <rect x="120" y="188" width="48" height="6" rx="3" fill="#CBD5E1"/>
-            <rect x="204" y="188" width="48" height="6" rx="3" fill="#CBD5E1"/>
-            <rect x="288" y="188" width="48" height="6" rx="3" fill="#CBD5E1"/>
-            <rect x="372" y="188" width="48" height="6" rx="3" fill="#CBD5E1"/>
-            <rect x="28" y="78" width="210" height="90" rx="10" fill="#1E293B"/>
-            <rect x="44" y="94" width="178" height="10" rx="4" fill="#334155"/>
-            <rect x="44" y="114" width="120" height="8" rx="4" fill="#475569"/>
-            <rect x="248" y="96" width="132" height="72" rx="12" fill="#2563EB"/>
-            <path d="M292 96h58c16 0 30 14 30 32v40H292V96z" fill="#1D4ED8"/>
-            <rect x="304" y="110" width="52" height="26" rx="5" fill="#F8FAFC"/>
-            <circle cx="86" cy="172" r="18" fill="#1E293B"/>
-            <circle cx="86" cy="172" r="7" fill="#F8FAFC"/>
-            <circle cx="168" cy="172" r="18" fill="#1E293B"/>
-            <circle cx="168" cy="172" r="7" fill="#F8FAFC"/>
-            <circle cx="286" cy="172" r="18" fill="#1E293B"/>
-            <circle cx="286" cy="172" r="7" fill="#F8FAFC"/>
-            <circle cx="352" cy="172" r="18" fill="#1E293B"/>
-            <circle cx="352" cy="172" r="7" fill="#F8FAFC"/>
-          </svg>
+      <div class="hero-media">
+        <img class="hero-photo" src="/landing/truck-white-scania-1280.webp" srcset="/landing/truck-white-scania-480.webp 480w, /landing/truck-white-scania-768.webp 768w, /landing/truck-white-scania-1280.webp 1280w, /landing/truck-white-scania.webp 1920w" sizes="100vw" width="1920" height="1176" alt="" fetchpriority="high" decoding="async">
+        <div class="hero-shade" aria-hidden="true"></div>
+        <svg class="hero-stripes" viewBox="0 0 320 860" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="landing-stripe" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#c77f28"/>
+              <stop offset="1" stop-color="#d9a050"/>
+            </linearGradient>
+          </defs>
+          <polygon points="70,0 190,0 90,860 -30,860" fill="url(#landing-stripe)" opacity="0.92"/>
+          <polygon points="220,0 290,0 190,860 120,860" fill="#d9a050" opacity="0.48"/>
+        </svg>
+      </div>
+      <div class="w">
+        <div class="hero-copy">
+          <p class="kick">Přeprava PHM · Kamionová doprava · Spedice</p>
+          <h1 id="hero-title">Pohonné hmoty<br><span>v pohybu</span></h1>
+          <p class="hero-lead">Přeprava pohonných hmot cisternovými vozidly, vnitrostátní i mezinárodní kamionová doprava a spediční služby.</p>
+          <a class="bt" href="#kontakt">Poptat přepravu</a>
         </div>
       </div>
     </section>
-  </div>
 
-  <section id="sluzby" aria-labelledby="sluzby-title">
-    <div class="section-intro">
-      <h2 id="sluzby-title">Služby</h2>
-      <p>Přeprava nákladu po silnici a organizace dopravy. Konkrétní rozsah se domlouvá podle zásilky.</p>
-    </div>
-    <div class="service-grid">
-      <article>
-        <svg class="icon" viewBox="0 0 48 48" aria-hidden="true">
-          <rect x="4" y="16" width="24" height="16" rx="3" fill="#1E293B"/>
-          <path d="M28 20h10l6 7v5H28V20z" fill="#2563EB"/>
-          <circle cx="14" cy="34" r="4" fill="#1E293B"/>
-          <circle cx="36" cy="34" r="4" fill="#1E293B"/>
-        </svg>
-        <h3>Vnitrostátní a mezinárodní kamionová doprava</h3>
-        <p>Přeprava nákladu kamionem po České republice a v mezinárodní silniční dopravě.</p>
-      </article>
-      <article>
-        <svg class="icon" viewBox="0 0 48 48" aria-hidden="true">
-          <rect x="6" y="18" width="22" height="14" rx="7" fill="#1E293B"/>
-          <rect x="26" y="20" width="14" height="12" rx="3" fill="#2563EB"/>
-          <circle cx="16" cy="34" r="4" fill="#1E293B"/>
-          <circle cx="34" cy="34" r="4" fill="#1E293B"/>
-        </svg>
-        <h3>Přeprava PHM a cisterny</h3>
-        <p>Přeprava pohonných hmot cisternovými vozidly.</p>
-      </article>
-      <article>
-        <svg class="icon" viewBox="0 0 48 48" aria-hidden="true">
-          <circle cx="12" cy="34" r="4" fill="#2563EB"/>
-          <circle cx="36" cy="14" r="4" fill="#2563EB"/>
-          <path d="M14 32c8-2 10-16 20-16" fill="none" stroke="#1E293B" stroke-width="3" stroke-linecap="round"/>
-          <path d="M28 12l8 2-2 6" fill="none" stroke="#1E293B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <h3>Spedice</h3>
-        <p>Zprostředkování přepravy a organizace silniční dopravy.</p>
-      </article>
-    </div>
-  </section>
+    <div class="hz" aria-hidden="true"></div>
 
-  <section id="vozovy-park" aria-labelledby="park-title">
-    <div class="section-intro">
-      <h2 id="park-title">Vozový park</h2>
-      <!-- UPRAVIT: popis vozového parku -->
-      <p>Vozový park je určený pro silniční nákladní dopravu a pro přepravu pohonných hmot.</p>
-      <p class="placeholder">[Doplňte popis vozového parku.]</p>
-    </div>
-    <div class="fleet-grid">
-      <article>
-        <h3>Nákladní vozidla</h3>
-        <p>Pro vnitrostátní a mezinárodní kamionovou dopravu.</p>
-      </article>
-      <article>
-        <h3>Cisterny</h3>
-        <p>Pro přepravu pohonných hmot.</p>
-      </article>
-    </div>
-  </section>
-
-  <section id="o-nas" aria-labelledby="about-title">
-    <div class="about-panel">
-      <h2 id="about-title">O nás</h2>
-      <!-- UPRAVIT: text o firmě -->
-      <p>PHM TRANS se věnuje silniční nákladní dopravě. Zajišťuje přepravu nákladu a spediční služby.</p>
-      <p class="placeholder">[Doplňte text o firmě.]</p>
-    </div>
-  </section>
-
-  <section id="kontakt" aria-labelledby="contact-title">
-    <div class="contact-panel">
-      <div>
-        <h2 id="contact-title">Kontakt</h2>
-        <p>Ozvěte se kvůli přepravě nebo spedici. Údaje níže jsou připravené k doplnění.</p>
+    <section id="sluzby" aria-labelledby="sluzby-title">
+      <div class="w">
+        <p class="kick">Služby</p>
+        <h2 id="sluzby-title">Co převezeme</h2>
+        <p class="lead">Přeprava nákladu po silnici a organizace dopravy. Konkrétní rozsah se domlouvá podle zásilky.</p>
+        <div class="g3">
+          <article class="s hi">
+            <span class="n" aria-hidden="true">01</span>
+            <h3>Přeprava PHM a cisterny</h3>
+            <p>Přeprava pohonných hmot cisternovými vozidly.</p>
+          </article>
+          <article class="s">
+            <span class="n" aria-hidden="true">02</span>
+            <h3>Kamionová doprava</h3>
+            <p>Přeprava nákladu kamionem po České republice a v mezinárodní silniční dopravě.</p>
+          </article>
+          <article class="s">
+            <span class="n" aria-hidden="true">03</span>
+            <h3>Spedice</h3>
+            <p>Zprostředkování přepravy a organizace silniční dopravy.</p>
+          </article>
+        </div>
       </div>
-      <!-- UPRAVIT: telefon, e-mail a adresa. Nechte zástupné texty, dokud nejsou skutečné. -->
-      <dl class="contact-list">
-        <div>
-          <dt>Telefon</dt>
-          <dd>[telefon]</dd>
-        </div>
-        <div>
-          <dt>E-mail</dt>
-          <dd>[e-mail]</dd>
-        </div>
-        <div>
-          <dt>Adresa</dt>
-          <dd>[adresa]</dd>
-        </div>
-      </dl>
-    </div>
-  </section>
+    </section>
 
-  <footer>
-    <p class="brand"><span>PHM</span> TRANS</p>
-    <p>Silniční nákladní doprava</p>
+    <section class="fl" id="vozovy-park" aria-labelledby="park-title">
+      <div class="w">
+        <p class="kick">Vozový park</p>
+        <h2 id="park-title">Cisterny a tahače</h2>
+        <!-- UPRAVIT: popis vozového parku -->
+        <p class="lead">Vozový park je určený pro silniční nákladní dopravu a pro přepravu pohonných hmot. <span class="placeholder">[Doplňte popis vozového parku.]</span></p>
+        <div class="f2">
+          <article class="fc">
+            <img src="/landing/tanker-scania-768.webp" srcset="/landing/tanker-scania-480.webp 480w, /landing/tanker-scania-768.webp 768w, /landing/tanker-scania-1200.webp 1200w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1024px) 92vw, 700px" width="1200" height="800" alt="Cisterna Scania pro přepravu pohonných hmot" loading="lazy" decoding="async">
+            <h3>Cisterny</h3>
+            <p>Pro přepravu pohonných hmot.</p>
+          </article>
+          <article class="fc">
+            <img src="/landing/truck-sunset-768.webp" srcset="/landing/truck-sunset-480.webp 480w, /landing/truck-sunset-768.webp 768w, /landing/truck-sunset-1200.webp 1200w" sizes="(max-width: 768px) calc(100vw - 32px), (max-width: 1024px) 92vw, 520px" width="1200" height="797" alt="Nákladní vozidlo na silnici při západu slunce" loading="lazy" decoding="async">
+            <h3>Nákladní vozidla</h3>
+            <p>Pro vnitrostátní a mezinárodní kamionovou dopravu.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="o-nas" aria-labelledby="about-title">
+      <div class="w ab">
+        <p class="big" aria-hidden="true">PHM<br>TRANS</p>
+        <div>
+          <p class="kick">O nás</p>
+          <h2 id="about-title">Silniční doprava s důrazem na bezpečnost</h2>
+          <!-- UPRAVIT: text o firmě -->
+          <p class="lead">PHM TRANS se věnuje silniční nákladní dopravě. Zajišťuje přepravu nákladu a spediční služby. <span class="placeholder">[Doplňte text o firmě.]</span></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="ct" id="kontakt" aria-labelledby="contact-title">
+      <div class="w">
+        <p class="kick">Kontakt</p>
+        <h2 id="contact-title">Potřebujete převézt?</h2>
+        <p class="lead">Ozvěte se kvůli přepravě nebo spedici.</p>
+        <!-- UPRAVIT: telefon, e-mail a adresa. Nechte zástupné texty, dokud nejsou skutečné. -->
+        <dl class="cg">
+          <div>
+            <dt>Telefon</dt>
+            <dd>[telefon]</dd>
+          </div>
+          <div>
+            <dt>E-mail</dt>
+            <dd>[e-mail]</dd>
+          </div>
+          <div>
+            <dt>Adresa</dt>
+            <dd>[adresa]</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="w">
+      <p class="footer-brand">
+        <img src="/landing/logo-dark.png" srcset="/landing/logo-dark.png 640w" sizes="135px" width="640" height="152" alt="" loading="lazy" decoding="async">
+        <span>Silniční nákladní doprava</span>
+      </p>
+      <p class="credits">Fotografie: Zieben VH a Natalia Marcelewicz (Unsplash), Boris Hamer (Pexels).</p>
+    </div>
   </footer>
 </body>
 </html>
