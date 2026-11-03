@@ -52,7 +52,7 @@ body:not(.landing)::before {
 /* Kapka v pravém prázdném pruhu, obsah zůstává vlevo od ní. */
 @media (min-width: 1100px) {
   body:not(.landing) {
-    --drop-w: min(34vw, 460px);
+    --drop-w: min(18vw, 240px);
   }
 
   body:not(.landing)::before {
