@@ -25,8 +25,8 @@ public sealed class PublicSitePageTests
         var index = File.ReadAllText(Path.Combine(root, "index.html"));
 
         Assert.Contains("lang=\"cs\"", html, StringComparison.Ordinal);
-        Assert.Contains("erp.css?v=10", html, StringComparison.Ordinal);
-        Assert.Contains("landing.css?v=6", html, StringComparison.Ordinal);
+        Assert.Contains("erp.css?v=11", html, StringComparison.Ordinal);
+        Assert.Contains("landing.css?v=7", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://intranet.phmtrans.cz/\">Intranet</a>", html, StringComparison.Ordinal);
