@@ -1,6 +1,6 @@
 :root {
   --bg: #ffffff;
-  --surface: #ffffff;
+  --surface: rgba(255, 255, 255, 0.9);
   --text: #142033;
   --text-secondary: #2c3b52;
   --accent: #c77f28;
@@ -25,60 +25,27 @@ body {
   font-family: "Segoe UI", Arial, sans-serif;
 }
 
-/* Kapka je výřez z logo.png, plné krytí, stejné barvy jako v logu. */
-body:not(.landing) {
-  overflow-x: clip;
-}
-
+/* Světlá kapka z loga, v pozadí za obsahem. */
 body:not(.landing)::before {
   content: "";
   position: fixed;
   z-index: 0;
-  right: -3vw;
-  bottom: -6vh;
-  width: min(46vw, 480px);
+  left: 50%;
+  top: 54%;
+  right: auto;
+  bottom: auto;
+  width: auto;
+  height: min(68vh, 640px);
   aspect-ratio: 207 / 372;
+  transform: translate(-50%, -50%);
   pointer-events: none;
   opacity: 1;
-  background: url("/landing/logo-drop.png") center / contain no-repeat;
+  background: url("/landing/logo-drop-pale.webp") center / contain no-repeat;
 }
 
-@media (max-width: 1099px) {
+@media (max-width: 768px) {
   body:not(.landing)::before {
-    display: none;
-  }
-}
-
-/* Kapka v pravém prázdném pruhu, obsah zůstává vlevo od ní. */
-@media (min-width: 1100px) {
-  body:not(.landing) {
-    --drop-w: min(18vw, 240px);
-  }
-
-  body:not(.landing)::before {
-    top: 5.25rem;
-    right: 1rem;
-    bottom: auto;
-    width: var(--drop-w);
-  }
-
-  body:not(.landing) header,
-  body:not(.landing) .erp-sections,
-  body:not(.landing) .section-title,
-  body:not(.landing) form,
-  body:not(.landing) section,
-  body:not(.landing) #message,
-  body:not(.landing) .tabs {
-    width: min(1180px, calc(100% - var(--drop-w) - 2.75rem));
-    margin-left: 1rem;
-    margin-right: calc(var(--drop-w) + 1.5rem);
-  }
-
-  body:not(.landing) header.login-bar,
-  body:not(.landing) .login-card {
-    width: min(420px, calc(100% - var(--drop-w) - 3rem));
-    margin-left: max(1rem, calc((100% - var(--drop-w) - 420px - 2.5rem) / 2));
-    margin-right: calc(var(--drop-w) + 1.25rem);
+    height: min(42vh, 280px);
   }
 }
 
@@ -282,12 +249,6 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
   margin: 0.15rem auto 0.8rem;
   font-size: 1.35rem;
   font-weight: 700;
-  background: #ffffff;
-}
-
-.erp-sections,
-#message {
-  background: #ffffff;
 }
 
 .section-panel {
@@ -465,7 +426,9 @@ th {
   border-bottom: 3px solid var(--button);
 }
 
-tbody tr:nth-child(even) { background: var(--table-stripe); }
+tbody { background: rgba(255, 255, 255, 0.9); }
+
+tbody tr:nth-child(even) { background: rgba(247, 244, 238, 0.94); }
 
 .num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
