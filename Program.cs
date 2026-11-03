@@ -7,6 +7,7 @@ using PHMTRANS.Cpq;
 using PHMTRANS.Crm;
 using PHMTRANS.Dispatch;
 using PHMTRANS.Pohoda;
+using PHMTRANS.Site;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
@@ -86,6 +87,7 @@ app.MapErpAuth();
 app.MapDispatch();
 app.MapCrm();
 app.MapBi();
+app.MapPublicSite();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapCpq();
