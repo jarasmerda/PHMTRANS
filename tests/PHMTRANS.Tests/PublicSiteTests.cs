@@ -30,9 +30,9 @@ public sealed class PublicSitePageTests
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
         Assert.Contains("class=\"intranet-label\">Intranet</span>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://erp.phmtrans.cz/\">ERP</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://disp.phmtrans.cz/\">Dispečink</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://crm.phmtrans.cz/\">CRM</a>", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/ERP\">ERP</a>", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/Dispecink\">Dispečink</a>", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/CRM\">CRM</a>", html, StringComparison.Ordinal);
         Assert.Contains("<h1 id=\"hero-title\">Silniční nákladní doprava</h1>", html, StringComparison.Ordinal);
         Assert.Contains("Vnitrostátní a mezinárodní kamionová doprava", html, StringComparison.Ordinal);
         Assert.Contains("Přeprava PHM a cisterny", html, StringComparison.Ordinal);
@@ -50,9 +50,9 @@ public sealed class PublicSitePageTests
         Assert.DoesNotContain("@", html, StringComparison.Ordinal);
         Assert.DoesNotContain("+420", html, StringComparison.Ordinal);
         Assert.DoesNotContain("http://", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("https://", html.Replace("https://erp.phmtrans.cz/", "", StringComparison.Ordinal)
-            .Replace("https://disp.phmtrans.cz/", "", StringComparison.Ordinal)
-            .Replace("https://crm.phmtrans.cz/", "", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.DoesNotContain("https://", html.Replace("https://intranet.phmtrans.cz/ERP", "", StringComparison.Ordinal)
+            .Replace("https://intranet.phmtrans.cz/Dispecink", "", StringComparison.Ordinal)
+            .Replace("https://intranet.phmtrans.cz/CRM", "", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("google", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("url(", css, StringComparison.OrdinalIgnoreCase);
@@ -61,14 +61,17 @@ public sealed class PublicSitePageTests
 
         Assert.Contains("name=\"PublicHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"PublicIndex\"", webConfig, StringComparison.Ordinal);
-        Assert.Contains("^(www\\.)?phmtrans\\.cz(?::\\d+)?$", webConfig, StringComparison.Ordinal);
+        Assert.Contains("name=\"WwwToApex\"", webConfig, StringComparison.Ordinal);
+        Assert.Contains("^www\\.phmtrans\\.cz(?::\\d+)?$", webConfig, StringComparison.Ordinal);
+        Assert.Contains("^phmtrans\\.cz(?::\\d+)?$", webConfig, StringComparison.Ordinal);
+        Assert.Contains("https://phmtrans.cz/{R:0}", webConfig, StringComparison.Ordinal);
         Assert.Contains("url=\"landing.html\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"ErpHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"DispHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"CrmHome\"", webConfig, StringComparison.Ordinal);
 
-        Assert.Contains("https://disp.phmtrans.cz/", index, StringComparison.Ordinal);
-        Assert.Contains("https://crm.phmtrans.cz/", index, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", index, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/CRM", index, StringComparison.Ordinal);
         Assert.DoesNotContain("Intranet", index, StringComparison.Ordinal);
         Assert.DoesNotContain("landing.html", index, StringComparison.Ordinal);
     }
@@ -96,8 +99,6 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
 
     [Theory]
     [InlineData("phmtrans.cz")]
-    [InlineData("www.phmtrans.cz")]
-    [InlineData("WWW.PHMTRANS.CZ")]
     [InlineData("phmtrans.cz:443")]
     public async Task Public_hosts_serve_the_landing_page_without_login(string host)
     {
@@ -111,7 +112,7 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             var html = await response.Content.ReadAsStringAsync();
             Assert.Contains("Silniční nákladní doprava", html, StringComparison.Ordinal);
             Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
-            Assert.Contains("https://erp.phmtrans.cz/", html, StringComparison.Ordinal);
+            Assert.Contains("https://intranet.phmtrans.cz/ERP", html, StringComparison.Ordinal);
             Assert.Contains("[telefon]", html, StringComparison.Ordinal);
             Assert.DoesNotContain("src=\"/image.jpg\"", html, StringComparison.Ordinal);
         }
@@ -130,11 +131,20 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var login = await client.SendAsync(Request("/login.html", user: false, "www.phmtrans.cz"));
+        var login = await client.SendAsync(Request("/login.html", user: false, "phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         var loginHtml = await login.Content.ReadAsStringAsync();
         Assert.Contains("Přihlášení", loginHtml, StringComparison.Ordinal);
+        Assert.Contains("Uživatelské jméno", loginHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Uživatel Pohody", loginHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("[telefon]", loginHtml, StringComparison.Ordinal);
+
+        var www = await client.SendAsync(Request("/vozovy-park?x=1", user: false, "www.phmtrans.cz"));
+        Assert.Equal(HttpStatusCode.MovedPermanently, www.StatusCode);
+        Assert.Equal("https://phmtrans.cz/vozovy-park?x=1", www.Headers.Location?.OriginalString);
+
+        var wwwHealth = await client.SendAsync(Request("/health", user: false, "WWW.PHMTRANS.CZ"));
+        Assert.Equal(HttpStatusCode.OK, wwwHealth.StatusCode);
 
         var direct = await client.SendAsync(Request("/landing.html", user: false, "localhost"));
         Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
@@ -152,20 +162,31 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
         Assert.Contains("src=\"/image.jpg\"", portalHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("aria-label=\"Intranet\"", portalHtml, StringComparison.Ordinal);
 
-        foreach (var host in new[] { "erp.phmtrans.cz", "www.erp.phmtrans.cz", "disp.phmtrans.cz", "www.disp.phmtrans.cz", "crm.phmtrans.cz", "www.crm.phmtrans.cz" })
+        foreach (var (host, target) in new[]
+        {
+            ("erp.phmtrans.cz", "https://intranet.phmtrans.cz/ERP"),
+            ("www.erp.phmtrans.cz", "https://intranet.phmtrans.cz/ERP"),
+            ("disp.phmtrans.cz", "https://intranet.phmtrans.cz/Dispecink"),
+            ("www.disp.phmtrans.cz", "https://intranet.phmtrans.cz/Dispecink"),
+            ("crm.phmtrans.cz", "https://intranet.phmtrans.cz/CRM"),
+            ("www.crm.phmtrans.cz", "https://intranet.phmtrans.cz/CRM")
+        })
         {
             var home = await client.SendAsync(Request("/", user: false, host));
-            Assert.Equal(HttpStatusCode.Redirect, home.StatusCode);
-            Assert.Equal("/login.html", home.Headers.Location?.OriginalString);
+            Assert.Equal(HttpStatusCode.MovedPermanently, home.StatusCode);
+            Assert.Equal(target, home.Headers.Location?.OriginalString);
+
+            var legacyHealth = await client.SendAsync(Request("/health", user: false, host));
+            Assert.Equal(HttpStatusCode.OK, legacyHealth.StatusCode);
         }
 
-        var signedErp = await client.SendAsync(Request("/", user: true, "erp.phmtrans.cz"));
+        var signedErp = await client.SendAsync(Request("/ERP", user: true, "intranet.phmtrans.cz"));
         Assert.Contains("Vydané faktury", await signedErp.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var signedDispatch = await client.SendAsync(Request("/", user: true, "disp.phmtrans.cz"));
+        var signedDispatch = await client.SendAsync(Request("/Dispecink", user: true, "intranet.phmtrans.cz"));
         Assert.Contains("<h1>Dispečink</h1>", await signedDispatch.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var signedCrm = await client.SendAsync(Request("/", user: true, "crm.phmtrans.cz"));
+        var signedCrm = await client.SendAsync(Request("/CRM", user: true, "intranet.phmtrans.cz"));
         Assert.Contains("<h1>CRM</h1>", await signedCrm.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
@@ -221,9 +242,7 @@ file sealed class PublicSiteAuthHandler(
         if (!Request.Headers.ContainsKey("X-Test-User"))
             return Task.FromResult(AuthenticateResult.NoResult());
 
-        var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, Request.Headers["X-Test-User"].ToString())],
-            "Test");
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), "Test")));
+        var identity = TestUsers.Identity(Request, Scheme.Name);
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
     }
 }

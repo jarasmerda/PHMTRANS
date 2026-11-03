@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Správa uživatelů – PHM Trans</title>
+  <link rel="stylesheet" href="/erp.css?v=6">
+  <style>
+    .checks { display: flex; flex-wrap: wrap; gap: 0.8rem 1rem; align-items: center; }
+    .checks label { display: flex; gap: 0.35rem; align-items: center; grid-template-columns: none; }
+    #users { min-width: 64rem; }
+    #users button.ghost {
+      background: var(--surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+    .row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="brand"><span>PHM</span> TRANS</p>
+      <h1>Správa uživatelů</h1>
+    </div>
+    <div class="header-actions">
+      <nav class="module-links" aria-label="Moduly">
+        <a href="/ERP">ERP</a>
+        <a href="/Dispecink">Dispečink</a>
+        <a href="/CRM">CRM</a>
+        <a href="/heslo">Heslo</a>
+        <span aria-current="page">Správa</span>
+      </nav>
+      <button type="button" id="logout">Odhlásit</button>
+    </div>
+  </header>
+  <p id="message" hidden></p>
+  <form id="create">
+    <label>Uživatelské jméno <input id="username" autocomplete="off" required></label>
+    <label>Zobrazované jméno <input id="displayName" autocomplete="off"></label>
+    <label>Heslo <input id="password" type="password" autocomplete="new-password" minlength="8" required></label>
+    <div class="checks">
+      <label><input type="checkbox" id="allowErp" checked> ERP</label>
+      <label><input type="checkbox" id="allowDispatch"> Dispečink</label>
+      <label><input type="checkbox" id="allowCrm"> CRM</label>
+      <label><input type="checkbox" id="isAdmin"> Správce</label>
+      <label><input type="checkbox" id="isActive" checked> Aktivní</label>
+    </div>
+    <button type="submit">Založit uživatele</button>
+  </form>
+  <section id="table-wrap">
+    <h2>Uživatelé</h2>
+    <div class="table-scroll">
+      <table id="users">
+        <thead>
+          <tr>
+            <th>Jméno</th>
+            <th>Zobrazení</th>
+            <th>Moduly</th>
+            <th>Stav</th>
+            <th>Vytvořen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+  <script>
+    const message = document.querySelector("#message");
+    const text = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+    }[char]));
+    const dateFormat = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" });
+
+    function show(text) {
+      message.hidden = !text;
+      message.textContent = text || "";
+    }
+
+    function formatWhen(value) {
+      return value ? dateFormat.format(new Date(value)) : "ještě ne";
+    }
+
+    async function send(url, method, body) {
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      if (response.status === 401) {
+        location.href = "/login.html";
+        return null;
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        show(data.message || "Požadavek se nepodařil.");
+        return null;
+      }
+      show("");
+      return data;
+    }
+
+    function modules(user) {
+      return [
+        user.allowErp ? "ERP" : "",
+        user.allowDispatch ? "Dispečink" : "",
+        user.allowCrm ? "CRM" : ""
+      ].filter(Boolean).join(", ") || "žádný";
+    }
+
+    function render(users) {
+      document.querySelector("#rows").innerHTML = users.map((user) => `
+        <tr data-id="${text(user.id)}">
+          <td>${text(user.username)}</td>
+          <td><input data-field="displayName" value="${text(user.displayName)}"></td>
+          <td>
+            <div class="checks">
+              <label><input data-field="allowErp" type="checkbox" ${user.allowErp ? "checked" : ""}> ERP</label>
+              <label><input data-field="allowDispatch" type="checkbox" ${user.allowDispatch ? "checked" : ""}> Dispečink</label>
+              <label><input data-field="allowCrm" type="checkbox" ${user.allowCrm ? "checked" : ""}> CRM</label>
+              <label><input data-field="isAdmin" type="checkbox" ${user.isAdmin ? "checked" : ""}> Správce</label>
+              <label><input data-field="isActive" type="checkbox" ${user.isActive ? "checked" : ""}> Aktivní</label>
+            </div>
+          </td>
+          <td>${user.isActive ? "aktivní" : "vypnutý"}${user.isAdmin ? ", správce" : ""}<br>${formatWhen(user.lastLoginAt)}</td>
+          <td>${formatWhen(user.createdAt)}</td>
+          <td>
+            <div class="row-actions">
+              <button type="button" class="ghost" data-action="save">Uložit</button>
+              <button type="button" class="ghost" data-action="password">Nové heslo</button>
+            </div>
+          </td>
+        </tr>`).join("") || `<tr><td colspan="6">Zatím tu není žádný uživatel.</td></tr>`;
+    }
+
+    async function load() {
+      const response = await fetch("/api/admin/users", { cache: "no-store" });
+      if (response.status === 401) {
+        location.href = "/login.html";
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        show(data.message || "Uživatele se nepodařilo načíst.");
+        return;
+      }
+      render(data);
+    }
+
+    document.querySelector("#create").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const created = await send("/api/admin/users", "POST", {
+        username: document.querySelector("#username").value,
+        displayName: document.querySelector("#displayName").value,
+        password: document.querySelector("#password").value,
+        allowErp: document.querySelector("#allowErp").checked,
+        allowDispatch: document.querySelector("#allowDispatch").checked,
+        allowCrm: document.querySelector("#allowCrm").checked,
+        isAdmin: document.querySelector("#isAdmin").checked,
+        isActive: document.querySelector("#isActive").checked
+      });
+      if (!created) return;
+      event.target.reset();
+      document.querySelector("#allowErp").checked = true;
+      document.querySelector("#isActive").checked = true;
+      await load();
+    });
+
+    document.querySelector("#rows").addEventListener("click", async (event) => {
+      const button = event.target.closest("button");
+      if (!button) return;
+      const row = button.closest("tr");
+      const id = row.dataset.id;
+      if (button.dataset.action === "save") {
+        const saved = await send(`/api/admin/users/${encodeURIComponent(id)}`, "PUT", {
+          displayName: row.querySelector("[data-field=displayName]").value,
+          allowErp: row.querySelector("[data-field=allowErp]").checked,
+          allowDispatch: row.querySelector("[data-field=allowDispatch]").checked,
+          allowCrm: row.querySelector("[data-field=allowCrm]").checked,
+          isAdmin: row.querySelector("[data-field=isAdmin]").checked,
+          isActive: row.querySelector("[data-field=isActive]").checked
+        });
+        if (saved) await load();
+        return;
+      }
+      const password = window.prompt("Nové heslo, aspoň 8 znaků");
+      if (!password) return;
+      const reset = await send(`/api/admin/users/${encodeURIComponent(id)}/password`, "POST", { password });
+      if (reset) show(reset.message || "Heslo je nastavené.");
+    });
+
+    document.querySelector("#logout").addEventListener("click", async () => {
+      await fetch("/api/logout", { method: "POST" });
+      location.href = "/login.html";
+    });
+
+    load();
+  </script>
+</body>
+</html>

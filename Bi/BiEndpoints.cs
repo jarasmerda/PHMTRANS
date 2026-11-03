@@ -6,39 +6,6 @@ public static class BiEndpoints
 {
     public static void MapBi(this WebApplication app)
     {
-        app.Use(async (context, next) =>
-        {
-            var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(',')[0].Trim()
-                ?? context.Request.Host.Host;
-            var path = context.Request.Path.Value ?? "";
-            var authenticated = context.User.Identity?.IsAuthenticated == true;
-            var invoiceApi = path.StartsWith("/api/bi", StringComparison.OrdinalIgnoreCase);
-
-            if (!authenticated && (invoiceApi || path is "/erp.html"))
-            {
-                if (invoiceApi)
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsJsonAsync(new { message = "Přihlaste se." });
-                    return;
-                }
-
-                context.Response.Redirect("/login.html");
-                return;
-            }
-
-            if (IsErpHost(host) && !authenticated && path is "" or "/" or "/index.html")
-            {
-                context.Response.Redirect("/login.html");
-                return;
-            }
-
-            if (IsErpHost(host) && authenticated && path is "" or "/" or "/index.html" or "/login.html")
-                context.Request.Path = "/erp.html";
-
-            await next();
-        });
-
         app.MapGet("/api/bi/issued-invoices", async (
             DateOnly? from,
             DateOnly? to,
@@ -70,13 +37,6 @@ public static class BiEndpoints
                 return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
             }
         });
-    }
-
-    private static bool IsErpHost(string host)
-    {
-        var name = host.Split(':')[0];
-        return name.Equals("www.erp.phmtrans.cz", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("erp.phmtrans.cz", StringComparison.OrdinalIgnoreCase);
     }
 
     private static IssuedInvoiceReport CreateReport(

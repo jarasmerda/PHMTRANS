@@ -26,25 +26,25 @@ public sealed class CrmHttpTests : IClassFixture<CrmApp>
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var board = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/board", user: false, host: "crm.phmtrans.cz"));
+        var board = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/board", user: false, host: "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.Unauthorized, board.StatusCode);
         Assert.Contains("Přihlaste se", await board.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var crmHome = await client.SendAsync(Request(HttpMethod.Get, "/", user: false, host: "crm.phmtrans.cz"));
+        var crmHome = await client.SendAsync(Request(HttpMethod.Get, "/", user: false, host: "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.Redirect, crmHome.StatusCode);
         Assert.Equal("/login.html", crmHome.Headers.Location?.OriginalString);
 
         var crmPage = await client.SendAsync(Request(HttpMethod.Get, "/crm.html", user: false));
         Assert.Equal(HttpStatusCode.Redirect, crmPage.StatusCode);
-        Assert.Equal("/login.html", crmPage.Headers.Location?.OriginalString);
+        Assert.StartsWith("/login.html", crmPage.Headers.Location?.OriginalString, StringComparison.Ordinal);
 
         var portal = await client.SendAsync(Request(HttpMethod.Get, "/", user: false));
         var portalHtml = await portal.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, portal.StatusCode);
-        Assert.Contains("https://crm.phmtrans.cz/", portalHtml, StringComparison.Ordinal);
-        Assert.Contains("https://disp.phmtrans.cz/", portalHtml, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/CRM", portalHtml, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", portalHtml, StringComparison.Ordinal);
 
-        var signedCrm = await client.SendAsync(Request(HttpMethod.Get, "/", user: true, host: "www.crm.phmtrans.cz"));
+        var signedCrm = await client.SendAsync(Request(HttpMethod.Get, "/CRM", user: true, host: "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, signedCrm.StatusCode);
         var crmHtml = await signedCrm.Content.ReadAsStringAsync();
         Assert.Contains("<h1>CRM</h1>", crmHtml, StringComparison.Ordinal);
@@ -52,12 +52,12 @@ public sealed class CrmHttpTests : IClassFixture<CrmApp>
         Assert.DoesNotContain("<h1>Dispečink</h1>", crmHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("Vydané faktury", crmHtml, StringComparison.Ordinal);
 
-        var signedErp = await client.SendAsync(Request(HttpMethod.Get, "/", user: true, host: "erp.phmtrans.cz"));
+        var signedErp = await client.SendAsync(Request(HttpMethod.Get, "/ERP", user: true, host: "intranet.phmtrans.cz"));
         var erpHtml = await signedErp.Content.ReadAsStringAsync();
         Assert.Contains("Vydané faktury", erpHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("<h1>CRM</h1>", erpHtml, StringComparison.Ordinal);
 
-        var signedDispatch = await client.SendAsync(Request(HttpMethod.Get, "/", user: true, host: "disp.phmtrans.cz"));
+        var signedDispatch = await client.SendAsync(Request(HttpMethod.Get, "/Dispecink", user: true, host: "intranet.phmtrans.cz"));
         var dispatchHtml = await signedDispatch.Content.ReadAsStringAsync();
         Assert.Contains("<h1>Dispečink</h1>", dispatchHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("<h1>CRM</h1>", dispatchHtml, StringComparison.Ordinal);
@@ -385,9 +385,7 @@ file sealed class CrmTestAuthHandler(
         if (!Request.Headers.ContainsKey("X-Test-User"))
             return Task.FromResult(AuthenticateResult.NoResult());
 
-        var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, Request.Headers["X-Test-User"].ToString())],
-            "Test");
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), "Test")));
+        var identity = TestUsers.Identity(Request, Scheme.Name);
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
     }
 }

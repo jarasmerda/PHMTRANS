@@ -8,39 +8,6 @@ public static class CrmEndpoints
 
     public static void MapCrm(this WebApplication app)
     {
-        app.Use(async (context, next) =>
-        {
-            var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(',')[0].Trim()
-                ?? context.Request.Host.Host;
-            var path = context.Request.Path.Value ?? "";
-            var authenticated = context.User.Identity?.IsAuthenticated == true;
-            var crmApi = context.Request.Path.StartsWithSegments("/api/crm");
-
-            if (!authenticated && (crmApi || IsCrmPage(path)))
-            {
-                if (crmApi)
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsJsonAsync(new { message = "Přihlaste se." });
-                    return;
-                }
-
-                context.Response.Redirect("/login.html");
-                return;
-            }
-
-            if (IsCrmHost(host) && !authenticated && IsHome(path))
-            {
-                context.Response.Redirect("/login.html");
-                return;
-            }
-
-            if (IsCrmHost(host) && authenticated && (IsHome(path) || IsLogin(path)))
-                context.Request.Path = "/crm.html";
-
-            await next();
-        });
-
         // Stejně jako /api/dispatch. RequireAuthorization() by skončilo prázdným 401
         // ještě před tímto middleware, protože UseAuthorization je registrované dřív.
         var api = app.MapGroup("/api/crm");
@@ -247,22 +214,6 @@ public static class CrmEndpoints
             CrmActivityKinds.All.Select(kind => new CrmKindCount(kind, activities.Count(item => item.Kind == kind))).ToArray());
         return new CrmBoard(CrmStorage.Kind, CrmStorage.Note, counts, customers, contacts, opportunities, activities);
     }
-
-    private static bool IsCrmHost(string host)
-    {
-        var name = host.Split(':')[0];
-        return name.Equals("crm.phmtrans.cz", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("www.crm.phmtrans.cz", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsHome(string path) =>
-        path is "" or "/" || path.Equals("/index.html", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsLogin(string path) =>
-        path.Equals("/login.html", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsCrmPage(string path) =>
-        path.Equals("/crm.html", StringComparison.OrdinalIgnoreCase);
 
     private static StringComparer CreateCzechComparer()
     {
