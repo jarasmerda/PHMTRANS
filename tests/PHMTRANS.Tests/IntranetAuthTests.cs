@@ -125,7 +125,7 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
         Assert.Equal(HttpStatusCode.OK, admin.StatusCode);
         Assert.Contains("Správa uživatelů", await admin.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var css = await client.SendAsync(Get("/ERP/erp.css?v=16", "intranet.phmtrans.cz"));
+        var css = await client.SendAsync(Get("/ERP/erp.css?v=17", "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, css.StatusCode);
         Assert.Contains("css", css.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
 
@@ -485,7 +485,7 @@ public sealed class IntranetRoutingTests : IClassFixture<PublicSiteApp>
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
         Assert.Contains("returnUrl=%2FERP", login.Headers.Location?.OriginalString, StringComparison.OrdinalIgnoreCase);
 
-        var asset = await client.SendAsync(Get("/Dispecink/dispecink.js?v=4", "intranet.phmtrans.cz", user: false));
+        var asset = await client.SendAsync(Get("/Dispecink/dispecink.js?v=5", "intranet.phmtrans.cz", user: false));
         Assert.Equal(HttpStatusCode.OK, asset.StatusCode);
         Assert.Contains("javascript", asset.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
 

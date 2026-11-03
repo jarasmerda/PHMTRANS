@@ -43,12 +43,25 @@ builder.Services.AddSingleton<IssuedInvoiceCache>();
 builder.Services.AddSingleton<SqlDispatchStore>();
 builder.Services.AddSingleton<IDispatchStore>(sp => sp.GetRequiredService<SqlDispatchStore>());
 builder.Services.AddHostedService<DispatchSchemaInitializer>();
+builder.Services.AddSingleton<SqlOrderStore>();
+builder.Services.AddSingleton<IOrderStore>(sp => sp.GetRequiredService<SqlOrderStore>());
+builder.Services.AddHostedService<OrderSyncWorker>();
 builder.Services.AddSingleton<SqlCrmStore>();
 builder.Services.AddSingleton<ICrmStore>(sp => sp.GetRequiredService<SqlCrmStore>());
 builder.Services.AddHostedService<CrmSchemaInitializer>();
 builder.Services.AddSingleton<SqlAuthStore>();
 builder.Services.AddSingleton<IAuthStore>(sp => sp.GetRequiredService<SqlAuthStore>());
 builder.Services.AddHostedService<AuthSchemaInitializer>();
+if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("Dispatch:Preview", false))
+{
+    // Náhled bez SQL. Zapne se jen v Development a jen když je Dispatch:Preview true.
+    builder.Services.AddSingleton<PreviewDispatchStore>();
+    builder.Services.AddSingleton<IDispatchStore>(sp => sp.GetRequiredService<PreviewDispatchStore>());
+    builder.Services.AddSingleton<PreviewOrderStore>();
+    builder.Services.AddSingleton<IOrderStore>(sp => sp.GetRequiredService<PreviewOrderStore>());
+    builder.Services.AddSingleton<PreviewAuthStore>();
+    builder.Services.AddSingleton<IAuthStore>(sp => sp.GetRequiredService<PreviewAuthStore>());
+}
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>
@@ -60,6 +73,8 @@ builder.Services.AddHttpClient<PohodaMServerClient>()
     });
 
 var app = builder.Build();
+if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Dispatch:Preview", false))
+    app.Logger.LogWarning("Dispečink běží v paměti (Dispatch:Preview). Do SQL se nic nezapisuje.");
 
 app.UseForwardedHeaders();
 app.UseHostRouting();
@@ -76,6 +91,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapAuth();
 app.MapDispatch();
+app.MapOrders();
 app.MapCrm();
 app.MapBi();
 app.MapPublicSite();

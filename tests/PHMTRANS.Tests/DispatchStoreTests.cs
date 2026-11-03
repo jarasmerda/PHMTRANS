@@ -354,7 +354,10 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=4", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=5", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("Potvrdit k fakturaci", html, StringComparison.Ordinal);
+        Assert.Contains("Fronta Pohody", html, StringComparison.Ordinal);
         Assert.Contains(">Upravit</button>", js, StringComparison.Ordinal);
         Assert.Contains("Uložit změny", js, StringComparison.Ordinal);
         Assert.Contains("data-field=\"vehicle\"", js, StringComparison.Ordinal);
@@ -395,7 +398,10 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("dbo.Disp_Vehicle", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Driver", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Trip", script, StringComparison.Ordinal);
-        Assert.Equal(3, Count(script, "IF OBJECT_ID"));
+        Assert.Equal(6, Count(script, "IF OBJECT_ID"));
+        Assert.Contains("dbo.Disp_Order", script, StringComparison.Ordinal);
+        Assert.Contains("dbo.Disp_OrderVersion", script, StringComparison.Ordinal);
+        Assert.Contains("dbo.Disp_SyncQueue", script, StringComparison.Ordinal);
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'VehicleId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
@@ -406,7 +412,9 @@ public sealed class DispatchSqlGuardTests
         Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE ", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Smerco_", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Pohoda", script, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PohodaSQL", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PohodaOrderId", script, StringComparison.Ordinal);
+        Assert.Contains("PohodaInvoiceNumber", script, StringComparison.Ordinal);
     }
 
     [Fact]
