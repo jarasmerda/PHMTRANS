@@ -299,8 +299,7 @@ body.landing .module-links {
 }
 
 body.landing .site-nav a,
-body.landing .module-links a,
-body.landing .intranet-label {
+body.landing .module-links a {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -313,9 +312,14 @@ body.landing .intranet-label {
   text-decoration: none;
 }
 
-body.landing .intranet-label {
+body.landing .module-links a {
   color: var(--accent);
   letter-spacing: 0.08em;
+}
+
+body.landing .module-links a:hover,
+body.landing .module-links a:focus-visible {
+  color: #fff;
 }
 
 body.landing .module-links {
@@ -772,32 +776,30 @@ body.landing .credits {
 
   body.landing .module-links {
     margin-top: 0;
-    padding: 0 16px 0 22px;
+    padding: 0;
     border-top: 0;
-    background: var(--button);
-    color: var(--ink);
+    background: transparent;
     gap: 0;
-    clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
-  }
-
-  body.landing .module-links a,
-  body.landing .intranet-label {
-    color: var(--ink);
-    padding: 0 8px;
-    font-size: 1.05rem;
   }
 
   body.landing .module-links a {
-    box-shadow: inset 1px 0 0 rgba(0, 22, 58, 0.22);
+    min-height: 44px;
+    padding: 0 20px 0 28px;
+    background: var(--button);
+    color: var(--ink);
+    font-size: 1.05rem;
+    letter-spacing: 0.08em;
+    clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
   }
 
   body.landing .module-links a:hover,
   body.landing .module-links a:focus-visible {
-    color: #00122f;
+    color: var(--ink);
+    filter: brightness(1.06);
   }
 
   body.landing .module-links a:focus-visible {
-    outline-color: #00122f;
+    outline-color: #fff;
   }
 
   body.landing .hero {
