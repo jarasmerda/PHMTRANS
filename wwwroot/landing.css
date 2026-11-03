@@ -207,7 +207,7 @@ body.landing .drop-mark {
   left: 46%;
   width: clamp(280px, 52vw, 640px);
   height: auto;
-  opacity: 0.14;
+  opacity: 0.28;
   pointer-events: none;
   user-select: none;
 }
@@ -974,7 +974,7 @@ body.landing .credits {
     left: auto;
     right: -8vw;
     width: 62vw;
-    opacity: 0.14;
+    opacity: 0.28;
   }
 
   body.landing .nav-toggle-btn {
@@ -1059,6 +1059,6 @@ body.landing .credits {
 
   body.landing .drop-mark {
     width: 70vw;
-    opacity: 0.14;
+    opacity: 0.28;
   }
 }
