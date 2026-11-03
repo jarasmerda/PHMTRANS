@@ -8,39 +8,6 @@ public static class DispatchEndpoints
 
     public static void MapDispatch(this WebApplication app)
     {
-        app.Use(async (context, next) =>
-        {
-            var host = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault()?.Split(',')[0].Trim()
-                ?? context.Request.Host.Host;
-            var path = context.Request.Path.Value ?? "";
-            var authenticated = context.User.Identity?.IsAuthenticated == true;
-            var dispatchApi = context.Request.Path.StartsWithSegments("/api/dispatch");
-
-            if (!authenticated && (dispatchApi || IsBoard(path)))
-            {
-                if (dispatchApi)
-                {
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await context.Response.WriteAsJsonAsync(new { message = "Přihlaste se." });
-                    return;
-                }
-
-                context.Response.Redirect("/login.html");
-                return;
-            }
-
-            if (IsDispatchHost(host) && !authenticated && IsHome(path))
-            {
-                context.Response.Redirect("/login.html");
-                return;
-            }
-
-            if (IsDispatchHost(host) && authenticated && (IsHome(path) || IsLogin(path)))
-                context.Request.Path = "/dispecink.html";
-
-            await next();
-        });
-
         // Stejně jako /api/bi. RequireAuthorization() by skončilo prázdným 401
         // ještě před tímto middleware, protože UseAuthorization je registrované dřív.
         var api = app.MapGroup("/api/dispatch");
@@ -142,22 +109,6 @@ public static class DispatchEndpoints
         var drivers = snapshot.Drivers.OrderBy(driver => driver.Name, Czech).ToArray();
         return new DispatchBoard(DispatchStorage.Kind, DispatchStorage.Note, counts, trips, vehicles, drivers);
     }
-
-    private static bool IsDispatchHost(string host)
-    {
-        var name = host.Split(':')[0];
-        return name.Equals("disp.phmtrans.cz", StringComparison.OrdinalIgnoreCase)
-            || name.Equals("www.disp.phmtrans.cz", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsHome(string path) =>
-        path is "" or "/" || path.Equals("/index.html", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsLogin(string path) =>
-        path.Equals("/login.html", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsBoard(string path) =>
-        path.Equals("/dispecink.html", StringComparison.OrdinalIgnoreCase);
 
     private static StringComparer CreateCzechComparer()
     {

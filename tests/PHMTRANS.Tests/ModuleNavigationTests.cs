@@ -33,23 +33,24 @@ public sealed class ModuleNavigationPageTests
             Assert.DoesNotContain("class=\"home\"", html, StringComparison.Ordinal);
         }
 
-        Assert.Contains("aria-current=\"page\">ERP</span>", erp, StringComparison.Ordinal);
-        Assert.DoesNotContain("href=\"https://erp.phmtrans.cz/\"", erp, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://disp.phmtrans.cz/\">Dispečink</a>", erp, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://crm.phmtrans.cz/\">CRM</a>", erp, StringComparison.Ordinal);
+            Assert.Contains("aria-current=\"page\">ERP</span>", erp, StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"https://intranet.phmtrans.cz/ERP\"", erp, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/Dispecink\">Dispečink</a>", erp, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/CRM\">CRM</a>", erp, StringComparison.Ordinal);
+        Assert.Contains("href=\"/heslo\">Heslo</a>", erp, StringComparison.Ordinal);
 
-        Assert.Contains("href=\"https://erp.phmtrans.cz/\">ERP</a>", dispatch, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/ERP\">ERP</a>", dispatch, StringComparison.Ordinal);
         Assert.Contains("aria-current=\"page\">Dispečink</span>", dispatch, StringComparison.Ordinal);
-        Assert.DoesNotContain("href=\"https://disp.phmtrans.cz/\"", dispatch, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://crm.phmtrans.cz/\">CRM</a>", dispatch, StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"https://intranet.phmtrans.cz/Dispecink\"", dispatch, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/CRM\">CRM</a>", dispatch, StringComparison.Ordinal);
         Assert.Contains("<h1>Dispečink</h1>", dispatch, StringComparison.Ordinal);
         Assert.DoesNotContain("erp-sections", dispatch, StringComparison.Ordinal);
         Assert.DoesNotContain("Připravujeme", dispatch, StringComparison.Ordinal);
 
-        Assert.Contains("href=\"https://erp.phmtrans.cz/\">ERP</a>", crm, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://disp.phmtrans.cz/\">Dispečink</a>", crm, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/ERP\">ERP</a>", crm, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/Dispecink\">Dispečink</a>", crm, StringComparison.Ordinal);
         Assert.Contains("aria-current=\"page\">CRM</span>", crm, StringComparison.Ordinal);
-        Assert.DoesNotContain("href=\"https://crm.phmtrans.cz/\"", crm, StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"https://intranet.phmtrans.cz/CRM\"", crm, StringComparison.Ordinal);
         Assert.Contains("<h1>CRM</h1>", crm, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Části CRM\"", crm, StringComparison.Ordinal);
         Assert.Contains(">Přehled</button>", crm, StringComparison.Ordinal);
@@ -132,11 +133,11 @@ public sealed class ModuleNavigationHttpTests : IClassFixture<ModuleNavigationAp
 
         var anonymous = await client.SendAsync(Request("/erp.html", user: false));
         Assert.Equal(HttpStatusCode.Redirect, anonymous.StatusCode);
-        Assert.Equal("/login.html", anonymous.Headers.Location?.OriginalString);
+        Assert.StartsWith("/login.html", anonymous.Headers.Location?.OriginalString, StringComparison.Ordinal);
 
         var home = await client.SendAsync(Request("/", user: false, host: "erp.phmtrans.cz"));
-        Assert.Equal(HttpStatusCode.Redirect, home.StatusCode);
-        Assert.Equal("/login.html", home.Headers.Location?.OriginalString);
+        Assert.Equal(HttpStatusCode.MovedPermanently, home.StatusCode);
+        Assert.Equal("https://intranet.phmtrans.cz/ERP", home.Headers.Location?.OriginalString);
 
         var signed = await client.SendAsync(Request("/erp.html", user: true));
         Assert.Equal(HttpStatusCode.OK, signed.StatusCode);
@@ -146,9 +147,11 @@ public sealed class ModuleNavigationHttpTests : IClassFixture<ModuleNavigationAp
         Assert.Contains("Vydané faktury", html, StringComparison.Ordinal);
         Assert.Contains("aria-current=\"page\">ERP</span>", html, StringComparison.Ordinal);
 
-        var signedHome = await client.SendAsync(Request("/", user: true, host: "erp.phmtrans.cz"));
+        var signedHome = await client.SendAsync(Request("/ERP", user: true, host: "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, signedHome.StatusCode);
-        Assert.Contains("Části ERP", await signedHome.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        var homeHtml = await signedHome.Content.ReadAsStringAsync();
+        Assert.Contains("Části ERP", homeHtml, StringComparison.Ordinal);
+        Assert.Contains("href=\"#uctovani-faktur\"", homeHtml, StringComparison.Ordinal);
     }
 
     private static HttpRequestMessage Request(string path, bool user, string? host = null)
@@ -203,9 +206,7 @@ file sealed class ModuleNavigationAuthHandler(
         if (!Request.Headers.ContainsKey("X-Test-User"))
             return Task.FromResult(AuthenticateResult.NoResult());
 
-        var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, Request.Headers["X-Test-User"].ToString())],
-            "Test");
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), "Test")));
+        var identity = TestUsers.Identity(Request, Scheme.Name);
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
     }
 }

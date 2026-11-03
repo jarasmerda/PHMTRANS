@@ -334,8 +334,8 @@ public sealed class CrmPageTests
         Assert.Contains("erp.css?v=6", html, StringComparison.Ordinal);
         Assert.Contains("crm.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
-        Assert.Contains("https://erp.phmtrans.cz/", html, StringComparison.Ordinal);
-        Assert.Contains("https://disp.phmtrans.cz/", html, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/ERP", html, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", html, StringComparison.Ordinal);
         Assert.Contains("aria-current=\"page\">CRM</span>", html, StringComparison.Ordinal);
         Assert.Contains(">Odhlásit</button>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Rozcestník", html, StringComparison.Ordinal);
@@ -365,9 +365,9 @@ public sealed class CrmPageTests
         Assert.Contains("/api/crm/opportunities", js, StringComparison.Ordinal);
         Assert.Contains("/api/crm/activities", js, StringComparison.Ordinal);
         Assert.Contains(", \"PUT\")", js, StringComparison.Ordinal);
-        Assert.Contains("https://crm.phmtrans.cz/", index, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/CRM", index, StringComparison.Ordinal);
         Assert.Contains(">CRM</a>", index, StringComparison.Ordinal);
-        Assert.True(index.IndexOf("https://disp.phmtrans.cz/", StringComparison.Ordinal) < index.IndexOf("https://crm.phmtrans.cz/", StringComparison.Ordinal));
+        Assert.True(index.IndexOf("https://intranet.phmtrans.cz/Dispecink", StringComparison.Ordinal) < index.IndexOf("https://intranet.phmtrans.cz/CRM", StringComparison.Ordinal));
         Assert.Contains("name=\"CrmHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"CrmApi\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("crm.html", webConfig, StringComparison.Ordinal);

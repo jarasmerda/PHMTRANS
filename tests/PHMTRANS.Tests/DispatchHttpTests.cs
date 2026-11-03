@@ -25,35 +25,35 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var board = await client.SendAsync(Request("/api/dispatch/board", "disp.phmtrans.cz", user: false));
+        var board = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: false));
         Assert.Equal(HttpStatusCode.Unauthorized, board.StatusCode);
         Assert.Contains("Přihlaste se", await board.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var dispatchHome = await client.SendAsync(Request("/", "disp.phmtrans.cz", user: false));
+        var dispatchHome = await client.SendAsync(Request("/", "intranet.phmtrans.cz", user: false));
         Assert.Equal(HttpStatusCode.Redirect, dispatchHome.StatusCode);
         Assert.Equal("/login.html", dispatchHome.Headers.Location?.OriginalString);
 
         var erpHome = await client.SendAsync(Request("/", "erp.phmtrans.cz", user: false));
-        Assert.Equal(HttpStatusCode.Redirect, erpHome.StatusCode);
-        Assert.Equal("/login.html", erpHome.Headers.Location?.OriginalString);
+        Assert.Equal(HttpStatusCode.MovedPermanently, erpHome.StatusCode);
+        Assert.Equal("https://intranet.phmtrans.cz/ERP", erpHome.Headers.Location?.OriginalString);
 
         var portal = await client.SendAsync(Request("/", null, user: false));
         Assert.Equal(HttpStatusCode.OK, portal.StatusCode);
-        Assert.Contains("https://disp.phmtrans.cz/", await portal.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", await portal.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var signedDispatch = await client.SendAsync(Request("/", "www.disp.phmtrans.cz", user: true));
+        var signedDispatch = await client.SendAsync(Request("/Dispecink", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, signedDispatch.StatusCode);
         var dispatchHtml = await signedDispatch.Content.ReadAsStringAsync();
         Assert.Contains("<h1>Dispečink</h1>", dispatchHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("Vydané faktury", dispatchHtml, StringComparison.Ordinal);
 
-        var signedErp = await client.SendAsync(Request("/", "erp.phmtrans.cz", user: true));
+        var signedErp = await client.SendAsync(Request("/ERP", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, signedErp.StatusCode);
         var erpHtml = await signedErp.Content.ReadAsStringAsync();
         Assert.Contains("Vydané faktury", erpHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("<h1>Dispečink</h1>", erpHtml, StringComparison.Ordinal);
 
-        var data = await client.SendAsync(Request("/api/dispatch/board", "disp.phmtrans.cz", user: true));
+        var data = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, data.StatusCode);
         using var json = JsonDocument.Parse(await data.Content.ReadAsStringAsync());
         Assert.Equal(DispatchStorage.Kind, json.RootElement.GetProperty("storage").GetString());
@@ -82,15 +82,15 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var anonymous = await client.SendAsync(Request("/api/dispatch/vehicles", "disp.phmtrans.cz", user: false));
+        var anonymous = await client.SendAsync(Request("/api/dispatch/vehicles", "intranet.phmtrans.cz", user: false));
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
 
-        var vehicles = await client.SendAsync(Request("/api/dispatch/vehicles", "disp.phmtrans.cz", user: true));
+        var vehicles = await client.SendAsync(Request("/api/dispatch/vehicles", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, vehicles.StatusCode);
         using var vehicleJson = JsonDocument.Parse(await vehicles.Content.ReadAsStringAsync());
         Assert.Contains(vehicleJson.RootElement.EnumerateArray(), item => item.GetProperty("plate").GetString() == "1A2 3456");
 
-        var drivers = await client.SendAsync(Request("/api/dispatch/drivers", "disp.phmtrans.cz", user: true));
+        var drivers = await client.SendAsync(Request("/api/dispatch/drivers", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, drivers.StatusCode);
         using var driverJson = JsonDocument.Parse(await drivers.Content.ReadAsStringAsync());
         Assert.Contains(driverJson.RootElement.EnumerateArray(), item => item.GetProperty("name").GetString() == "Jan Novák");
@@ -120,7 +120,7 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal("drv-1", createdJson.RootElement.GetProperty("driverId").GetString());
         Assert.Equal(DispatchStatuses.Prirazena, createdJson.RootElement.GetProperty("status").GetString());
 
-        var board = await client.SendAsync(Request("/api/dispatch/board", "disp.phmtrans.cz", user: true));
+        var board = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
         using var boardJson = JsonDocument.Parse(await board.Content.ReadAsStringAsync());
         var stored = boardJson.RootElement.GetProperty("trips").EnumerateArray()
             .Single(item => item.GetProperty("customer").GetString() == "Zákazník HTTP");
@@ -202,7 +202,7 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal(DispatchStatuses.Prirazena, updatedJson.RootElement.GetProperty("status").GetString());
         Assert.Equal("Zákazník po úpravě", updatedJson.RootElement.GetProperty("customer").GetString());
 
-        var board = await client.SendAsync(Request("/api/dispatch/board", "disp.phmtrans.cz", user: true));
+        var board = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
         using var boardJson = JsonDocument.Parse(await board.Content.ReadAsStringAsync());
         var stored = boardJson.RootElement.GetProperty("trips").EnumerateArray()
             .Single(item => item.GetProperty("id").GetString() == id);
@@ -256,7 +256,7 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal(HttpStatusCode.BadRequest, rejectedResponse.StatusCode);
         Assert.Contains("Neznámé vozidlo", await rejectedResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var afterReject = await client.SendAsync(Request("/api/dispatch/board", "disp.phmtrans.cz", user: true));
+        var afterReject = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
         using var afterJson = JsonDocument.Parse(await afterReject.Content.ReadAsStringAsync());
         var unchanged = afterJson.RootElement.GetProperty("trips").EnumerateArray()
             .Single(item => item.GetProperty("id").GetString() == id);
@@ -388,9 +388,7 @@ file sealed class TestAuthHandler(
         if (!Request.Headers.ContainsKey("X-Test-User"))
             return Task.FromResult(AuthenticateResult.NoResult());
 
-        var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, Request.Headers["X-Test-User"].ToString())],
-            "Test");
-        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), "Test")));
+        var identity = TestUsers.Identity(Request, Scheme.Name);
+        return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
     }
 }

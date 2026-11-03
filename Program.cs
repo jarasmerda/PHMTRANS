@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Identity;
+using PHMTRANS.Auth;
 using PHMTRANS.Bi;
 using PHMTRANS.Cpq;
 using PHMTRANS.Crm;
@@ -24,28 +26,11 @@ if (!builder.Environment.IsDevelopment())
     builder.WebHost.UseUrls("http://*:8089");
 
 builder.Services.AddOpenApi();
+builder.Services.Configure<IntranetOptions>(builder.Configuration.GetSection(IntranetOptions.SectionName));
+builder.Services.AddSingleton<IPasswordHasher<AuthUser>, PasswordHasher<AuthUser>>();
+builder.Services.AddSingleton<LoginRateLimiter>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
-    {
-        options.Cookie.Name = "phmtrans-auth";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.LoginPath = "/login.html";
-        options.ExpireTimeSpan = TimeSpan.FromHours(12);
-        options.SlidingExpiration = true;
-        options.Events.OnRedirectToLogin = context =>
-        {
-            if (context.Request.Path.StartsWithSegments("/api"))
-            {
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return Task.CompletedTask;
-            }
-
-            context.Response.Redirect(context.RedirectUri);
-            return Task.CompletedTask;
-        };
-    });
+    .AddCookie(options => IntranetCookies.Apply(options, builder.Environment.IsDevelopment()));
 builder.Services.AddAuthorization();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -61,6 +46,9 @@ builder.Services.AddHostedService<DispatchSchemaInitializer>();
 builder.Services.AddSingleton<SqlCrmStore>();
 builder.Services.AddSingleton<ICrmStore>(sp => sp.GetRequiredService<SqlCrmStore>());
 builder.Services.AddHostedService<CrmSchemaInitializer>();
+builder.Services.AddSingleton<SqlAuthStore>();
+builder.Services.AddSingleton<IAuthStore>(sp => sp.GetRequiredService<SqlAuthStore>());
+builder.Services.AddHostedService<AuthSchemaInitializer>();
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>
@@ -74,8 +62,11 @@ builder.Services.AddHttpClient<PohodaMServerClient>()
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+app.UseHostRouting();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseModuleGate();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -83,7 +74,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.MapErpAuth();
+app.MapAuth();
 app.MapDispatch();
 app.MapCrm();
 app.MapBi();

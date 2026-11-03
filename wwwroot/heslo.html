@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Změna hesla – PHM Trans</title>
+  <link rel="stylesheet" href="/erp.css?v=6">
+</head>
+<body>
+  <header>
+    <div>
+      <p class="brand"><span>PHM</span> TRANS</p>
+      <h1>Změna hesla</h1>
+    </div>
+    <div class="header-actions">
+      <nav class="module-links" aria-label="Moduly">
+        <a href="/ERP">ERP</a>
+        <a href="/Dispecink">Dispečink</a>
+        <a href="/CRM">CRM</a>
+        <span aria-current="page">Heslo</span>
+        <a href="/Admin">Správa</a>
+      </nav>
+      <button type="button" id="logout">Odhlásit</button>
+    </div>
+  </header>
+  <main class="login-card">
+    <form id="password">
+      <label>Současné heslo <input id="current" type="password" autocomplete="current-password" required></label>
+      <label>Nové heslo <input id="next" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>Nové heslo znovu <input id="again" type="password" autocomplete="new-password" minlength="8" required></label>
+      <p id="message" hidden></p>
+      <button type="submit">Uložit heslo</button>
+    </form>
+  </main>
+  <script>
+    const message = document.querySelector("#message");
+    function show(text, ok) {
+      message.hidden = !text;
+      message.textContent = text || "";
+      message.style.color = ok ? "#1d6b32" : "";
+    }
+    document.querySelector("#password").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const next = document.querySelector("#next").value;
+      if (next !== document.querySelector("#again").value) {
+        show("Nová hesla se neshodují.");
+        return;
+      }
+      const response = await fetch("/api/auth/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: document.querySelector("#current").value,
+          newPassword: next
+        })
+      });
+      if (response.status === 401) {
+        location.href = "/login.html";
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        show(data.message || "Heslo se nepodařilo změnit.");
+        return;
+      }
+      document.querySelector("#password").reset();
+      show(data.message || "Heslo je změněné.", true);
+    });
+    document.querySelector("#logout").addEventListener("click", async () => {
+      await fetch("/api/logout", { method: "POST" });
+      location.href = "/login.html";
+    });
+  </script>
+</body>
+</html>

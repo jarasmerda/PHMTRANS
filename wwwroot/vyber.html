@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Výběr modulu – PHM Trans</title>
+  <link rel="stylesheet" href="/erp.css?v=6">
+  <style>
+    .choices { display: grid; gap: 0.7rem; margin-top: 1rem; }
+    .choices a {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 0.9rem 1rem;
+      color: var(--text);
+      font-weight: 700;
+      text-decoration: none;
+    }
+    .choices a:hover { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <main class="login-card">
+    <p class="brand"><span>PHM</span> TRANS</p>
+    <h1>Intranet</h1>
+    <p>Vyberte modul. Když nejde otevřít, správce vám ho musí povolit.</p>
+    <nav class="choices" aria-label="Moduly">
+      <a href="/ERP">ERP</a>
+      <a href="/Dispecink">Dispečink</a>
+      <a href="/CRM">CRM</a>
+      <a href="/heslo">Změna hesla</a>
+      <a href="/Admin">Správa uživatelů</a>
+    </nav>
+  </main>
+</body>
+</html>
