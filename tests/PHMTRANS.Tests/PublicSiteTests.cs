@@ -26,17 +26,25 @@ public sealed class PublicSitePageTests
 
         Assert.Contains("lang=\"cs\"", html, StringComparison.Ordinal);
         Assert.Contains("erp.css?v=6", html, StringComparison.Ordinal);
-        Assert.Contains("landing.css?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("landing.css?v=2", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
         Assert.Contains("class=\"intranet-label\">Intranet</span>", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://intranet.phmtrans.cz/ERP\">ERP</a>", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://intranet.phmtrans.cz/Dispecink\">Dispečink</a>", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://intranet.phmtrans.cz/CRM\">CRM</a>", html, StringComparison.Ordinal);
-        Assert.Contains("<h1 id=\"hero-title\">Silniční nákladní doprava</h1>", html, StringComparison.Ordinal);
-        Assert.Contains("Vnitrostátní a mezinárodní kamionová doprava", html, StringComparison.Ordinal);
+        Assert.Contains("<h1 id=\"hero-title\">Pohonné hmoty<br><span>v pohybu</span></h1>", html, StringComparison.Ordinal);
+        Assert.Contains("Silniční nákladní doprava", html, StringComparison.Ordinal);
+        Assert.Contains("<h3>Kamionová doprava</h3>", html, StringComparison.Ordinal);
+        Assert.Contains("mezinárodní silniční dopravě", html, StringComparison.Ordinal);
         Assert.Contains("Přeprava PHM a cisterny", html, StringComparison.Ordinal);
         Assert.Contains(">Spedice</h3>", html, StringComparison.Ordinal);
+        Assert.Contains("srcset=\"/landing/logo-dark.png 640w\"", html, StringComparison.Ordinal);
+        Assert.Contains("alt=\"PHM TRANS\"", html, StringComparison.Ordinal);
+        Assert.Contains("alt=\"Cisterna Scania pro přepravu pohonných hmot\"", html, StringComparison.Ordinal);
+        Assert.Contains("loading=\"lazy\"", html, StringComparison.Ordinal);
+        Assert.Contains("fetchpriority=\"high\"", html, StringComparison.Ordinal);
+        Assert.Contains("for=\"nav-toggle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"vozovy-park\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"o-nas\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"kontakt\"", html, StringComparison.Ordinal);
@@ -55,9 +63,34 @@ public sealed class PublicSitePageTests
             .Replace("https://intranet.phmtrans.cz/CRM", "", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("google", html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("url(", css, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("http://", css, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("https://", css, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("max-width: 480px", css, StringComparison.Ordinal);
+        Assert.Contains("max-width: 768px", css, StringComparison.Ordinal);
+        Assert.Contains("max-width: 1024px", css, StringComparison.Ordinal);
+        Assert.Contains("min-width: 481px", css, StringComparison.Ordinal);
+        Assert.Contains("min-width: 769px", css, StringComparison.Ordinal);
+        Assert.Contains("min-width: 1025px", css, StringComparison.Ordinal);
+        var urlCount = 0;
+        var searchFrom = 0;
+        while (css.IndexOf("url(", searchFrom, StringComparison.OrdinalIgnoreCase) is var urlAt and >= 0)
+        {
+            var end = css.IndexOf(')', urlAt);
+            Assert.True(end > urlAt);
+            var value = css[(urlAt + 4)..end].Trim().Trim('"').Trim('\'');
+            Assert.StartsWith("/landing/fonts/", value, StringComparison.Ordinal);
+            Assert.EndsWith(".woff2", value, StringComparison.Ordinal);
+            urlCount++;
+            searchFrom = end + 1;
+        }
+
+        Assert.True(urlCount >= 12);
         Assert.Contains("var(--accent)", css, StringComparison.Ordinal);
         Assert.Contains("var(--button)", css, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(root, "landing", "logo-dark.png")));
+        Assert.True(File.Exists(Path.Combine(root, "landing", "tanker-scania.webp")));
+        Assert.True(File.Exists(Path.Combine(root, "landing", "truck-white-scania.webp")));
+        Assert.True(File.Exists(Path.Combine(root, "landing", "truck-sunset.webp")));
 
         Assert.Contains("name=\"PublicHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"PublicIndex\"", webConfig, StringComparison.Ordinal);
@@ -145,6 +178,31 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
 
         var wwwHealth = await client.SendAsync(Request("/health", user: false, "WWW.PHMTRANS.CZ"));
         Assert.Equal(HttpStatusCode.OK, wwwHealth.StatusCode);
+
+        foreach (var asset in new[]
+        {
+            "/landing/logo-dark.png",
+            "/landing/logo.png",
+            "/landing/truck-white-scania.webp",
+            "/landing/truck-white-scania-480.webp",
+            "/landing/tanker-scania.webp",
+            "/landing/tanker-scania-768.webp",
+            "/landing/truck-sunset.webp",
+            "/landing/truck-sunset-768.webp",
+            "/landing/truck-blue-scania.webp",
+            "/landing/fonts/barlow-condensed-800.woff2"
+        })
+        {
+            var file = await client.SendAsync(Request(asset, user: false, "phmtrans.cz"));
+            Assert.Equal(HttpStatusCode.OK, file.StatusCode);
+            Assert.Null(file.Headers.Location);
+            var media = file.Content.Headers.ContentType?.MediaType ?? "";
+            Assert.DoesNotContain("text/html", media, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var wwwLogo = await client.SendAsync(Request("/landing/logo-dark.png", user: false, "www.phmtrans.cz"));
+        Assert.Equal(HttpStatusCode.MovedPermanently, wwwLogo.StatusCode);
+        Assert.Equal("https://phmtrans.cz/landing/logo-dark.png", wwwLogo.Headers.Location?.OriginalString);
 
         var direct = await client.SendAsync(Request("/landing.html", user: false, "localhost"));
         Assert.Equal(HttpStatusCode.OK, direct.StatusCode);
