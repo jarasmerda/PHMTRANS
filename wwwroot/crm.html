@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRM – PHM Trans</title>
-  <link rel="stylesheet" href="/erp.css?v=7">
+  <link rel="stylesheet" href="/erp.css?v=8">
   <style>
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
     .route-to { color: var(--text-secondary); font-size: 0.82rem; }
@@ -15,13 +15,13 @@
       flex-wrap: wrap;
       gap: 0.45rem;
     }
-    .tabs button[aria-current="page"] { background: var(--button); color: var(--surface); }
+    .tabs button[aria-current="page"] { background: var(--button); color: var(--on-button); }
     .tabs button[aria-current="false"] {
       background: var(--surface);
-      color: var(--accent);
-      border: 1px solid var(--border);
+      color: var(--ink);
+      border: 1px solid var(--accent);
     }
-    .tabs button:hover { background: var(--button-hover); color: var(--surface); }
+    .tabs button:hover { background: var(--button-hover); color: var(--on-button); }
     .cards { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
     .cards article.ok strong { color: #1d6b32; }
     .cards article[data-open-tab] { cursor: pointer; }
@@ -49,10 +49,10 @@
     #customer-rows button, #contact-rows button, #opportunity-rows button, #activity-rows button { white-space: nowrap; }
     button.ghost {
       background: var(--surface);
-      color: var(--accent);
-      border: 1px solid var(--border);
+      color: var(--ink);
+      border: 1px solid var(--accent);
     }
-    button.ghost:hover { background: var(--table-header); color: var(--button-hover); }
+    button.ghost:hover { background: var(--button); color: var(--on-button); }
     .panel-card, .create-wrap {
       background: var(--surface);
       border: 1px solid var(--border);

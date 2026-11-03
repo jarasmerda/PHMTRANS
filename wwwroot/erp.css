@@ -1,14 +1,17 @@
 :root {
-  --bg: #F8FAFC;
-  --surface: #FFFFFF;
-  --text: #1E293B;
-  --text-secondary: #64748B;
-  --accent: #2563EB;
-  --button: #2563EB;
-  --button-hover: #1D4ED8;
-  --border: #E2E8F0;
-  --table-header: #F1F5F9;
-  --table-stripe: #F8FAFC;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --text: #142033;
+  --text-secondary: #2c3b52;
+  --accent: #c77f28;
+  --button: #d9a050;
+  --button-hover: #c77f28;
+  --on-button: #001e4f;
+  --ink: #001e4f;
+  --navy: #00163a;
+  --border: rgba(0, 30, 79, 0.28);
+  --table-header: #00163a;
+  --table-stripe: #f7f4ee;
   --alert: #8a2a1a;
 }
 
@@ -18,7 +21,31 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  color-scheme: light;
   font-family: "Segoe UI", Arial, sans-serif;
+}
+
+/* Kapka z loga. Na landing.html má vlastní značku, tady jen intranet. */
+body:not(.landing) {
+  overflow-x: clip;
+}
+
+body:not(.landing)::before {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  right: -3vw;
+  bottom: -6vh;
+  width: min(46vw, 480px);
+  aspect-ratio: 82 / 139;
+  pointer-events: none;
+  opacity: 0.065;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 82 139'%3E%3Cpath fill='%23001E4F' d='M41.5 1C42 1 42.4-.3 43 1C43.6 2.3 44.2 6.3 45 9C45.8 11.7 46.8 14.3 48 17C49.2 19.7 50.7 22.3 52 25C53.3 27.7 54.7 30.3 56 33C57.3 35.7 58.7 38.3 60 41C61.3 43.7 62.5 46.3 64 49C65.5 51.7 67.5 54.3 69 57C70.5 59.7 71.7 62.3 73 65C74.3 67.7 76 70.3 77 73C78 75.7 78.3 78.3 79 81C79.7 83.7 80.7 86.3 81 89C81.3 91.7 81.2 94.3 81 97C80.8 99.7 80.5 102.3 80 105C79.5 107.7 79 110.3 78 113C77 115.7 75.7 118.3 74 121C72.3 123.7 69.7 126.8 68 129C66.3 131.2 68.2 132.5 64 134C59.8 135.5 49.7 138 42.5 138C35.3 138 25.6 135.5 21 134C16.4 132.5 17 131.2 15 129C13 126.8 10.8 123.7 9 121C7.2 118.3 5.2 115.7 4 113C2.8 110.3 2.5 107.7 2 105C1.5 102.3 1 99.7 1 97C1 94.3 1.7 91.7 2 89C2.3 86.3 2.3 83.7 3 81C3.7 78.3 4.8 75.7 6 73C7.2 70.3 8.7 67.7 10 65C11.3 62.3 12.5 59.7 14 57C15.5 54.3 17.3 51.7 19 49C20.7 46.3 22.5 43.7 24 41C25.5 38.3 26.7 35.7 28 33C29.3 30.3 30.8 27.7 32 25C33.2 22.3 34 19.7 35 17C36 14.3 37.2 11.7 38 9C38.8 6.3 39.4 2.3 40 1C40.6-.3 41 1 41.5 1Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+body:not(.landing) > * {
+  position: relative;
+  z-index: 1;
 }
 
 header, form, section {
@@ -32,7 +59,15 @@ header {
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 1rem;
-  padding: 1.4rem 0 0.4rem;
+  padding: 1.1rem 0 0.85rem;
+  border-bottom: 3px solid var(--accent);
+}
+
+body:not(.landing) > header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #ffffff;
 }
 
 header.login-bar {
@@ -49,7 +84,8 @@ header.login-bar + .login-card {
   margin: 0;
   letter-spacing: 0.08em;
   font-weight: 800;
-  color: var(--text);
+  font-size: 1.35rem;
+  color: var(--navy);
 }
 
 a.brand {
@@ -76,20 +112,22 @@ a.brand:focus-visible {
   min-height: 44px;
   padding: 0 0.85rem 0 0.15rem;
   margin-right: 0.1rem;
-  border-right: 1px solid var(--border);
-  color: var(--accent);
+  border-right: 1px solid var(--accent);
+  color: var(--ink);
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.2;
-  text-decoration: none;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
   white-space: nowrap;
 }
 
 .site-back:hover,
 .site-back:focus-visible {
-  color: var(--button-hover);
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
+  color: var(--navy);
+  text-decoration-color: var(--navy);
 }
 
 .site-back:focus-visible {
@@ -97,7 +135,7 @@ a.brand:focus-visible {
   outline-offset: 2px;
 }
 
-h1, h2 { margin: 0.15rem 0 0; }
+h1, h2 { margin: 0.15rem 0 0; color: var(--navy); }
 
 h1 { font-size: 1.7rem; }
 
@@ -127,34 +165,40 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
 }
 
 .module-links a {
-  color: var(--text-secondary);
+  color: var(--ink);
   text-decoration: none;
 }
 
 .module-links a:hover,
 .module-links a:focus-visible {
-  color: var(--accent);
+  color: var(--ink);
   text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
 }
 
 .module-links [aria-current="page"] {
-  color: var(--text);
-  font-weight: 700;
+  color: var(--on-button);
+  background: var(--button);
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem;
+  font-weight: 800;
   cursor: default;
 }
 
 .header-actions button {
-  color: var(--accent);
+  color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   border-radius: 999px;
   padding: 0.55rem 0.9rem;
   font-weight: 700;
 }
 
 .header-actions button:hover {
-  background: var(--table-header);
-  color: var(--button-hover);
+  background: var(--button);
+  color: var(--on-button);
 }
 
 .erp-sections {
@@ -172,19 +216,19 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
   font-size: 0.88rem;
   font-weight: 700;
   background: var(--surface);
-  color: var(--accent);
+  color: var(--ink);
   border: 1px solid var(--border);
 }
 
 .erp-sections a[aria-current="page"] {
   background: var(--button);
-  color: var(--surface);
-  border-color: var(--button);
+  color: var(--on-button);
+  border-color: var(--accent);
 }
 
 .erp-sections a:hover {
   background: var(--button-hover);
-  color: var(--surface);
+  color: var(--on-button);
   border-color: var(--button-hover);
 }
 
@@ -285,7 +329,7 @@ select:focus {
 button {
   border: 0;
   background: var(--button);
-  color: var(--surface);
+  color: var(--on-button);
   font-weight: 700;
   padding: 0.5rem 0.8rem;
   cursor: pointer;
@@ -293,6 +337,18 @@ button {
 
 button:hover {
   background: var(--button-hover);
+  color: var(--on-button);
+}
+
+button.ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--accent);
+}
+
+button.ghost:hover {
+  background: var(--button);
+  color: var(--on-button);
 }
 
 #message {
@@ -359,8 +415,9 @@ th, td { padding: 0.55rem 0.45rem; border-bottom: 1px solid var(--border); text-
 
 th {
   background: var(--table-header);
-  color: var(--text-secondary);
+  color: #ffffff;
   font-size: 0.75rem;
+  border-bottom: 3px solid var(--button);
 }
 
 tbody tr:nth-child(even) { background: var(--table-stripe); }
@@ -373,8 +430,16 @@ tbody tr:nth-child(even) { background: var(--table-stripe); }
   padding: 0.15rem 0.5rem;
   font-size: 0.75rem;
   font-weight: 700;
-  background: var(--table-header);
-  color: var(--accent);
+  background: #f8efe0;
+  color: var(--ink);
+  border: 1px solid var(--accent);
+}
+
+.login-card a {
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration-color: var(--accent);
+  text-underline-offset: 0.15em;
 }
 
 .pill.warn { background: #f8ece8; color: var(--alert); }

@@ -4,16 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Správa uživatelů – PHM Trans</title>
-  <link rel="stylesheet" href="/erp.css?v=7">
+  <link rel="stylesheet" href="/erp.css?v=8">
   <style>
     .checks { display: flex; flex-wrap: wrap; gap: 0.8rem 1rem; align-items: center; }
     .checks label { display: flex; gap: 0.35rem; align-items: center; grid-template-columns: none; }
     #users { min-width: 64rem; }
     #users button.ghost {
       background: var(--surface);
-      color: var(--accent);
-      border: 1px solid var(--border);
+      color: var(--ink);
+      border: 1px solid var(--accent);
     }
+    #users button.ghost:hover { background: var(--button); color: var(--on-button); }
     .row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
   </style>
 </head>
