@@ -212,11 +212,16 @@ public static class ModuleGate
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1">
               <title>Bez oprávnění – PHM Trans</title>
-              <link rel="stylesheet" href="/erp.css?v=6">
+              <link rel="stylesheet" href="/erp.css?v=7">
             </head>
             <body>
+              <header class="login-bar">
+                <a class="brand" href="https://phmtrans.cz/"><span>PHM</span> TRANS</a>
+                <div class="header-actions">
+                  <a class="site-back" href="https://phmtrans.cz/">Zpět na web</a>
+                </div>
+              </header>
               <main class="login-card">
-                <p class="brand"><span>PHM</span> TRANS</p>
                 <h1>Bez oprávnění</h1>
                 <p>{{message}}</p>
                 <p><a href="/vyber">Výběr modulu</a> · <a href="/heslo">Heslo</a></p>

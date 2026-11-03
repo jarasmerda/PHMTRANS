@@ -24,9 +24,11 @@ public sealed class ModuleNavigationPageTests
 
         foreach (var html in new[] { erp, dispatch, crm })
         {
-            Assert.Contains("erp.css?v=6", html, StringComparison.Ordinal);
+            Assert.Contains("erp.css?v=7", html, StringComparison.Ordinal);
             Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
             Assert.Contains("aria-label=\"Moduly\"", html, StringComparison.Ordinal);
+            Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"", html, StringComparison.Ordinal);
+            Assert.Contains("class=\"site-back\" href=\"https://phmtrans.cz/\">Zpět na web</a>", html, StringComparison.Ordinal);
             Assert.Contains(">Odhlásit</button>", html, StringComparison.Ordinal);
             Assert.DoesNotContain("Rozcestník", html, StringComparison.Ordinal);
             Assert.DoesNotContain("https://www.phmtrans.cz/", html, StringComparison.Ordinal);
@@ -59,6 +61,30 @@ public sealed class ModuleNavigationPageTests
         Assert.Contains(">Aktivity</button>", crm, StringComparison.Ordinal);
         Assert.DoesNotContain("erp-sections", crm, StringComparison.Ordinal);
         Assert.DoesNotContain("Připravujeme", crm, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Intranet_pages_link_back_to_the_public_website()
+    {
+        var root = FindWwwRoot();
+        foreach (var name in new[] { "erp.html", "dispecink.html", "crm.html", "admin.html", "heslo.html", "vyber.html", "login.html" })
+        {
+            var html = File.ReadAllText(Path.Combine(root, name));
+            Assert.Contains("erp.css?v=7", html, StringComparison.Ordinal);
+            Assert.Contains("<header", html, StringComparison.Ordinal);
+            Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"><span>PHM</span> TRANS</a>", html, StringComparison.Ordinal);
+            Assert.Contains("class=\"site-back\" href=\"https://phmtrans.cz/\">Zpět na web</a>", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://www.phmtrans.cz/", html, StringComparison.Ordinal);
+        }
+
+        var picker = File.ReadAllText(Path.Combine(root, "vyber.html"));
+        Assert.Contains("href=\"/ERP\">ERP</a>", picker, StringComparison.Ordinal);
+        Assert.Contains("href=\"/Dispecink\">Dispečink</a>", picker, StringComparison.Ordinal);
+        Assert.Contains("href=\"/CRM\">CRM</a>", picker, StringComparison.Ordinal);
+
+        var landing = File.ReadAllText(Path.Combine(root, "landing.html"));
+        Assert.DoesNotContain("Zpět na web", landing, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://phmtrans.cz/", landing, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -35,6 +35,16 @@ header {
   padding: 1.4rem 0 0.4rem;
 }
 
+header.login-bar {
+  width: min(420px, calc(100% - 2rem));
+  align-items: center;
+  padding-top: 1.6rem;
+}
+
+header.login-bar + .login-card {
+  margin-top: 1.25rem;
+}
+
 .brand {
   margin: 0;
   letter-spacing: 0.08em;
@@ -42,7 +52,50 @@ header {
   color: var(--text);
 }
 
+a.brand {
+  display: inline-block;
+  text-decoration: none;
+  border-radius: 4px;
+}
+
+a.brand:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+a.brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .brand span { color: var(--accent); }
+
+.site-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.85rem 0 0.15rem;
+  margin-right: 0.1rem;
+  border-right: 1px solid var(--border);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-back:hover,
+.site-back:focus-visible {
+  color: var(--button-hover);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.site-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 h1, h2 { margin: 0.15rem 0 0; }
 
@@ -329,4 +382,15 @@ tbody tr:nth-child(even) { background: var(--table-stripe); }
 
 @media (max-width: 900px) {
   .cards { grid-template-columns: 1fr 1fr; }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .site-back {
+    border-right: 0;
+    padding-right: 0.15rem;
+    margin-right: 0;
+  }
 }

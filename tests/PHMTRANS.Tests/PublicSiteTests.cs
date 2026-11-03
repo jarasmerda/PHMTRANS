@@ -25,14 +25,18 @@ public sealed class PublicSitePageTests
         var index = File.ReadAllText(Path.Combine(root, "index.html"));
 
         Assert.Contains("lang=\"cs\"", html, StringComparison.Ordinal);
-        Assert.Contains("erp.css?v=6", html, StringComparison.Ordinal);
-        Assert.Contains("landing.css?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("erp.css?v=7", html, StringComparison.Ordinal);
+        Assert.Contains("landing.css?v=3", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
-        Assert.Contains("class=\"intranet-label\">Intranet</span>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://intranet.phmtrans.cz/ERP\">ERP</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://intranet.phmtrans.cz/Dispecink\">Dispečink</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://intranet.phmtrans.cz/CRM\">CRM</a>", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://intranet.phmtrans.cz/\">Intranet</a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"intranet-label\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://intranet.phmtrans.cz/ERP", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://intranet.phmtrans.cz/Dispecink", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://intranet.phmtrans.cz/CRM", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">ERP</a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">Dispečink</a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">CRM</a>", html, StringComparison.Ordinal);
         Assert.Contains("<h1 id=\"hero-title\">Pohonné hmoty<br><span>v pohybu</span></h1>", html, StringComparison.Ordinal);
         Assert.Contains("Silniční nákladní doprava", html, StringComparison.Ordinal);
         Assert.Contains("<h3>Kamionová doprava</h3>", html, StringComparison.Ordinal);
@@ -58,9 +62,7 @@ public sealed class PublicSitePageTests
         Assert.DoesNotContain("@", html, StringComparison.Ordinal);
         Assert.DoesNotContain("+420", html, StringComparison.Ordinal);
         Assert.DoesNotContain("http://", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("https://", html.Replace("https://intranet.phmtrans.cz/ERP", "", StringComparison.Ordinal)
-            .Replace("https://intranet.phmtrans.cz/Dispecink", "", StringComparison.Ordinal)
-            .Replace("https://intranet.phmtrans.cz/CRM", "", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.DoesNotContain("https://", html.Replace("https://intranet.phmtrans.cz/", "", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("google", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("http://", css, StringComparison.OrdinalIgnoreCase);
@@ -145,7 +147,10 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             var html = await response.Content.ReadAsStringAsync();
             Assert.Contains("Silniční nákladní doprava", html, StringComparison.Ordinal);
             Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
-            Assert.Contains("https://intranet.phmtrans.cz/ERP", html, StringComparison.Ordinal);
+            Assert.Contains("https://intranet.phmtrans.cz/\">Intranet</a>", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://intranet.phmtrans.cz/ERP", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://intranet.phmtrans.cz/Dispecink", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("https://intranet.phmtrans.cz/CRM", html, StringComparison.Ordinal);
             Assert.Contains("[telefon]", html, StringComparison.Ordinal);
             Assert.DoesNotContain("src=\"/image.jpg\"", html, StringComparison.Ordinal);
         }
@@ -169,6 +174,8 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
         var loginHtml = await login.Content.ReadAsStringAsync();
         Assert.Contains("Přihlášení", loginHtml, StringComparison.Ordinal);
         Assert.Contains("Uživatelské jméno", loginHtml, StringComparison.Ordinal);
+        Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"", loginHtml, StringComparison.Ordinal);
+        Assert.Contains("class=\"site-back\" href=\"https://phmtrans.cz/\">Zpět na web</a>", loginHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("Uživatel Pohody", loginHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("[telefon]", loginHtml, StringComparison.Ordinal);
 

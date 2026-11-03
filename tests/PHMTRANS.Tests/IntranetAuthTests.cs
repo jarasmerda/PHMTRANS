@@ -125,7 +125,7 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
         Assert.Equal(HttpStatusCode.OK, admin.StatusCode);
         Assert.Contains("Správa uživatelů", await admin.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
-        var css = await client.SendAsync(Get("/ERP/erp.css?v=6", "intranet.phmtrans.cz"));
+        var css = await client.SendAsync(Get("/ERP/erp.css?v=7", "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, css.StatusCode);
         Assert.Contains("css", css.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
 
@@ -162,7 +162,10 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
 
         var erp = await user.SendAsync(Get("/ERP", "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.Forbidden, erp.StatusCode);
-        Assert.Contains("Na tento modul nemáte oprávnění.", await erp.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        var denied = await erp.Content.ReadAsStringAsync();
+        Assert.Contains("Na tento modul nemáte oprávnění.", denied, StringComparison.Ordinal);
+        Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"", denied, StringComparison.Ordinal);
+        Assert.Contains("class=\"site-back\" href=\"https://phmtrans.cz/\">Zpět na web</a>", denied, StringComparison.Ordinal);
 
         var invoices = await user.SendAsync(Get("/ERP/api/bi/issued-invoices", "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.Forbidden, invoices.StatusCode);
