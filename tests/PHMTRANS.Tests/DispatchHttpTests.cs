@@ -78,6 +78,38 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
     }
 
     [Fact]
+    public async Task Board_keeps_counts_and_returns_only_the_chosen_statuses()
+    {
+        using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var filtered = await client.SendAsync(Request(
+            "/api/dispatch/board?status=Nová&status=Vyložená",
+            "intranet.phmtrans.cz",
+            user: true));
+        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);
+        using var json = JsonDocument.Parse(await filtered.Content.ReadAsStringAsync());
+        var trips = json.RootElement.GetProperty("trips").EnumerateArray()
+            .Select(trip => trip.GetProperty("status").GetString())
+            .ToArray();
+        Assert.NotEmpty(trips);
+        Assert.All(trips, status => Assert.Contains(status, new[] { DispatchStatuses.Nova, DispatchStatuses.Vylozena }));
+        Assert.Equal(DispatchStatuses.All.Count, json.RootElement.GetProperty("counts").GetArrayLength());
+
+        var comma = await client.SendAsync(Request(
+            "/api/dispatch/board?status=Nová,Na cestě",
+            "intranet.phmtrans.cz",
+            user: true));
+        Assert.Equal(HttpStatusCode.OK, comma.StatusCode);
+
+        var unknown = await client.SendAsync(Request(
+            "/api/dispatch/board?status=Potvrzená",
+            "intranet.phmtrans.cz",
+            user: true));
+        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+        Assert.Contains(DispatchStatuses.UnknownMessage, await unknown.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Vehicles_and_drivers_can_be_chosen_when_a_trip_is_created()
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });

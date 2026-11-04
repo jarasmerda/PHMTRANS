@@ -11,6 +11,22 @@ public sealed class DispatchStoreTests
     private readonly MemoryDispatchStore _store = new();
 
     [Fact]
+    public void Status_query_accepts_several_values_and_rejects_unknown_ones()
+    {
+        var parsed = StatusSelection.Parse(["Nová", "Přiřazená,Nová"], DispatchStatuses.All, DispatchStatuses.UnknownMessage);
+        Assert.Null(parsed.Error);
+        Assert.Equal([DispatchStatuses.Nova, DispatchStatuses.Prirazena], parsed.Values);
+
+        var orders = StatusSelection.Parse(["Nová,K fakturaci"], OrderStatuses.All, OrderStatuses.UnknownMessage);
+        Assert.Null(orders.Error);
+        Assert.Equal([OrderStatuses.Nova, OrderStatuses.KFakturaci], orders.Values);
+
+        var unknown = StatusSelection.Parse(["Potvrzená"], OrderStatuses.All, OrderStatuses.UnknownMessage);
+        Assert.Equal(OrderStatuses.UnknownMessage, unknown.Error);
+        Assert.Empty(unknown.Values);
+    }
+
+    [Fact]
     public async Task Seed_covers_every_status()
     {
         var snapshot = await _store.ReadAsync(CancellationToken.None);
@@ -350,8 +366,12 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=9", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=7", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=10", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=8", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"trip-status-filter\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"order-status-filter\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-status-all", html, StringComparison.Ordinal);
+        Assert.Contains("> Vše</label>", html, StringComparison.Ordinal);
         Assert.Contains("id=\"trip-create-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"order-create-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"open-trip-create\"", html, StringComparison.Ordinal);
@@ -381,6 +401,8 @@ public sealed class DispatchPageTests
         Assert.Contains("Ze zakázek", js, StringComparison.Ordinal);
         Assert.Contains("data-open-order", js, StringComparison.Ordinal);
         Assert.Contains("showModal", js, StringComparison.Ordinal);
+        Assert.Contains("param: \"jizdy\"", js, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-field=\"status\"", html, StringComparison.Ordinal);
     }
 
     [Fact]

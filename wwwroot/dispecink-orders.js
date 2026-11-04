@@ -373,7 +373,7 @@ function renderOrders(data) {
   document.querySelector("#order-table-wrap").hidden = false;
   const empty = document.querySelector("#orders-empty");
   empty.hidden = orderList.length > 0;
-  empty.textContent = document.querySelector("#order-status").value
+  empty.textContent = orderStatusFilter && orderStatusFilter.values().length
     ? "V tomto stavu není žádná zakázka."
     : "Zatím není žádná zakázka.";
 }
@@ -532,7 +532,7 @@ function showVersion(versionNumber) {
   hideOrderChrome();
   page.innerHTML = versionPage(data, version);
   page.hidden = false;
-  history.replaceState(null, "", `#verze-${encodeURIComponent(data.order.id)}-${version.currentVersion}`);
+  history.replaceState(null, "", window.keepQuery(`#verze-${encodeURIComponent(data.order.id)}-${version.currentVersion}`));
   page.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -545,7 +545,7 @@ function closeVersion() {
   showOrderChrome();
   const detail = document.querySelector("#order-detail");
   if (detail && orderDetail?.order) detail.hidden = false;
-  if (location.hash.startsWith("#verze-")) history.replaceState(null, "", "#zakazky");
+  if (location.hash.startsWith("#verze-")) history.replaceState(null, "", window.keepQuery("#zakazky"));
 }
 
 function renderQueue(data) {
@@ -574,9 +574,9 @@ function showView(name) {
   document.querySelector(`#tab-${name}`)?.setAttribute("aria-current", "page");
   if (name === "orders") loadOrders();
   if (name === "queue") loadQueue();
-  if (name === "trips") history.replaceState(null, "", location.pathname);
-  if (name === "orders") history.replaceState(null, "", "#zakazky");
-  if (name === "queue") history.replaceState(null, "", "#fronta");
+  if (name === "trips") history.replaceState(null, "", window.keepQuery(""));
+  if (name === "orders") history.replaceState(null, "", window.keepQuery("#zakazky"));
+  if (name === "queue") history.replaceState(null, "", window.keepQuery("#fronta"));
 }
 
 async function orderFetch(url, options) {
@@ -614,8 +614,9 @@ async function loadCatalog() {
 
 async function loadOrders() {
   orderShow(orderMessage, "Načítám zakázky…");
-  const status = document.querySelector("#order-status").value;
-  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  const params = new URLSearchParams();
+  for (const status of orderStatusFilter?.values() ?? []) params.append("status", status);
+  const query = params.toString() ? `?${params}` : "";
   const result = await orderFetch(`/api/dispatch/orders${query}`);
   if (!result.ok) {
     orderShow(orderMessage, result.data.message || "Zakázky se nepodařilo načíst.");
@@ -701,7 +702,6 @@ document.querySelector("#tab-trips").addEventListener("click", () => showView("t
 document.querySelector("#tab-orders").addEventListener("click", () => showView("orders"));
 document.querySelector("#tab-queue").addEventListener("click", () => showView("queue"));
 document.querySelector("#order-reload").addEventListener("click", () => loadOrders());
-document.querySelector("#order-status").addEventListener("change", () => loadOrders());
 document.querySelector("#queue-reload").addEventListener("click", () => loadQueue());
 
 document.querySelector("#orders-view").addEventListener("click", (event) => {
@@ -906,6 +906,12 @@ document.querySelector("#order-close").addEventListener("click", () => {
   orderDetail = null;
   document.querySelector("#order-detail").hidden = true;
   closeVersion();
+});
+
+const orderStatusFilter = window.bindStatusFilter(document.querySelector("#order-status-filter"), {
+  param: "zakazky",
+  known: ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno", "Stornováno"],
+  onChange() { loadOrders(); }
 });
 
 window.showOrder = async (id) => {

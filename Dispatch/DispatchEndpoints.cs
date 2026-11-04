@@ -28,11 +28,19 @@ public static class DispatchEndpoints
         api.MapPut("/rates", SaveRates);
     }
 
-    private static Task<IResult> GetBoard(IDispatchStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> GetBoard(string[]? status, IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            var snapshot = await store.ReadAsync(cancellationToken);
-            return Results.Ok(ToBoard(snapshot));
+            var selected = StatusSelection.Parse(status, DispatchStatuses.All, DispatchStatuses.UnknownMessage);
+            if (selected.Error is not null)
+                return Results.BadRequest(new { message = selected.Error });
+
+            var board = ToBoard(await store.ReadAsync(cancellationToken));
+            if (selected.Values.Count == 0)
+                return Results.Ok(board);
+
+            var trips = board.Trips.Where(trip => selected.Values.Contains(trip.Status)).ToArray();
+            return Results.Ok(board with { Trips = trips });
         });
 
     private static Task<IResult> GetVehicles(IDispatchStore store, CancellationToken cancellationToken) =>
@@ -41,19 +49,16 @@ public static class DispatchEndpoints
     private static Task<IResult> GetDrivers(IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () => Results.Ok(ToBoard(await store.ReadAsync(cancellationToken)).Drivers));
 
-    private static Task<IResult> GetTrips(string? status, IDispatchStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> GetTrips(string[]? status, IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            if (!string.IsNullOrWhiteSpace(status) && !DispatchStatuses.IsKnown(status.Trim()))
-                return Results.BadRequest(new { message = DispatchStatuses.UnknownMessage });
+            var selected = StatusSelection.Parse(status, DispatchStatuses.All, DispatchStatuses.UnknownMessage);
+            if (selected.Error is not null)
+                return Results.BadRequest(new { message = selected.Error });
 
-            var snapshot = await store.ReadAsync(cancellationToken);
-            var trips = ToBoard(snapshot).Trips;
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                var selected = status.Trim();
-                trips = trips.Where(trip => trip.Status == selected).ToArray();
-            }
+            var trips = ToBoard(await store.ReadAsync(cancellationToken)).Trips;
+            if (selected.Values.Count > 0)
+                trips = trips.Where(trip => selected.Values.Contains(trip.Status)).ToArray();
 
             return Results.Ok(trips);
         });

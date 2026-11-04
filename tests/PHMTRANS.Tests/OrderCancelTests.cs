@@ -43,10 +43,14 @@ public sealed class OrderCancelTests
         Assert.Equal(other.Order.Id, removed.Id);
         Assert.Null(await store.GetAsync(other.Order.Id, CancellationToken.None));
 
-        var visible = OrderListFilter.Apply(await store.ListAsync(CancellationToken.None), null);
-        Assert.DoesNotContain(visible, order => order.Id == created.Order.Id);
-        var filtered = OrderListFilter.Apply(await store.ListAsync(CancellationToken.None), OrderStatuses.Stornovano);
+        var list = await store.ListAsync(CancellationToken.None);
+        var visible = OrderListFilter.Apply(list, (IReadOnlyCollection<string>?)null);
+        Assert.Contains(visible, order => order.Id == created.Order.Id);
+        var active = OrderListFilter.Apply(list, OrderStatuses.Editable);
+        Assert.DoesNotContain(active, order => order.Id == created.Order.Id);
+        var filtered = OrderListFilter.Apply(list, new[] { OrderStatuses.Nova, OrderStatuses.Stornovano });
         Assert.Contains(filtered, order => order.Id == created.Order.Id);
+        Assert.DoesNotContain(OrderListFilter.Apply(list, new[] { OrderStatuses.Nova }), order => order.Id == created.Order.Id);
     }
 
     [Fact]

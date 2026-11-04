@@ -21,20 +21,21 @@ public static class OrderEndpoints
     }
 
     private static Task<IResult> ListOrders(
-        string? status,
+        string[]? status,
         IOrderStore store,
         IOptions<PohodaOptions> options,
         CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            if (!string.IsNullOrWhiteSpace(status) && !OrderStatuses.IsKnown(status.Trim()))
-                return Results.BadRequest(new { message = OrderStatuses.UnknownMessage });
+            var selected = StatusSelection.Parse(status, OrderStatuses.All, OrderStatuses.UnknownMessage);
+            if (selected.Error is not null)
+                return Results.BadRequest(new { message = selected.Error });
 
             var orders = await store.ListAsync(cancellationToken);
             var counts = OrderStatuses.All
                 .Select(item => new OrderStatusCount(item, orders.Count(order => order.Status == item)))
                 .ToArray();
-            orders = OrderListFilter.Apply(orders, status);
+            orders = OrderListFilter.Apply(orders, selected.Values);
 
             var sorted = orders
                 .OrderBy(order => OrderStatuses.Rank(order.Status))
@@ -151,12 +152,15 @@ public sealed record OrderSyncResponse(
 
 public static class OrderListFilter
 {
-    public static IReadOnlyList<DispatchOrder> Apply(IReadOnlyList<DispatchOrder> orders, string? status)
-    {
-        if (string.IsNullOrWhiteSpace(status))
-            return orders.Where(order => order.Status != OrderStatuses.Stornovano).ToArray();
+    public static IReadOnlyList<DispatchOrder> Apply(IReadOnlyList<DispatchOrder> orders, string? status) =>
+        Apply(orders, string.IsNullOrWhiteSpace(status) ? null : [status.Trim()]);
 
-        var selected = status.Trim();
-        return orders.Where(order => order.Status == selected).ToArray();
+    public static IReadOnlyList<DispatchOrder> Apply(IReadOnlyList<DispatchOrder> orders, IReadOnlyCollection<string>? statuses)
+    {
+        if (statuses is null || statuses.Count == 0)
+            return orders.ToArray();
+
+        var selected = new HashSet<string>(statuses, StringComparer.Ordinal);
+        return orders.Where(order => selected.Contains(order.Status)).ToArray();
     }
 }
