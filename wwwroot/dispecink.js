@@ -3,7 +3,6 @@ const text = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
 }[char]));
 const dateTime = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" });
 const message = document.querySelector("#message");
-const statusInput = document.querySelector("#status");
 const rows = document.querySelector("#rows");
 const empty = document.querySelector("#empty");
 let requestSeq = 0;
@@ -14,6 +13,7 @@ let orders = [];
 let board = null;
 let openTripId = null;
 let expandedTripId = null;
+let tripStatusFilter = null;
 let rates = null;
 
 const moneyLabel = new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -102,17 +102,108 @@ function count(data, status) {
 }
 
 function applyFilter() {
-  const selected = statusInput.value;
   let visible = 0;
   for (const row of rows.querySelectorAll("tr[data-id]")) {
-    const hide = selected.length > 0 && row.dataset.status !== selected;
-    row.hidden = hide;
+    row.hidden = false;
     const extra = rows.querySelector(`tr[data-for="${CSS.escape(row.dataset.id)}"]`);
-    if (extra) extra.hidden = hide || extra.dataset.open !== "1";
-    if (!hide) visible += 1;
+    if (extra) extra.hidden = extra.dataset.open !== "1";
+    visible += 1;
   }
   empty.hidden = visible > 0;
-  empty.textContent = selected ? "V tomto stavu není žádná jízda." : "Zatím není žádná jízda.";
+  const filtered = tripStatusFilter && tripStatusFilter.values().length > 0;
+  empty.textContent = filtered ? "V tomto stavu není žádná jízda." : "Zatím není žádná jízda.";
+}
+
+window.keepQuery = (hash) => `${location.pathname}${location.search}${hash || ""}`;
+
+window.bindStatusFilter = function (root, options) {
+  const toggle = root.querySelector(".status-filter-toggle");
+  const panel = root.querySelector(".status-filter-panel");
+  const all = root.querySelector("[data-status-all]");
+  const boxes = [...root.querySelectorAll("[data-status-value]")];
+  const known = options.known;
+
+  function chosen() {
+    return boxes.filter((box) => box.checked).map((box) => box.value);
+  }
+
+  function summary() {
+    const values = chosen();
+    if (all.checked || values.length === 0) return "Vše";
+    if (values.length === 1) return values[0];
+    if (values.length === 2) return values.join(", ");
+    const word = values.length >= 5 ? "stavů" : "stavy";
+    return `${values.length} ${word}`;
+  }
+
+  function paint() {
+    toggle.textContent = summary();
+  }
+
+  function readQuery() {
+    const params = new URLSearchParams(location.search);
+    const values = params.getAll(options.param)
+      .flatMap((value) => value.split(","))
+      .map((value) => value.trim())
+      .filter((value) => known.includes(value));
+    if (!values.length) {
+      all.checked = true;
+      boxes.forEach((box) => { box.checked = false; });
+    } else {
+      all.checked = false;
+      boxes.forEach((box) => { box.checked = values.includes(box.value); });
+    }
+    paint();
+  }
+
+  function writeQuery() {
+    const params = new URLSearchParams(location.search);
+    params.delete(options.param);
+    if (!all.checked) {
+      for (const value of chosen()) params.append(options.param, value);
+    }
+    const query = params.toString();
+    history.replaceState(null, "", query ? `${location.pathname}?${query}${location.hash}` : `${location.pathname}${location.hash}`);
+  }
+
+  function publish() {
+    paint();
+    writeQuery();
+    options.onChange();
+  }
+
+  all.addEventListener("change", () => {
+    if (all.checked) boxes.forEach((box) => { box.checked = false; });
+    else if (!chosen().length) all.checked = true;
+    publish();
+  });
+  for (const box of boxes) {
+    box.addEventListener("change", () => {
+      if (box.checked) all.checked = false;
+      if (!chosen().length) all.checked = true;
+      publish();
+    });
+  }
+  toggle.addEventListener("click", () => {
+    const open = panel.hidden;
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.addEventListener("click", (event) => {
+    if (!root.contains(event.target)) {
+      panel.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+    }
+  });
+  readQuery();
+  return { values: () => (all.checked ? [] : chosen()) };
+};
+
+function statusQuery(filter) {
+  const params = new URLSearchParams();
+  for (const value of filter?.values() ?? []) params.append("status", value);
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
 function tripOrders(tripId) {
@@ -382,8 +473,8 @@ function showTrip(id) {
     `<option value="">— zakázka bez jízdy —</option>` +
     free.map((order) => `<option value="${text(order.id)}">${text(order.code)} · ${text(order.customerName)} · ${litersLabel(order.liters)} l</option>`).join("");
   detail.hidden = false;
-  if (location.hash !== `#jizda-${id}`)
-    history.replaceState(null, "", `#jizda-${id}`);
+    if (location.hash !== `#jizda-${id}`)
+    history.replaceState(null, "", window.keepQuery(`#jizda-${id}`));
 }
 
 function renderRates() {
@@ -422,7 +513,7 @@ async function load() {
   let driversResponse;
   try {
     [boardResponse, vehiclesResponse, driversResponse] = await Promise.all([
-      fetch("/api/dispatch/board", { cache: "no-store" }),
+      fetch(`/api/dispatch/board${statusQuery(tripStatusFilter)}`, { cache: "no-store" }),
       fetch("/api/dispatch/vehicles", { cache: "no-store" }),
       fetch("/api/dispatch/drivers", { cache: "no-store" })
     ]);
@@ -552,7 +643,6 @@ document.querySelector("#logout").addEventListener("click", async () => {
 });
 
 document.querySelector("#reload").addEventListener("click", () => load());
-statusInput.addEventListener("change", applyFilter);
 rows.addEventListener("submit", (event) => {
   const form = event.target.closest("[data-add-order]");
   if (!form) return;
@@ -690,7 +780,7 @@ document.querySelector("#trip-storno").addEventListener("click", () => {
 document.querySelector("#trip-detail-close").addEventListener("click", () => {
   openTripId = null;
   document.querySelector("#trip-detail").hidden = true;
-  if (location.hash.startsWith("#jizda-")) history.replaceState(null, "", location.pathname);
+  if (location.hash.startsWith("#jizda-")) history.replaceState(null, "", window.keepQuery(""));
 });
 async function addOrderToTrip(tripId, orderId) {
   if (!tripId || !orderId || saving) return;
@@ -761,6 +851,12 @@ document.querySelector("#rates").addEventListener("submit", async (event) => {
   rates = saved;
   renderRates();
   showMessage("Sazby jsou uložené.");
+});
+
+tripStatusFilter = window.bindStatusFilter(document.querySelector("#trip-status-filter"), {
+  param: "jizdy",
+  known: ["Nová", "Přiřazená", "Na cestě", "Vyložená", "Zrušená", "Stornováno"],
+  onChange() { load(); }
 });
 
 load();
