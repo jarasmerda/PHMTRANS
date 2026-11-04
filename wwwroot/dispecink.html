@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dispečink – PHM Trans</title>
-  <link rel="stylesheet" href="/erp.css?v=17">
+    <link rel="stylesheet" href="/erp.css?v=17">
   <style>
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
     .route-to { color: var(--text-secondary); font-size: 0.82rem; }
@@ -34,7 +34,7 @@
     }
     .view-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .view-tabs button[aria-current="page"] { background: var(--ink); color: #fff; }
-    #order-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    #order-cards, #cards { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
     #orders, #versions, #queue { min-width: 64rem; }
     #order-create, #order-edit {
       display: grid;
@@ -82,7 +82,38 @@
     .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 0.45rem; margin-top: 0.6rem; }
     .totals article { border: 1px solid var(--border); border-radius: 10px; padding: 0.45rem 0.6rem; }
     .totals span { display: block; color: var(--text-secondary); font-size: 0.78rem; }
-    #create-order-list { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.4rem 0 0.8rem; }
+    #create {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 0.7rem;
+    }
+    #create > label { flex: 1 1 14rem; min-width: min(14rem, 100%); }
+    #create-orders {
+      flex: 1 0 100%;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 0 0.2rem;
+      padding: 0.75rem 0.85rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      min-width: 0;
+    }
+    #create-orders legend { padding: 0 0.35rem; font-weight: 700; }
+    #create-order-hint { margin: 0.15rem 0 0.45rem; }
+    #create-order-list {
+      display: block;
+      width: 100%;
+      max-width: none;
+      min-height: 9rem;
+      margin: 0;
+    }
+    #create-order-empty { flex: 1 0 100%; width: 100%; margin: 0.2rem 0 0.6rem; }
+    .customer-results { max-height: 16rem; overflow: auto; }
+    @media (max-width: 720px) {
+      #create > label { flex-basis: 100%; }
+      #create-order-list { min-height: 7.5rem; }
+    }
     #vehicle-rates { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
     @media (max-width: 900px) {
       #order-cards { grid-template-columns: 1fr 1fr; }
@@ -124,6 +155,7 @@
           <option>Na cestě</option>
           <option>Vyložená</option>
           <option>Zrušená</option>
+          <option>Stornováno</option>
         </select>
       </label>
       <button type="button" id="reload">Obnovit</button>
@@ -134,6 +166,7 @@
       <article><span>Na cestě</span><strong id="count-naceste">0</strong></article>
       <article><span>Vyložené</span><strong id="count-vylozena">0</strong></article>
       <article><span>Zrušené</span><strong id="count-zrusena">0</strong></article>
+      <article><span>Stornované</span><strong id="count-stornovano">0</strong></article>
     </section>
     <section id="table-wrap" hidden>
       <h2>Jízdy</h2>
@@ -175,7 +208,7 @@
           <tbody id="trip-order-rows"></tbody>
         </table>
       </div>
-      <p>Součet litrů: <strong id="trip-liters">0</strong></p>
+      <p>Součet litrů: <strong id="trip-liters">0</strong> <span class="route-to">Stornované zakázky se do součtu nepočítají.</span></p>
       <form id="trip-add-order">
         <label>Přidat zakázku
           <select id="trip-free-orders">
@@ -183,17 +216,20 @@
           </select>
         </label>
         <button type="submit">Přidat na jízdu</button>
+        <button type="button" id="trip-storno" class="ghost">Stornovat</button>
         <button type="button" id="trip-detail-close" class="ghost">Zavřít</button>
       </form>
     </section>
     <section id="create-wrap">
       <h2>Nová jízda</h2>
       <form id="create">
-        <label>Zákazník <input id="customer" required maxlength="160"></label>
-        <fieldset>
+        <fieldset id="create-orders">
           <legend>Zakázky na jízdu</legend>
-          <div id="create-order-list"></div>
+          <p id="create-order-hint" class="note">Vyberte zakázky, jízda se předvyplní z první.</p>
+          <select id="create-order-list" multiple size="6" aria-label="Volné zakázky na jízdu"></select>
         </fieldset>
+        <p id="create-order-empty" class="note" hidden>Žádná volná zakázka.</p>
+        <label>Zákazník <input id="customer" required maxlength="160"></label>
         <label>Nakládka <input id="loading" required maxlength="160"></label>
         <label>Vykládka <input id="unloading" required maxlength="160"></label>
         <label>Náklad <input id="cargo" maxlength="80" placeholder="motorová nafta"></label>
@@ -228,13 +264,14 @@
     <form id="order-filter">
       <label>Stav
         <select id="order-status">
-          <option value="">Všechny stavy</option>
+          <option value="">Aktivní stavy</option>
           <option>Nová</option>
           <option>Naplánovaná</option>
           <option>Na cestě</option>
           <option>Doručeno</option>
           <option>K fakturaci</option>
           <option>Vyfakturováno</option>
+          <option>Stornováno</option>
         </select>
       </label>
       <button type="button" id="order-reload">Obnovit</button>
@@ -246,6 +283,7 @@
       <article><span>Doručené</span><strong id="ocount-doruceno">0</strong></article>
       <article><span>K fakturaci</span><strong id="ocount-kfakturaci">0</strong></article>
       <article><span>Vyfakturované</span><strong id="ocount-vyfakturovano">0</strong></article>
+      <article><span>Stornované</span><strong id="ocount-stornovano">0</strong></article>
     </section>
     <section id="order-table-wrap" hidden>
       <h2>Zakázky</h2>
@@ -272,6 +310,7 @@
     <section id="order-detail" hidden>
       <h2 id="order-detail-title">Zakázka</h2>
       <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
+      <p id="order-cancel-note" class="note warn" hidden></p>
       <p id="order-sync-warning" class="note warn" hidden></p>
       <form id="order-edit"></form>
       <div class="order-actions">
@@ -279,6 +318,7 @@
         <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
         <button type="button" id="order-invoice">Označit jako vyfakturované</button>
         <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
+        <button type="button" id="order-cancel" class="ghost">Stornovat</button>
         <button type="button" id="order-close" class="ghost">Zavřít</button>
       </div>
       <h3>Historie verzí</h3>
@@ -338,7 +378,7 @@
       <pre id="queue-xml" class="xml" hidden></pre>
     </section>
   </div>
-  <script src="/dispecink.js?v=6"></script>
-  <script src="/dispecink-orders.js?v=2"></script>
+  <script src="/dispecink.js?v=7"></script>
+  <script src="/dispecink-orders.js?v=3"></script>
 </body>
 </html>

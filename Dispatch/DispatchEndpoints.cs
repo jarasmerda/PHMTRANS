@@ -20,6 +20,8 @@ public static class DispatchEndpoints
         api.MapPatch("/trips/{id}", UpdateTrip);
         api.MapPost("/trips/{id}/assign", AssignTrip);
         api.MapPost("/trips/{id}/status", ChangeStatus);
+        api.MapPost("/trips/{id}/cancel", CancelTrip);
+        api.MapDelete("/trips/{id}", DeleteTrip);
         api.MapPost("/trips/{id}/orders", AddOrderToTrip);
         api.MapDelete("/trips/{id}/orders/{orderId}", RemoveOrderFromTrip);
         api.MapGet("/rates", GetRates);
@@ -95,6 +97,72 @@ public static class DispatchEndpoints
         IDispatchStore store,
         CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.SetStatusAsync(id, request.Status, cancellationToken)));
+
+    private static async Task<IResult> CancelTrip(
+        string id,
+        IDispatchStore store,
+        IOrderStore orders,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var snapshot = await store.ReadAsync(cancellationToken);
+            var trip = snapshot.Trips.FirstOrDefault(item => item.Id == id);
+            if (trip is null)
+                return Results.NotFound(new { message = "Jízda neexistuje." });
+            if (trip.Status == DispatchStatuses.Stornovano)
+                return Results.BadRequest(new { message = "Jízda už je stornovaná." });
+
+            var assigned = (await orders.ListAsync(cancellationToken))
+                .Where(order => string.Equals(order.TripId, id, StringComparison.Ordinal))
+                .ToArray();
+            foreach (var order in assigned)
+            {
+                var detached = await orders.AttachTripAsync(order.Id, null, onlyIfFree: false, cancellationToken);
+                if (detached is not OrderMutation.Success)
+                    return OrderFailure(detached);
+            }
+
+            return ToResult(await store.CancelTripAsync(id, cancellationToken));
+        }
+        catch (DispatchStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+        catch (OrderStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private static async Task<IResult> DeleteTrip(
+        string id,
+        IDispatchStore store,
+        IOrderStore orders,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var assigned = (await orders.ListAsync(cancellationToken))
+                .Count(order => string.Equals(order.TripId, id, StringComparison.Ordinal));
+            return ToResult(await store.DeleteTripAsync(id, assigned, cancellationToken));
+        }
+        catch (DispatchStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+        catch (OrderStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private static IResult OrderFailure(OrderMutation mutation) => mutation switch
+    {
+        OrderMutation.NotFound => Results.NotFound(new { message = "Zakázka neexistuje." }),
+        OrderMutation.Rejected rejected => Results.BadRequest(new { message = rejected.Message }),
+        _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+    };
 
     private static async Task<IResult> AddOrderToTrip(
         string id,
@@ -180,6 +248,7 @@ public static class DispatchEndpoints
     private static IResult ToResult(DispatchMutation mutation) => mutation switch
     {
         DispatchMutation.Success success => Results.Ok(success.Trip),
+        DispatchMutation.Deleted => Results.Ok(new { deleted = true }),
         DispatchMutation.NotFound => Results.NotFound(new { message = "Jízda neexistuje." }),
         DispatchMutation.Rejected rejected => Results.BadRequest(new { message = rejected.Message }),
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)

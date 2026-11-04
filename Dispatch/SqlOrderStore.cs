@@ -43,6 +43,7 @@ public sealed class SqlOrderStore(
                     o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
                     o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
                     o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
+                    o.CancelReason, o.CustomerIco, o.CustomerDic, o.CustomerStreet, o.CustomerCity, o.CustomerZip, o.CustomerEmail, o.CustomerPhone,
                     q.Status AS LatestSyncStatus, q.LastError AS LatestSyncError, q.Warning AS LatestSyncWarning
                 FROM dbo.Disp_Order o
                 LEFT JOIN dbo.Disp_Trip t ON t.Id = o.TripId
@@ -89,6 +90,9 @@ public sealed class SqlOrderStore(
 
     public Task<OrderMutation> ResendAsync(string id, CancellationToken cancellationToken) =>
         ChangeAsync(id, (context, latest) => OrderWorkflow.Resend(latest, context), cancellationToken);
+
+    public Task<OrderMutation> CancelAsync(string id, string? reason, bool delete, CancellationToken cancellationToken) =>
+        ChangeAsync(id, (context, _) => OrderWorkflow.Cancel(reason, delete, context), cancellationToken);
 
     public Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken) =>
         ChangeAsync(orderId, (context, _) => OrderWorkflow.AssignTrip(tripId, onlyIfFree, context), cancellationToken);
@@ -338,7 +342,7 @@ public sealed class SqlOrderStore(
                     """
                     SELECT COUNT(*)
                     FROM dbo.Disp_SyncQueue
-                    WHERE OrderId = @OrderId AND Action = N'Correction' AND Status = N'Sent'
+                    WHERE OrderId = @OrderId AND Action IN (N'Correction', N'Cancel') AND Status = N'Sent'
                     """,
                     transaction,
                     token,
@@ -355,6 +359,13 @@ public sealed class SqlOrderStore(
                 SentCorrections = sentCorrections
             };
             var result = change(context, latest);
+            if (result is OrderChange.Deleted deleted)
+            {
+                await DeleteOrderAsync(connection, transaction!, deleted.Id, token);
+                await transaction!.CommitAsync(token);
+                return (OrderMutation)new OrderMutation.Deleted(deleted.Id);
+            }
+
             if (result is not OrderChange.Saved saved)
             {
                 await transaction!.CommitAsync(token);
@@ -371,6 +382,8 @@ public sealed class SqlOrderStore(
                 await ReplaceRouteAsync(connection, transaction!, order, token);
             if (saved.VersionAdded)
                 await InsertVersionAsync(connection, transaction!, order, token);
+            if (saved.DropOpenQueue)
+                await DropOpenQueueAsync(connection, transaction!, order.Id, token);
             if (saved.Queue is not null)
                 await UpsertQueueAsync(connection, transaction!, order, saved.Queue, token);
 
@@ -486,7 +499,7 @@ public sealed class SqlOrderStore(
             "SELECT Id, CostPerKm FROM dbo.Disp_Vehicle", transaction, cancellationToken))).AsList();
         var drivers = await connection.QueryAsync<string>(Command("SELECT Id FROM dbo.Disp_Driver", transaction, cancellationToken));
         var trips = (await connection.QueryAsync<TripLink>(Command(
-            "SELECT Id, VehicleId, DriverId FROM dbo.Disp_Trip", transaction, cancellationToken))).AsList();
+            "SELECT Id, VehicleId, DriverId, Status FROM dbo.Disp_Trip", transaction, cancellationToken))).AsList();
         var costText = await connection.ExecuteScalarAsync<string>(Command(
             "SELECT Value FROM dbo.Disp_Setting WHERE [Key] = N'CostPerKm'",
             transaction,
@@ -521,7 +534,8 @@ public sealed class SqlOrderStore(
                 o.TripId, o.Status, o.IsLocked,
                 o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
                 o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
-                o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm
+                o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
+                o.CancelReason, o.CustomerIco, o.CustomerDic, o.CustomerStreet, o.CustomerCity, o.CustomerZip, o.CustomerEmail, o.CustomerPhone
             FROM dbo.Disp_Order o
             LEFT JOIN dbo.Disp_Trip t ON t.Id = o.TripId
             WHERE o.Id = @Id
@@ -545,7 +559,8 @@ public sealed class SqlOrderStore(
                 LoadingDate, UnloadingDate, FuelType, Liters, AgreedPrice, Surcharges,
                 Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
-                PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson
+                PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
+                CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone
             FROM dbo.Disp_OrderVersion
             WHERE OrderId = @Id
             ORDER BY Version DESC
@@ -570,7 +585,8 @@ public sealed class SqlOrderStore(
                 LoadingDate, UnloadingDate, FuelType, Liters, AgreedPrice, Surcharges,
                 Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
-                PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson
+                PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
+                CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone
             FROM dbo.Disp_OrderVersion
             WHERE OrderId = @Id AND Version = @Version
             """,
@@ -605,12 +621,14 @@ public sealed class SqlOrderStore(
                 (Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
                  FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
                  IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
-                 CreatedAt, UpdatedAt, PricingMode, SalePerKm, SalePerLiter, CostPerKm)
+                 CreatedAt, UpdatedAt, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
+                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
             VALUES
                 (@Id, @Code, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
                  @FuelType, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status,
                  @IsLocked, @CurrentVersion, @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @LastSentVersion,
-                 @CreatedAt, @UpdatedAt, @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm)
+                 @CreatedAt, @UpdatedAt, @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm,
+                 @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
             """,
             transaction,
             cancellationToken,
@@ -650,6 +668,14 @@ public sealed class SqlOrderStore(
                 SalePerKm = @SalePerKm,
                 SalePerLiter = @SalePerLiter,
                 CostPerKm = @CostPerKm,
+                CancelReason = @CancelReason,
+                CustomerIco = @CustomerIco,
+                CustomerDic = @CustomerDic,
+                CustomerStreet = @CustomerStreet,
+                CustomerCity = @CustomerCity,
+                CustomerZip = @CustomerZip,
+                CustomerEmail = @CustomerEmail,
+                CustomerPhone = @CustomerPhone,
                 UpdatedAt = @UpdatedAt
             WHERE Id = @Id
             """,
@@ -668,12 +694,14 @@ public sealed class SqlOrderStore(
                 (OrderId, Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
                  FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
                  PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
-                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson)
+                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
+                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
             VALUES
                 (@Id, @CurrentVersion, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
                  @FuelType, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status, @IsLocked,
                  @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @UpdatedAt,
-                 @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm, @RouteJson)
+                 @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm, @RouteJson,
+                 @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
             """,
             transaction,
             cancellationToken,
@@ -706,8 +734,50 @@ public sealed class SqlOrderStore(
                 order.SalePerKm,
                 order.SalePerLiter,
                 order.CostPerKm,
-                RouteJson = OrderRoute.Write(order)
+                RouteJson = OrderRoute.Write(order),
+                order.CancelReason,
+                order.CustomerIco,
+                order.CustomerDic,
+                order.CustomerStreet,
+                order.CustomerCity,
+                order.CustomerZip,
+                order.CustomerEmail,
+                order.CustomerPhone
             }));
+
+    private static Task<int> DeleteOrderAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        string id,
+        CancellationToken cancellationToken) =>
+        connection.ExecuteAsync(Command(
+            """
+            DELETE FROM dbo.Disp_SyncQueue WHERE OrderId = @Id;
+            DELETE FROM dbo.Disp_OrderLeg WHERE OrderId = @Id;
+            DELETE FROM dbo.Disp_OrderStop WHERE OrderId = @Id;
+            DELETE FROM dbo.Disp_OrderVersion WHERE OrderId = @Id;
+            DELETE FROM dbo.Disp_Order WHERE Id = @Id;
+            """,
+            transaction,
+            cancellationToken,
+            new { Id = id }));
+
+    private static Task<int> DropOpenQueueAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        string id,
+        CancellationToken cancellationToken) =>
+        connection.ExecuteAsync(Command(
+            """
+            UPDATE dbo.Disp_SyncQueue
+            SET Status = N'Failed',
+                LastError = N'Zakázka byla stornována před odesláním do Pohody.',
+                ProcessedUtc = SYSDATETIMEOFFSET()
+            WHERE OrderId = @Id AND Status IN (N'Pending', N'DryRun')
+            """,
+            transaction,
+            cancellationToken,
+            new { Id = id }));
 
     private static async Task ReplaceRouteAsync(
         SqlConnection connection,
@@ -923,12 +993,22 @@ public sealed class SqlOrderStore(
         public decimal SalePerKm { get; set; }
         public decimal SalePerLiter { get; set; }
         public decimal CostPerKm { get; set; }
+        public string? CancelReason { get; set; }
+        public string? CustomerIco { get; set; }
+        public string? CustomerDic { get; set; }
+        public string? CustomerStreet { get; set; }
+        public string? CustomerCity { get; set; }
+        public string? CustomerZip { get; set; }
+        public string? CustomerEmail { get; set; }
+        public string? CustomerPhone { get; set; }
 
         public DispatchOrder ToOrder() => new(
             Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
             FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
             IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
-            CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, LatestSyncWarning, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
+            CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, LatestSyncWarning, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
+            CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
+            CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone);
     }
 
     private sealed class VehicleCostRow
@@ -966,6 +1046,14 @@ public sealed class SqlOrderStore(
         public decimal SalePerLiter { get; set; }
         public decimal CostPerKm { get; set; }
         public string? RouteJson { get; set; }
+        public string? CancelReason { get; set; }
+        public string? CustomerIco { get; set; }
+        public string? CustomerDic { get; set; }
+        public string? CustomerStreet { get; set; }
+        public string? CustomerCity { get; set; }
+        public string? CustomerZip { get; set; }
+        public string? CustomerEmail { get; set; }
+        public string? CustomerPhone { get; set; }
 
         public DispatchOrder ToOrder(DispatchOrder order)
         {
@@ -973,7 +1061,9 @@ public sealed class SqlOrderStore(
                 order.Id, order.Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
                 FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
                 IsLocked, Version, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, order.LastSentVersion,
-                order.CreatedAt, CreatedUtc, null, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
+                order.CreatedAt, CreatedUtc, null, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
+                CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
+                CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone);
             return OrderRoute.Read(version, RouteJson);
         }
     }

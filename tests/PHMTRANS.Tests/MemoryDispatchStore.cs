@@ -32,6 +32,12 @@ public sealed class MemoryDispatchStore : IDispatchStore
     public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
         Change((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
 
+    public Task<DispatchMutation> CancelTripAsync(string id, CancellationToken cancellationToken) =>
+        Change((document, now) => DispatchRules.CancelTrip(document, id, now), cancellationToken);
+
+    public Task<DispatchMutation> DeleteTripAsync(string id, int orderCount, CancellationToken cancellationToken) =>
+        Change((document, now) => DispatchRules.DeleteTrip(document, id, orderCount), cancellationToken);
+
     public async Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);
@@ -98,6 +104,7 @@ public sealed class MemoryDispatchStore : IDispatchStore
                 Trip("trip-5", "J2026-0140", "Doprava Demo s.r.o.", "Sklad Mělník", "ČS Hradec Králové – ukázka", "motorová nafta", now.AddDays(-1), DispatchStatuses.Zrusena, null, null, "Ukázková jízda, zákazník zrušil", now.AddHours(-6)),
                 Trip("trip-1", "J2026-0141", "Agropodnik Demo a.s.", "Sklad Lovosice", "ČS Olomouc – ukázka", "motorová nafta", now.AddHours(-8), DispatchStatuses.Vylozena, "veh-3", "drv-3", "Ukázková jízda", now.AddHours(-2)),
                 Trip("trip-2", "J2026-0142", "Velkoobchod Palivo s.r.o.", "Sklad Cerekvice", "ČS Praha Chodov – ukázka", "motorová nafta", now.AddHours(-1), DispatchStatuses.NaCeste, "veh-1", "drv-1", "Ukázková jízda", now.AddMinutes(-30)),
+                Trip("trip-6", "J2026-0139", "Storno Demo s.r.o.", "Sklad Kralupy", "ČS Kolín – ukázka", "motorová nafta", now.AddDays(-2), DispatchStatuses.Stornovano, null, null, "Ukázková jízda, storno", now.AddDays(-2)),
                 Trip("trip-3", "J2026-0143", "Rafinérie Demo a.s.", "Areál Litvínov", "ČS Brno Slatina – ukázka", "benzin BA95", now.AddHours(3), DispatchStatuses.Nova, null, null, "Ukázková jízda, čeká na přiřazení", now),
                 Trip("trip-4", "J2026-0144", "Síť stanic Demo s.r.o.", "Sklad Kralupy", "ČS Plzeň Bory – ukázka", "motorová nafta", now.AddHours(5), DispatchStatuses.Prirazena, "veh-2", "drv-2", "Ukázková jízda", now)
             ]

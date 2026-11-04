@@ -61,6 +61,9 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
     public Task<OrderMutation> ResendAsync(string id, CancellationToken cancellationToken) =>
         Change(id, (context, latest) => OrderWorkflow.Resend(latest, context), cancellationToken);
 
+    public Task<OrderMutation> CancelAsync(string id, string? reason, bool delete, CancellationToken cancellationToken) =>
+        Change(id, (context, _) => OrderWorkflow.Cancel(reason, delete, context), cancellationToken);
+
     public Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken) =>
         Change(orderId, (context, _) => OrderWorkflow.AssignTrip(tripId, onlyIfFree, context), cancellationToken);
 
@@ -203,9 +206,17 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                 LastSent = lastSent,
                 SentCorrections = id is null
                     ? 0
-                    : _queue.Count(item => item.OrderId == id && item.Action == OrderSyncActions.Correction && item.Status == OrderQueueStatuses.Sent)
+                    : _queue.Count(item => item.OrderId == id && OrderSyncActions.CountsTowardCorrectionIndex(item.Action) && item.Status == OrderQueueStatuses.Sent)
             };
             var result = change(context, latest);
+            if (result is OrderChange.Deleted deleted)
+            {
+                _orders.RemoveAll(item => item.Id == deleted.Id);
+                _versions.RemoveAll(item => item.Id == deleted.Id);
+                _queue.RemoveAll(item => item.OrderId == deleted.Id);
+                return new OrderMutation.Deleted(deleted.Id);
+            }
+
             if (result is not OrderChange.Saved saved)
                 return new OrderMutation.Rejected(result is OrderChange.Rejected rejected ? rejected.Message : "Zakázku se nepodařilo uložit.");
 
@@ -219,6 +230,8 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                 _orders[index] = order;
             if (saved.VersionAdded)
                 _versions.Add(order);
+            if (saved.DropOpenQueue)
+                DropOpen(order.Id);
             if (saved.Queue is not null)
                 Upsert(order, saved.Queue);
             return new OrderMutation.Success(_orders.First(item => item.Id == order.Id));
@@ -226,6 +239,21 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private void DropOpen(string orderId)
+    {
+        for (var index = 0; index < _queue.Count; index++)
+        {
+            if (_queue[index].OrderId != orderId || !OrderQueueStatuses.IsOpen(_queue[index].Status))
+                continue;
+            _queue[index] = _queue[index] with
+            {
+                Status = OrderQueueStatuses.Failed,
+                LastError = "Zakázka byla stornována před odesláním do Pohody.",
+                ProcessedUtc = DateTimeOffset.UtcNow
+            };
         }
     }
 
@@ -362,6 +390,24 @@ public static class PreviewOrders
                 now,
                 [Stop("st-6", 1, "ČS České Budějovice", 24000m)],
                 [Leg("lg-6", 1, "Sklad Mělník", "ČS České Budějovice", 24000m, 150m, false, 0m, OrderPricing.ByKm, 42m, 0.9m, 28m)])
+                with { CustomerPohodaId = null },
+            Order(
+                "ord-preview-4",
+                "Z2026-0304",
+                "Rafinérie Demo a.s.",
+                "Areál Litvínov",
+                "motorová nafta",
+                18000m,
+                OrderPricing.ByKm,
+                salePerKm: 44m,
+                salePerLiter: 1m,
+                costPerKm: 29m,
+                null,
+                null,
+                null,
+                now,
+                [Stop("st-7", 1, "ČS Plzeň Bory", 18000m)],
+                [Leg("lg-7", 1, "Areál Litvínov", "ČS Plzeň Bory", 18000m, 120m, false, 0m, OrderPricing.ByKm, 44m, 1m, 29m)])
         ];
     }
 

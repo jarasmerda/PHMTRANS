@@ -28,6 +28,9 @@ public sealed class PohodaOptions
 
     public int TimeoutSeconds { get; set; } = 180;
 
+    /// <summary>Databáze firmy v Pohodě, ve které leží dbo.AD. Čte se plně kvalifikovaně, jen SELECT.</summary>
+    public string AddressBookDatabase { get; set; } = "Smerco_26950430_2026";
+
     public string EffectiveSyncMode()
     {
         if (string.Equals(SyncMode, "Off", StringComparison.OrdinalIgnoreCase))

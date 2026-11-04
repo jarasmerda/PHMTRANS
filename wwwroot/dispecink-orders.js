@@ -46,6 +46,8 @@ function orderOptions(items, selected, emptyLabel, labelOf) {
 }
 
 function orderStatusOptions(selected) {
+  if (selected === "Stornováno")
+    return `<option selected>Stornováno</option>`;
   return orderStatuses.map((status) =>
     `<option${status === selected ? " selected" : ""}>${orderText(status)}</option>`).join("");
 }
@@ -60,7 +62,7 @@ function syncLabel(status) {
 }
 
 function actionLabel(action) {
-  return { Create: "Založení", Update: "Aktualizace", Correction: "Oprava" }[action] || action;
+  return { Create: "Založení", Update: "Aktualizace", Correction: "Oprava", Delete: "Smazání v Pohodě", Cancel: "Opravné storno" }[action] || action;
 }
 
 function versionWarning(data, version) {
@@ -89,17 +91,22 @@ function formFields(prefix, order) {
     ? order.stops
     : [{ place: order?.unloadingPlace || "", liters: order?.liters ?? "", note: "", arrivalAt: "" }];
   const legs = order?.legs || [];
+  const legacy = !!order && !order.customerPohodaId;
   return `
-    <label class="wide">Zákazník
-      <input id="${prefix}-customer" required maxlength="160" value="${orderText(order?.customerName || "")}">
+    <label class="wide">Zákazník z adresáře Pohody
+      <input id="${prefix}-customer" required maxlength="160" autocomplete="off" placeholder="Název nebo IČO" value="${orderText(order?.customerName || "")}">
     </label>
-    <label>Id v Pohodě
-      <input id="${prefix}-customer-id" inputmode="numeric" value="${orderText(order?.customerPohodaId ?? "")}">
-    </label>
-    <div class="wide">
-      <button type="button" class="ghost" data-search="${prefix}">Hledat v adresáři Pohody</button>
-      <div class="picker" id="${prefix}-results"></div>
-    </div>
+    <p class="note warn wide" id="${prefix}-customer-warn"${legacy ? "" : " hidden"}>Zakázka nemá vazbu na adresář Pohody (AD). Vyberte zákazníka z našeptávače.</p>
+    <p class="note wide" id="${prefix}-customer-snapshot">${orderText(customerSnapshot(order))}</p>
+    <div class="picker customer-results wide" id="${prefix}-results"></div>
+    <input type="hidden" id="${prefix}-customer-id" value="${orderText(order?.customerPohodaId ?? "")}">
+    <input type="hidden" id="${prefix}-customer-ico" value="${orderText(order?.customerIco || "")}">
+    <input type="hidden" id="${prefix}-customer-dic" value="${orderText(order?.customerDic || "")}">
+    <input type="hidden" id="${prefix}-customer-street" value="${orderText(order?.customerStreet || "")}">
+    <input type="hidden" id="${prefix}-customer-city" value="${orderText(order?.customerCity || "")}">
+    <input type="hidden" id="${prefix}-customer-zip" value="${orderText(order?.customerZip || "")}">
+    <input type="hidden" id="${prefix}-customer-email" value="${orderText(order?.customerEmail || "")}">
+    <input type="hidden" id="${prefix}-customer-phone" value="${orderText(order?.customerPhone || "")}">
     <label>Nakládka <input id="${prefix}-loading" required maxlength="160" value="${orderText(order?.loadingPlace || "")}"></label>
     <label>Datum nakládky <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}"></label>
     <label>Datum vykládky <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}"></label>
@@ -108,7 +115,7 @@ function formFields(prefix, order) {
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
     <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
-    <label>Jízda <select id="${prefix}-trip">${orderOptions(orderCatalog.trips, trip, "— bez jízdy —", (item) => `${item.code} · ${item.customer}`)}</select></label>
+    <label>Jízda <select id="${prefix}-trip">${orderOptions(orderCatalog.trips.filter((item) => item.status !== "Stornováno" || item.id === trip), trip, "— bez jízdy —", (item) => `${item.code} · ${item.customer}`)}</select></label>
     <div><button type="button" class="ghost" data-open-trip="${prefix}">Otevřít jízdu</button></div>
     <label>Režim prodeje
       <select id="${prefix}-mode">
@@ -242,6 +249,12 @@ function refreshRoute(prefix) {
   return state;
 }
 
+function customerSnapshot(order) {
+  if (!order) return "";
+  const parts = [order.customerIco ? `IČO ${order.customerIco}` : "", [order.customerStreet, order.customerCity, order.customerZip].filter(Boolean).join(", ")].filter(Boolean);
+  return parts.join(" · ");
+}
+
 function readForm(prefix) {
   const value = (name) => document.querySelector(`#${prefix}-${name}`).value;
   const idText = value("customer-id").trim();
@@ -253,6 +266,13 @@ function readForm(prefix) {
   return {
     customerPohodaId: idText === "" ? null : Number(idText),
     customerName: value("customer"),
+    customerIco: value("customer-ico"),
+    customerDic: value("customer-dic"),
+    customerStreet: value("customer-street"),
+    customerCity: value("customer-city"),
+    customerZip: value("customer-zip"),
+    customerEmail: value("customer-email"),
+    customerPhone: value("customer-phone"),
     loadingPlace: value("loading"),
     unloadingPlace: last,
     loadingDate: value("loading-date"),
@@ -318,6 +338,7 @@ function renderOrders(data) {
   document.querySelector("#ocount-doruceno").textContent = orderCount(data, "Doručeno");
   document.querySelector("#ocount-kfakturaci").textContent = orderCount(data, "K fakturaci");
   document.querySelector("#ocount-vyfakturovano").textContent = orderCount(data, "Vyfakturováno");
+  document.querySelector("#ocount-stornovano").textContent = orderCount(data, "Stornováno");
   document.querySelector("#order-cards").hidden = false;
   document.querySelector("#order-rows").innerHTML = orderList.map((order) => `<tr>
       <td>${orderText(order.code)}<br><span class="route-to">v${orderText(order.currentVersion)}</span></td>
@@ -347,9 +368,22 @@ function renderDetail(data) {
   const warningNote = document.querySelector("#order-sync-warning");
   warningNote.hidden = !syncWarning;
   warningNote.textContent = syncWarning;
-  document.querySelector("#order-lock-note").hidden = !order.isLocked;
-  document.querySelector("#order-confirm").disabled = !!order.isLocked;
+  document.querySelector("#order-lock-note").hidden = !order.isLocked || order.status === "Stornováno";
+  const cancelled = order.status === "Stornováno";
+  const cancelNote = document.querySelector("#order-cancel-note");
+  cancelNote.hidden = !cancelled;
+  cancelNote.textContent = cancelled
+    ? `Stornováno.${order.cancelReason ? ` Důvod: ${order.cancelReason}` : ""} Zakázka je jen ke čtení, z jízdy je odebraná a do součtů se nepočítá.`
+    : "";
+  document.querySelector("#order-confirm").disabled = !!order.isLocked || cancelled;
+  for (const id of ["order-save", "order-confirm", "order-invoice", "order-resend", "order-cancel"])
+    document.querySelector(`#${id}`).hidden = cancelled;
   document.querySelector("#order-edit").innerHTML = formFields("edit", order);
+  if (cancelled) {
+    document.querySelectorAll("#order-edit input, #order-edit select, #order-edit button").forEach((element) => {
+      element.disabled = true;
+    });
+  }
   applyTripCrew("edit");
   refreshRoute("edit");
   document.querySelector("#version-rows").innerHTML = (data.versions ?? []).map((version) => `<tr>
@@ -473,14 +507,21 @@ async function loadQueue() {
   renderQueue(result.data);
 }
 
+const customerSearchTimers = {};
+
+function scheduleCustomerSearch(prefix) {
+  clearTimeout(customerSearchTimers[prefix]);
+  customerSearchTimers[prefix] = setTimeout(() => searchCustomers(prefix), 250);
+}
+
 async function searchCustomers(prefix) {
   const name = document.querySelector(`#${prefix}-customer`).value.trim();
   const results = document.querySelector(`#${prefix}-results`);
+  if (!results) return;
   if (name.length < 2) {
-    orderShow(orderMessage, "Pro hledání v adresáři napište aspoň dva znaky názvu.");
+    results.innerHTML = "";
     return;
   }
-  orderShow(orderMessage, "Hledám v adresáři Pohody…");
   const result = await orderFetch(`/api/dispatch/customers?q=${encodeURIComponent(name)}`);
   if (!result.ok) {
     orderShow(orderMessage, result.data.message || "Adresář Pohody se nepodařilo načíst.");
@@ -488,9 +529,11 @@ async function searchCustomers(prefix) {
     return;
   }
   const items = Array.isArray(result.data) ? result.data : [];
-  orderShow(orderMessage, items.length ? "" : "V adresáři Pohody nic není. Název můžete nechat ručně.");
-  results.innerHTML = items.map((item) =>
-    `<button type="button" data-pick="${prefix}" data-id="${orderText(item.id)}" data-name="${orderText(item.name)}">${orderText(item.name)}${item.city ? ` · ${orderText(item.city)}` : ""}</button>`).join("");
+  orderShow(orderMessage, items.length ? "" : "V adresáři Pohody nic není.");
+  results.innerHTML = items.map((item) => {
+    const detail = [item.ico ? `IČO ${item.ico}` : "", item.street, item.city, item.zip].filter(Boolean).join(", ");
+    return `<button type="button" data-pick="${prefix}" data-id="${orderText(item.id)}" data-name="${orderText(item.name)}" data-ico="${orderText(item.ico || "")}" data-dic="${orderText(item.dic || "")}" data-street="${orderText(item.street || "")}" data-city="${orderText(item.city || "")}" data-zip="${orderText(item.zip || "")}" data-email="${orderText(item.email || "")}" data-phone="${orderText(item.phone || "")}">${orderText(item.name)}${detail ? ` · ${orderText(detail)}` : ""}</button>`;
+  }).join("");
 }
 
 async function saveOrder(url, body, method) {
@@ -522,16 +565,28 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     openOrder(open.dataset.open, true);
     return;
   }
-  const search = event.target.closest("[data-search]");
-  if (search) {
-    searchCustomers(search.dataset.search);
-    return;
-  }
   const pick = event.target.closest("[data-pick]");
   if (pick) {
-    document.querySelector(`#${pick.dataset.pick}-customer`).value = pick.dataset.name;
-    document.querySelector(`#${pick.dataset.pick}-customer-id`).value = pick.dataset.id;
-    document.querySelector(`#${pick.dataset.pick}-results`).innerHTML = "";
+    const prefix = pick.dataset.pick;
+    const set = (name, value) => {
+      const field = document.querySelector(`#${prefix}-${name}`);
+      if (field) field.value = value || "";
+    };
+    set("customer", pick.dataset.name);
+    set("customer-id", pick.dataset.id);
+    set("customer-ico", pick.dataset.ico);
+    set("customer-dic", pick.dataset.dic);
+    set("customer-street", pick.dataset.street);
+    set("customer-city", pick.dataset.city);
+    set("customer-zip", pick.dataset.zip);
+    set("customer-email", pick.dataset.email);
+    set("customer-phone", pick.dataset.phone);
+    const snapshot = document.querySelector(`#${prefix}-customer-snapshot`);
+    if (snapshot) snapshot.textContent = [pick.dataset.ico ? `IČO ${pick.dataset.ico}` : "", [pick.dataset.street, pick.dataset.city, pick.dataset.zip].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
+    const warn = document.querySelector(`#${prefix}-customer-warn`);
+    if (warn) warn.hidden = true;
+    document.querySelector(`#${prefix}-results`).innerHTML = "";
+    orderShow(orderMessage, "");
     return;
   }
   const openTrip = event.target.closest("[data-open-trip]");
@@ -576,6 +631,14 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
 });
 
 document.querySelector("#orders-view").addEventListener("input", (event) => {
+  if (event.target.matches("[id$='-customer']") && !event.target.id.endsWith("-customer-id")) {
+    const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
+    const idField = document.querySelector(`#${prefix}-customer-id`);
+    if (idField && event.target.id === `${prefix}-customer`) {
+      idField.value = "";
+      scheduleCustomerSearch(prefix);
+    }
+  }
   if (event.target.matches("[id$='-cost-km']")) event.target.dataset.touched = "1";
   const route = event.target.closest("[data-route]") || event.target.closest("form");
   const prefix = event.target.id?.startsWith("edit-") ? "edit" : event.target.id?.startsWith("create-") ? "create" : route?.dataset?.route;
@@ -600,7 +663,12 @@ document.querySelector("#queue-rows").addEventListener("click", (event) => {
 
 document.querySelector("#order-create").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const created = await saveOrder("/api/dispatch/orders", readForm("create"), "POST");
+  const body = readForm("create");
+  if (!body.customerPohodaId) {
+    orderShow(orderMessage, "Zákazníka vyberte z adresáře Pohody.");
+    return;
+  }
+  const created = await saveOrder("/api/dispatch/orders", body, "POST");
   if (!created) return;
   document.querySelector("#order-create").innerHTML = formFields("create");
   orderShow(orderMessage, `Zakázka ${created.code} je založená.`);
@@ -641,6 +709,32 @@ document.querySelector("#order-resend").addEventListener("click", async () => {
   const saved = await saveOrder(`/api/dispatch/orders/${encodeURIComponent(orderDetail.order.id)}/resend`, {}, "POST");
   if (!saved) return;
   orderShow(orderMessage, "Zakázka je znovu ve frontě.");
+  await loadOrders();
+  await openOrder(saved.id, false);
+});
+
+document.querySelector("#order-cancel").addEventListener("click", async () => {
+  const order = orderDetail?.order;
+  if (!order || order.status === "Stornováno") return;
+  const reason = window.prompt("Důvod storna (nepovinný). Zrušení dialogu nic neudělá.", "");
+  if (reason === null) return;
+  const sent = !!(order.pohodaOrderId || order.lastSentVersion);
+  let remove = false;
+  if (!sent) {
+    remove = window.confirm("Zakázka ještě nebyla v Pohodě.\n\nOK = smazat natrvalo\nZrušit = jen stornovat a nechat v historii");
+  } else if (order.isLocked) {
+    if (!window.confirm(`Stornovat ${order.code}? Původní objednávka v Pohodě se nemění, protože je uzamčená. Vznikne opravný doklad ${order.code}/N jen se storno položkami.`)) return;
+  } else if (!window.confirm(`Stornovat ${order.code}? V Pohodě se přijatá objednávka smaže. Když už tam není, bere se to jako hotovo. Zakázka zůstane v historii.`)) return;
+  const saved = await saveOrder(`/api/dispatch/orders/${encodeURIComponent(order.id)}/cancel`, { reason, delete: remove }, "POST");
+  if (!saved) return;
+  if (saved.deleted) {
+    orderDetail = null;
+    document.querySelector("#order-detail").hidden = true;
+    orderShow(orderMessage, "Zakázka je smazaná.");
+    await loadOrders();
+    return;
+  }
+  orderShow(orderMessage, "Zakázka je stornovaná.");
   await loadOrders();
   await openOrder(saved.id, false);
 });

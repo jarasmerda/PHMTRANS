@@ -49,7 +49,7 @@ public static class OrderPohodaXml
 
     public static IReadOnlyList<OrderXmlLine> Lines(OrderSyncAction action, DispatchOrder current, DispatchOrder? lastSent)
     {
-        if (action == OrderSyncAction.Correction)
+        if (action is OrderSyncAction.Correction or OrderSyncAction.Cancel)
         {
             if (lastSent is null)
                 throw new InvalidOperationException("Oprava potřebuje poslední odeslanou verzi.");
@@ -57,7 +57,8 @@ public static class OrderPohodaXml
             var lines = new List<OrderXmlLine>();
             foreach (var line in SaleItems(lastSent))
                 lines.Add(new OrderXmlLine("Storno: " + line.Text, -line.Quantity, line.UnitPrice));
-            lines.AddRange(SaleItems(current));
+            if (action == OrderSyncAction.Correction)
+                lines.AddRange(SaleItems(current));
             return lines;
         }
 
@@ -78,18 +79,30 @@ public static class OrderPohodaXml
             throw new InvalidOperationException("Prázdný plán se do XML nepřevádí.");
 
         var items = new List<XElement>();
-        if (plan.Action == OrderSyncAction.Update && plan.IncludeDelete)
+        if (plan.Action == OrderSyncAction.Delete || (plan.Action == OrderSyncAction.Update && plan.IncludeDelete))
         {
             if (current.PohodaOrderId is not int id || id < 1)
-                throw new InvalidOperationException("Aktualizace potřebuje id dokladu v Pohodě.");
+                throw new InvalidOperationException(plan.Action == OrderSyncAction.Delete
+                    ? "Smazání potřebuje id dokladu v Pohodě."
+                    : "Aktualizace potřebuje id dokladu v Pohodě.");
 
             items.Add(PackItem(ItemId(current.Code, DeleteItemSuffix), DeleteOrder(id)));
         }
 
-        var explicitAdd = plan.Action is OrderSyncAction.Update or OrderSyncAction.Correction;
+        if (plan.Action == OrderSyncAction.Delete)
+        {
+            return Pack(options, current, items);
+        }
+
+        var explicitAdd = plan.Action is OrderSyncAction.Update or OrderSyncAction.Correction or OrderSyncAction.Cancel;
         var addSuffix = plan.Action == OrderSyncAction.Update ? AddItemSuffix : "";
         items.Add(PackItem(ItemId(current.Code, addSuffix), DocumentOrder(plan, current, lastSent, explicitAdd)));
 
+        return Pack(options, current, items);
+    }
+
+    private static string Pack(PohodaOptions options, DispatchOrder current, IReadOnlyList<XElement> items)
+    {
         var packId = Trim($"order-{current.Code}-v{current.CurrentVersion}", PackIdMax);
         var document = new XElement(Dat + "dataPack",
             new XAttribute("version", "2.0"),
@@ -158,6 +171,13 @@ public static class OrderPohodaXml
         var items = document.Descendants().Where(element => element.Name.LocalName == "responsePackItem").ToList();
         var deletes = items.Where(IsDeleteResponse).ToList();
         var adds = items.Where(element => !IsDeleteResponse(element)).ToList();
+        if (deletes.Count > 0 && adds.Count == 0)
+        {
+            return deletes.All(IsAcceptableDelete)
+                ? PohodaImportResult.Success(null, null)
+                : PohodaImportResult.Failure(DescribeImportError(document, body));
+        }
+
         if (deletes.Count == 0)
             return ReadSingle(document, body, adds.Count == 1 ? adds[0] : null);
 
@@ -189,10 +209,13 @@ public static class OrderPohodaXml
         {
             OrderSyncActions.Create => OrderSyncAction.Create,
             OrderSyncActions.Correction => OrderSyncAction.Correction,
+            OrderSyncActions.Delete => OrderSyncAction.Delete,
+            OrderSyncActions.Cancel => OrderSyncAction.Cancel,
             _ => OrderSyncAction.Update
         };
-        var index = action == OrderSyncAction.Correction ? sentCorrections + 1 : 1;
-        return new OrderSyncPlan(action, entry.VersionFrom, current.CurrentVersion, index < 1 ? 1 : index, includeDelete);
+        var index = action is OrderSyncAction.Correction or OrderSyncAction.Cancel ? sentCorrections + 1 : 1;
+        var delete = action == OrderSyncAction.Delete || (action == OrderSyncAction.Update && includeDelete);
+        return new OrderSyncPlan(action, entry.VersionFrom, current.CurrentVersion, index < 1 ? 1 : index, delete);
     }
 
     private static PohodaImportResult ReadSingle(XDocument document, string body, XElement? item)
@@ -377,32 +400,52 @@ public static class OrderPohodaXml
 
     private static string DocumentText(OrderSyncPlan plan, DispatchOrder current, DispatchOrder? lastSent)
     {
-        if (plan.Action == OrderSyncAction.Correction)
+        if (plan.Action is OrderSyncAction.Correction or OrderSyncAction.Cancel)
         {
             var number = string.IsNullOrWhiteSpace(current.PohodaOrderNumber) ? current.Code : current.PohodaOrderNumber;
             var from = lastSent?.CurrentVersion ?? plan.VersionFrom;
-            return $"Oprava k {number}: {current.Code} verze {from}–{current.CurrentVersion}";
+            var label = plan.Action == OrderSyncAction.Cancel ? "Storno" : "Oprava";
+            return $"{label} k {number}: {current.Code} verze {from}–{current.CurrentVersion}";
         }
 
         return $"{current.Code}: {current.LoadingPlace} → {current.UnloadingPlace}, {current.FuelType}";
     }
 
     private static string ExternalNumber(OrderSyncPlan plan, DispatchOrder current) =>
-        plan.Action == OrderSyncAction.Correction
+        plan.Action is OrderSyncAction.Correction or OrderSyncAction.Cancel
             ? CorrectionNumber(current.Code, plan.CorrectionIndex)
             : Trim(current.Code, NumberOrderMax);
 
     private static XElement Partner(DispatchOrder order)
     {
+        var identity = new XElement(Ord + "partnerIdentity");
         if (order.CustomerPohodaId is int id && id >= 1)
-        {
-            return new XElement(Ord + "partnerIdentity",
-                new XElement(Typ + "id", id.ToString(CultureInfo.InvariantCulture)));
-        }
+            identity.Add(new XElement(Typ + "id", id.ToString(CultureInfo.InvariantCulture)));
+        identity.Add(Address(order));
+        return identity;
+    }
 
-        return new XElement(Ord + "partnerIdentity",
-            new XElement(Typ + "address",
-                new XElement(Typ + "company", Trim(order.CustomerName, CompanyMax))));
+    private static XElement Address(DispatchOrder order)
+    {
+        var address = new XElement(Typ + "address");
+        AddAddress(address, "company", order.CustomerName, CompanyMax);
+        AddAddress(address, "city", order.CustomerCity, 45);
+        AddAddress(address, "street", order.CustomerStreet, 64);
+        AddAddress(address, "zip", order.CustomerZip, 15);
+        AddAddress(address, "ico", order.CustomerIco, IcoMax);
+        AddAddress(address, "dic", order.CustomerDic, 18);
+        AddAddress(address, "phone", order.CustomerPhone, 40);
+        AddAddress(address, "email", order.CustomerEmail, 98);
+        if (!address.HasElements)
+            address.Add(new XElement(Typ + "company", Trim(string.IsNullOrWhiteSpace(order.CustomerName) ? "Zákazník" : order.CustomerName, CompanyMax)));
+        return address;
+    }
+
+    private static void AddAddress(XElement address, string name, string? value, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+        address.Add(new XElement(Typ + name, Trim(value.Trim(), max)));
     }
 
     private static XElement Item(OrderXmlLine line) =>

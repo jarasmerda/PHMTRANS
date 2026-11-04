@@ -11,6 +11,13 @@ public static class OrderPohodaFields
     public static bool Same(DispatchOrder left, DispatchOrder right) =>
         left.CustomerPohodaId == right.CustomerPohodaId
         && left.CustomerName == right.CustomerName
+        && left.CustomerIco == right.CustomerIco
+        && left.CustomerDic == right.CustomerDic
+        && left.CustomerStreet == right.CustomerStreet
+        && left.CustomerCity == right.CustomerCity
+        && left.CustomerZip == right.CustomerZip
+        && left.CustomerEmail == right.CustomerEmail
+        && left.CustomerPhone == right.CustomerPhone
         && left.LoadingPlace == right.LoadingPlace
         && left.UnloadingPlace == right.UnloadingPlace
         && left.LoadingDate == right.LoadingDate

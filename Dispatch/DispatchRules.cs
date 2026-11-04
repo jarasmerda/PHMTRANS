@@ -39,6 +39,8 @@ public static class DispatchRules
         var index = IndexOf(document, id);
         if (index < 0)
             return new DispatchMutation.NotFound();
+        if (document.Trips[index].Status == DispatchStatuses.Stornovano)
+            return new DispatchMutation.Rejected("Stornovaná jízda je jen ke čtení.");
 
         var error = ValidateTripFields(
             request.Customer,
@@ -90,6 +92,8 @@ public static class DispatchRules
         var index = IndexOf(document, id);
         if (index < 0)
             return new DispatchMutation.NotFound();
+        if (document.Trips[index].Status == DispatchStatuses.Stornovano)
+            return new DispatchMutation.Rejected("Stornovaná jízda je jen ke čtení.");
 
         var assignmentError = ValidateAssignment(document, vehicleId, driverId);
         if (assignmentError is not null)
@@ -119,6 +123,8 @@ public static class DispatchRules
         var index = IndexOf(document, id);
         if (index < 0)
             return new DispatchMutation.NotFound();
+        if (document.Trips[index].Status == DispatchStatuses.Stornovano)
+            return new DispatchMutation.Rejected("Stornovaná jízda je jen ke čtení.");
 
         var updated = document.Trips[index] with
         {
@@ -127,6 +133,45 @@ public static class DispatchRules
         };
         document.Trips[index] = updated;
         return new DispatchMutation.Success(updated);
+    }
+
+    public static bool CanHardDelete(DispatchTrip trip, int orderCount) =>
+        orderCount == 0
+        && trip.Status == DispatchStatuses.Nova
+        && trip.VehicleId is null
+        && trip.DriverId is null;
+
+    public static DispatchMutation CancelTrip(DispatchDocument document, string id, DateTimeOffset now)
+    {
+        var index = IndexOf(document, id);
+        if (index < 0)
+            return new DispatchMutation.NotFound();
+        if (document.Trips[index].Status == DispatchStatuses.Stornovano)
+            return new DispatchMutation.Rejected("Jízda už je stornovaná.");
+
+        var updated = document.Trips[index] with
+        {
+            Status = DispatchStatuses.Stornovano,
+            UpdatedAt = now
+        };
+        document.Trips[index] = updated;
+        return new DispatchMutation.Success(updated);
+    }
+
+    public static DispatchMutation DeleteTrip(DispatchDocument document, string id, int orderCount)
+    {
+        var index = IndexOf(document, id);
+        if (index < 0)
+            return new DispatchMutation.NotFound();
+
+        var trip = document.Trips[index];
+        if (trip.Status == DispatchStatuses.Stornovano)
+            return new DispatchMutation.Rejected("Stornovaná jízda zůstává v historii.");
+        if (!CanHardDelete(trip, orderCount))
+            return new DispatchMutation.Rejected("Jízdu s historií nebo se zakázkami lze jen stornovat.");
+
+        document.Trips.RemoveAt(index);
+        return new DispatchMutation.Deleted(id);
     }
 
     public static DispatchRateCard Rates(DispatchDocument document) =>
@@ -233,6 +278,13 @@ public static class DispatchRules
         }
 
         var selected = requested.Trim();
+        if (selected == DispatchStatuses.Stornovano)
+        {
+            status = current;
+            error = "Jízdu stornujte tlačítkem Stornovat. Tím se odeberou zakázky.";
+            return false;
+        }
+
         if (!DispatchStatuses.IsKnown(selected))
         {
             status = current;

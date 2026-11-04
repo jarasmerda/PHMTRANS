@@ -51,7 +51,9 @@ public abstract record OrderChange
     {
     }
 
-    public sealed record Saved(DispatchOrder Order, bool VersionAdded, QueueUpsert? Queue) : OrderChange;
+    public sealed record Saved(DispatchOrder Order, bool VersionAdded, QueueUpsert? Queue, bool DropOpenQueue = false) : OrderChange;
+
+    public sealed record Deleted(string Id) : OrderChange;
 
     public sealed record Rejected(string Message) : OrderChange;
 }
@@ -82,6 +84,8 @@ public static class OrderWorkflow
     {
         if (context.Current is null)
             return new OrderChange.Rejected("Zakázka neexistuje.");
+        if (context.Current.Status == OrderStatuses.Stornovano)
+            return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
 
         var draft = Read(request, context.Current);
         if (draft.Error is not null)
@@ -105,6 +109,8 @@ public static class OrderWorkflow
     {
         if (context.Current is null)
             return new OrderChange.Rejected("Zakázka neexistuje.");
+        if (context.Current.Status == OrderStatuses.Stornovano)
+            return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
         if (context.Current.IsLocked)
             return new OrderChange.Rejected("Zakázka je uzamčená, protože je vyfakturovaná.");
 
@@ -124,6 +130,8 @@ public static class OrderWorkflow
     {
         if (context.Current is null)
             return new OrderChange.Rejected("Zakázka neexistuje.");
+        if (context.Current.Status == OrderStatuses.Stornovano)
+            return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
 
         var invoiceError = CheckLength(invoiceNumber, 40, "Číslo faktury může mít nejvýše 40 znaků.");
         if (invoiceError is not null)
@@ -150,6 +158,8 @@ public static class OrderWorkflow
     {
         if (context.Current is null)
             return new OrderChange.Rejected("Zakázka neexistuje.");
+        if (context.Current.Status == OrderStatuses.Stornovano)
+            return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
         if (!OrderStatuses.IsConfirmed(context.Current.Status))
             return new OrderChange.Rejected("Nejdřív zakázku potvrďte k fakturaci.");
 
@@ -176,10 +186,65 @@ public static class OrderWorkflow
         return new OrderChange.Saved(context.Current, false, Queue(context, context.Current, plan, targetId: null));
     }
 
+    public static OrderChange Cancel(string? reason, bool delete, OrderEditContext context)
+    {
+        if (context.Current is null)
+            return new OrderChange.Rejected("Zakázka neexistuje.");
+        if (context.Current.Status == OrderStatuses.Stornovano)
+            return new OrderChange.Rejected("Zakázka už je stornovaná.");
+
+        var reasonError = CheckLength(reason, 500, "Důvod storna může mít nejvýše 500 znaků.");
+        if (reasonError is not null)
+            return new OrderChange.Rejected(reasonError);
+
+        var sent = OrderSyncPlanner.WasSent(context.Current);
+        if (delete)
+        {
+            if (sent)
+                return new OrderChange.Rejected("Zakázku odeslanou do Pohody nelze smazat, jen stornovat.");
+            return new OrderChange.Deleted(context.Current.Id);
+        }
+
+        var order = context.Current with
+        {
+            Status = OrderStatuses.Stornovano,
+            TripId = null,
+            CancelReason = Blank(reason),
+            CurrentVersion = context.Current.CurrentVersion + 1,
+            UpdatedAt = context.Now
+        };
+
+        if (!sent)
+            return new OrderChange.Saved(order, true, null, DropOpenQueue: true);
+
+        if (context.Current.IsLocked)
+        {
+            if (context.LastSent is null)
+                return new OrderChange.Rejected("Chybí poslední odeslaná verze, opravné storno nelze sestavit.");
+
+            var plan = WithCorrectionIndex(
+                new OrderSyncPlan(OrderSyncAction.Cancel, context.LastSent.CurrentVersion, order.CurrentVersion),
+                context);
+            return new OrderChange.Saved(order, true, Queue(context, order, plan, targetId: null));
+        }
+
+        if (context.Current.PohodaOrderId is not int id || id < 1)
+            return new OrderChange.Rejected("Chybí id objednávky v Pohodě, storno nelze smazat v Pohodě.");
+
+        var deletePlan = new OrderSyncPlan(
+            OrderSyncAction.Delete,
+            context.LastSent?.CurrentVersion,
+            order.CurrentVersion,
+            IncludeDelete: true);
+        return new OrderChange.Saved(order, true, Queue(context, order, deletePlan, targetId: null));
+    }
+
     public static OrderChange AssignTrip(string? tripId, bool onlyIfFree, OrderEditContext context)
     {
         if (context.Current is null)
             return new OrderChange.Rejected("Zakázka neexistuje.");
+        if (context.Current.Status == OrderStatuses.Stornovano)
+            return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
 
         var trip = Blank(tripId);
         var error = OrderAssignment.Check(context.Current, trip, onlyIfFree, context.Catalog);
@@ -216,14 +281,14 @@ public static class OrderWorkflow
     }
 
     private static OrderSyncPlan WithCorrectionIndex(OrderSyncPlan plan, OrderEditContext context) =>
-        plan.Action == OrderSyncAction.Correction
+        plan.Action is OrderSyncAction.Correction or OrderSyncAction.Cancel
             ? plan with { CorrectionIndex = context.SentCorrections + 1 }
             : plan;
 
     private static QueueUpsert Queue(OrderEditContext context, DispatchOrder order, OrderSyncPlan plan, long? targetId)
     {
         var xml = OrderPohodaXml.Build(context.Pohoda, plan, order, context.LastSent);
-        var warning = plan.Action == OrderSyncAction.Correction
+        var warning = plan.Action is OrderSyncAction.Correction or OrderSyncAction.Cancel
             ? OrderPohodaXml.LockedOrderWarning(OrderPohodaXml.CorrectionNumber(order.Code, plan.CorrectionIndex))
             : null;
         return new QueueUpsert(
@@ -270,7 +335,15 @@ public static class OrderWorkflow
             context.Now,
             current?.LatestSyncStatus,
             current?.LatestSyncError,
-            current?.LatestSyncWarning);
+            current?.LatestSyncWarning,
+            CancelReason: current?.CancelReason,
+            CustomerIco: draft.CustomerIco,
+            CustomerDic: draft.CustomerDic,
+            CustomerStreet: draft.CustomerStreet,
+            CustomerCity: draft.CustomerCity,
+            CustomerZip: draft.CustomerZip,
+            CustomerEmail: draft.CustomerEmail,
+            CustomerPhone: draft.CustomerPhone);
     }
 
     private static (string Status, bool Locked, string? Invoice) ResolveState(
@@ -298,7 +371,31 @@ public static class OrderWorkflow
     {
         if (request.CustomerPohodaId is 0 or < 0)
             return Draft.Fail("Id zákazníka v Pohodě musí být kladné číslo.");
-        var customerId = request.CustomerPohodaId;
+        var customerId = request.CustomerPohodaId ?? current?.CustomerPohodaId;
+        if (current is null && customerId is null)
+            return Draft.Fail("Zákazníka vyberte z adresáře Pohody.");
+        var keepCustomer = current is not null && customerId == current.CustomerPohodaId;
+        var ico = Snapshot(request.CustomerIco, current?.CustomerIco, keepCustomer, 15, "IČO může mít nejvýše 15 znaků.");
+        if (ico.Error is not null)
+            return Draft.Fail(ico.Error);
+        var dic = Snapshot(request.CustomerDic, current?.CustomerDic, keepCustomer, 18, "DIČ může mít nejvýše 18 znaků.");
+        if (dic.Error is not null)
+            return Draft.Fail(dic.Error);
+        var street = Snapshot(request.CustomerStreet, current?.CustomerStreet, keepCustomer, 64, "Ulice může mít nejvýše 64 znaků.");
+        if (street.Error is not null)
+            return Draft.Fail(street.Error);
+        var city = Snapshot(request.CustomerCity, current?.CustomerCity, keepCustomer, 45, "Obec může mít nejvýše 45 znaků.");
+        if (city.Error is not null)
+            return Draft.Fail(city.Error);
+        var zip = Snapshot(request.CustomerZip, current?.CustomerZip, keepCustomer, 15, "PSČ může mít nejvýše 15 znaků.");
+        if (zip.Error is not null)
+            return Draft.Fail(zip.Error);
+        var email = Snapshot(request.CustomerEmail, current?.CustomerEmail, keepCustomer, 98, "E-mail může mít nejvýše 98 znaků.");
+        if (email.Error is not null)
+            return Draft.Fail(email.Error);
+        var phone = Snapshot(request.CustomerPhone, current?.CustomerPhone, keepCustomer, 40, "Telefon může mít nejvýše 40 znaků.");
+        if (phone.Error is not null)
+            return Draft.Fail(phone.Error);
 
         var customer = Required(request.CustomerName, 160, "Vyplňte zákazníka.", "Zákazník může mít nejvýše 160 znaků.");
         if (customer.Error is not null)
@@ -348,6 +445,8 @@ public static class OrderWorkflow
         var status = string.IsNullOrWhiteSpace(request.Status) ? current?.Status ?? OrderStatuses.Nova : request.Status.Trim();
         if (!OrderStatuses.IsKnown(status))
             return Draft.Fail(OrderStatuses.UnknownMessage);
+        if (status == OrderStatuses.Stornovano)
+            return Draft.Fail("Storno zakázky se dělá tlačítkem Stornovat.");
 
         return new Draft(
             null,
@@ -367,7 +466,14 @@ public static class OrderWorkflow
             Blank(request.DriverId),
             Blank(request.TripId),
             status,
-            Blank(request.PohodaInvoiceNumber));
+            Blank(request.PohodaInvoiceNumber),
+            ico.Value,
+            dic.Value,
+            street.Value,
+            city.Value,
+            zip.Value,
+            email.Value,
+            phone.Value);
     }
 
     private static string? CheckLinks(Draft draft, OrderCatalog catalog)
@@ -398,6 +504,14 @@ public static class OrderWorkflow
 
     private static string? Blank(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static (string? Value, string? Error) Snapshot(string? requested, string? current, bool keep, int max, string tooLong)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+            return (keep ? current : null, null);
+        var trimmed = requested.Trim();
+        return trimmed.Length > max ? (null, tooLong) : (trimmed, null);
+    }
 
     private static string NewId() => Guid.NewGuid().ToString("n");
 
@@ -434,7 +548,14 @@ public static class OrderWorkflow
         string? DriverId,
         string? TripId,
         string? Status,
-        string? Invoice)
+        string? Invoice,
+        string? CustomerIco = null,
+        string? CustomerDic = null,
+        string? CustomerStreet = null,
+        string? CustomerCity = null,
+        string? CustomerZip = null,
+        string? CustomerEmail = null,
+        string? CustomerPhone = null)
     {
         public static Draft Fail(string error) => new(error, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
