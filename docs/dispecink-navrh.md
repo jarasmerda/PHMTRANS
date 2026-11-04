@@ -169,7 +169,9 @@ Kód jízdy je `J{rok}-{čtyři číslice}`. Čítač je nejvyšší známé č�
 
 ## SQL úložiště
 
-Třída `SqlDispatchStore`, přístup přes `Microsoft.Data.SqlClient` a Dapper. Databáze je `Smerco_26950430_2026` na `192.168.1.54\POHODASQL`. Je samostatná pro dispečink. Účet v connection stringu nemá být v jiných databázích a aplikace do Pohody nezapisuje.
+Třída `SqlDispatchStore`, přístup přes `Microsoft.Data.SqlClient` a Dapper. Connection string ukazuje na `Smerco_26950430_2026` na `192.168.1.54\POHODASQL`. V ní jsou tabulky dispečinku, CRM i přihlášení. Aplikace do Pohody nezapisuje.
+
+Adresář Pohody `dbo.AD` v té databázi není. Našeptávač zákazníka ho čte z firemní databáze `StwPh_26950430_2026` trojdílným jménem `[StwPh_26950430_2026].dbo.AD` (`Pohoda:AddressBookDatabase`). Účet `phmtrans_dispatch` potřebuje na té tabulce jen `SELECT`.
 
 Connection string je jen `ConnectionStrings:Dispatch`. Na serveru je to proměnná počítače `ConnectionStrings__Dispatch`. V `appsettings.json` je prázdný řetězec, heslo v gitu není.
 
@@ -281,7 +283,7 @@ IIS a DNS:
 
 Heslo nepatří do gitu. V `appsettings.json` je `ConnectionStrings:Dispatch` prázdné. Služba bere proměnnou počítače `ConnectionStrings__Dispatch`. Bez ní `/health` zůstane v pořádku a deska po přihlášení řekne, že connection string chybí.
 
-Účet jen pro databázi `Smerco_26950430_2026`, ne pro zbytek instance a ne `sysadmin`. Heslo v příkazu vyměnit:
+Účet zapisuje jen do databáze `Smerco_26950430_2026`. Není `sysadmin` a do ostatních databází se nezakládá jako zapisovatel. Heslo v příkazu vyměnit:
 
 ```sql
 CREATE LOGIN [phmtrans_dispatch] WITH PASSWORD = N'heslo-jen-na-serveru', CHECK_POLICY = ON;
@@ -294,7 +296,14 @@ ALTER ROLE db_datawriter ADD MEMBER [phmtrans_dispatch];
 ALTER ROLE db_ddladmin ADD MEMBER [phmtrans_dispatch];
 ```
 
-`db_ddladmin` je jen v téhle databázi, aby služba při startu založila chybějící `Disp_*`. Jiné databáze na instanci účet nevidí, dokud se v nich nezaloží uživatel. To se dělat nemá.
+`db_ddladmin` je jen v téhle databázi, aby služba při startu založila chybějící `Disp_*`. Do jiných databází se účet nezakládá jako zapisovatel. Jediná výjimka je čtení adresáře Pohody. Tabulka `dbo.AD` je ve firemní databázi `StwPh_26950430_2026`, connection string se kvůli tomu nemění:
+
+```sql
+USE [StwPh_26950430_2026];
+GO
+CREATE USER [phmtrans_dispatch] FOR LOGIN [phmtrans_dispatch];
+GRANT SELECT ON dbo.AD TO [phmtrans_dispatch];
+```
 
 TCP pro pojmenovanou instanci `POHODASQL`:
 

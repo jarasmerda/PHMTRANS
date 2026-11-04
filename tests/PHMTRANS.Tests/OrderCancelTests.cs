@@ -257,9 +257,31 @@ public sealed class OrderCancelTests
         Assert.Null(person.Company);
         Assert.Null(new PohodaAddressRow { ID = 0, Firma = "X" }.ToAddress());
 
+        Assert.Equal("StwPh_26950430_2026", PohodaAddressSql.DefaultDatabase);
+        Assert.Equal("StwPh_26950430_2026", new PohodaOptions().AddressBookDatabase);
+        var settingsDir = new DirectoryInfo(AppContext.BaseDirectory);
+        string? settings = null;
+        string? development = null;
+        while (settingsDir is not null && (settings is null || development is null))
+        {
+            var app = Path.Combine(settingsDir.FullName, "appsettings.json");
+            var dev = Path.Combine(settingsDir.FullName, "appsettings.Development.json");
+            if (settings is null && File.Exists(app))
+                settings = File.ReadAllText(app);
+            if (development is null && File.Exists(dev))
+                development = File.ReadAllText(dev);
+            settingsDir = settingsDir.Parent;
+        }
+        Assert.NotNull(settings);
+        Assert.NotNull(development);
+        Assert.Contains("\"AddressBookDatabase\": \"StwPh_26950430_2026\"", settings, StringComparison.Ordinal);
+        Assert.Contains("\"AddressBookDatabase\": \"StwPh_26950430_2026\"", development, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"AddressBookDatabase\": \"Smerco_26950430_2026\"", settings, StringComparison.Ordinal);
+        Assert.DoesNotContain("Password=", settings, StringComparison.Ordinal);
         var sql = PohodaAddressSql.SearchSql(PohodaAddressSql.DefaultDatabase);
         Assert.Contains("SELECT TOP (20)", sql, StringComparison.Ordinal);
-        Assert.Contains("[Smerco_26950430_2026].dbo.AD", sql, StringComparison.Ordinal);
+        Assert.Contains("[StwPh_26950430_2026].dbo.AD", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("Smerco_26950430_2026.dbo.AD", sql, StringComparison.Ordinal);
         Assert.Contains("Firma", sql, StringComparison.Ordinal);
         Assert.Contains("Jmeno", sql, StringComparison.Ordinal);
         Assert.Contains("ICO", sql, StringComparison.Ordinal);
@@ -271,8 +293,8 @@ public sealed class OrderCancelTests
         Assert.DoesNotContain("DELETE", sql, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("%12!%3%", PohodaAddressSql.Like("12%3"));
         Assert.Contains(
-            "GRANT SELECT ON [Smerco_26950430_2026].dbo.AD TO phmtrans_dispatch;",
-            PohodaAddressSql.PermissionMessage("Smerco_26950430_2026"),
+            "GRANT SELECT ON [StwPh_26950430_2026].dbo.AD TO phmtrans_dispatch;",
+            PohodaAddressSql.PermissionMessage(PohodaAddressSql.DefaultDatabase),
             StringComparison.Ordinal);
         Assert.True(PohodaAddressSql.IsPermissionError(229));
     }

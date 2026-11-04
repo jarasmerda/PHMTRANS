@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/erp.css?v=17">
   <style>
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
+    [hidden] { display: none !important; }
     .route-to { color: var(--text-secondary); font-size: 0.82rem; }
     #trips { min-width: 76rem; }
     #rows input, #rows select { min-width: 7.5rem; max-width: 14rem; width: 100%; }
@@ -35,7 +36,25 @@
     .view-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .view-tabs button[aria-current="page"] { background: var(--ink); color: #fff; }
     #order-cards, #cards { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
-    #orders, #versions, #queue { min-width: 64rem; }
+    #orders, #version-lines, #queue { min-width: 64rem; }
+    .version-links { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+    .version-links li { margin: 0.25rem 0; }
+    .version-links a { color: var(--ink); font-weight: 700; }
+    #version-page {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    .snapshot {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+      gap: 0.7rem;
+      margin: 0.8rem 0;
+    }
+    .snapshot p { margin: 0; }
+    .snapshot span { display: block; color: var(--text-secondary); font-size: 0.78rem; }
     #order-create, #order-edit {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
@@ -322,27 +341,13 @@
         <button type="button" id="order-close" class="ghost">Zavřít</button>
       </div>
       <h3>Historie verzí</h3>
-      <div class="table-scroll">
-        <table id="versions">
-          <thead>
-            <tr>
-              <th>Verze</th>
-              <th>Čas</th>
-              <th>Zákazník</th>
-              <th>Trasa</th>
-              <th>Termín</th>
-              <th>Náklad</th>
-              <th>Cena</th>
-              <th>Příplatky</th>
-              <th>Stav</th>
-            </tr>
-          </thead>
-          <tbody id="version-rows"></tbody>
-        </table>
-      </div>
+      <p class="note">Starší uložené snímky. Aktuální údaje jsou ve formuláři nahoře.</p>
+      <ul id="version-links" class="version-links"></ul>
+      <p id="version-empty" class="note" hidden>Starší verze zatím nejsou.</p>
       <h3>Synchronizace do Pohody</h3>
       <div id="order-sync"></div>
     </section>
+    <section id="version-page" hidden></section>
     <section id="order-create-wrap">
       <h2>Nová zakázka</h2>
       <form id="order-create"></form>
@@ -378,7 +383,7 @@
       <pre id="queue-xml" class="xml" hidden></pre>
     </section>
   </div>
-  <script src="/dispecink.js?v=7"></script>
-  <script src="/dispecink-orders.js?v=3"></script>
+  <script src="/dispecink.js?v=8"></script>
+  <script src="/dispecink-orders.js?v=5"></script>
 </body>
 </html>

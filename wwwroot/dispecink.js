@@ -342,10 +342,18 @@ async function load() {
   if (hashTrip) showTrip(decodeURIComponent(hashTrip));
 }
 
-window.openTrip = (id) => {
+window.openTrip = async (id) => {
   document.querySelector("#tab-trips")?.click();
+  if (!(board?.trips ?? []).some((item) => item.id === id))
+    await load();
   showTrip(id);
-  document.querySelector("#trip-detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const detail = document.querySelector("#trip-detail");
+  if (detail && !detail.hidden) {
+    showMessage("");
+    detail.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else {
+    showMessage("Jízdu se nepodařilo otevřít.");
+  }
 };
 
 async function send(url, body, method = "POST") {
