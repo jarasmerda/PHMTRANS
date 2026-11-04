@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
@@ -26,7 +27,7 @@ public sealed class PublicSitePageTests
 
         Assert.Contains("lang=\"cs\"", html, StringComparison.Ordinal);
         Assert.Contains("erp.css?v=17", html, StringComparison.Ordinal);
-        Assert.Contains("landing.css?v=12", html, StringComparison.Ordinal);
+        Assert.Contains("landing.css?v=13", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://intranet.phmtrans.cz/\">Intranet</a>", html, StringComparison.Ordinal);
@@ -52,21 +53,77 @@ public sealed class PublicSitePageTests
         Assert.Contains("id=\"vozovy-park\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"o-nas\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"kontakt\"", html, StringComparison.Ordinal);
-        Assert.Contains("[telefon]", html, StringComparison.Ordinal);
-        Assert.Contains("[e-mail]", html, StringComparison.Ordinal);
-        Assert.Contains("[adresa]", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"eu-projekt\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[telefon]", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[e-mail]", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[adresa]", html, StringComparison.Ordinal);
         Assert.Contains("UPRAVIT: text o firmě", html, StringComparison.Ordinal);
         Assert.Contains("UPRAVIT: popis vozového parku", html, StringComparison.Ordinal);
         Assert.Contains("[Doplňte text o firmě.]", html, StringComparison.Ordinal);
         Assert.Contains("[Doplňte popis vozového parku.]", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("@", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("+420", html, StringComparison.Ordinal);
+        var contactAt = html.IndexOf("id=\"kontakt\"", StringComparison.Ordinal);
+        var euAt = html.IndexOf("id=\"eu-projekt\"", StringComparison.Ordinal);
+        var footerAt = html.IndexOf("class=\"site-footer\"", StringComparison.Ordinal);
+        Assert.True(contactAt >= 0 && euAt > contactAt && footerAt > euAt);
+        const string operatorLine = "Provozovatel: Autodoprava Hrbáček s.r.o.";
+        Assert.Contains(operatorLine, html[contactAt..euAt], StringComparison.Ordinal);
+        Assert.Contains(operatorLine, html[footerAt..], StringComparison.Ordinal);
+        Assert.Contains("href=\"tel:+420603475612\"", html, StringComparison.Ordinal);
+        Assert.Contains("+420 603 475 612", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"mailto:info@phmtrans.cz\"", html, StringComparison.Ordinal);
+        Assert.Contains("info@phmtrans.cz", html, StringComparison.Ordinal);
+        Assert.Contains("Nížkovice 41, 684 01 Nížkovice", html, StringComparison.Ordinal);
+        Assert.Contains("IČO: 26950430", html, StringComparison.Ordinal);
+        Assert.Contains("DIČ: CZ26950430", html, StringComparison.Ordinal);
+        Assert.Contains("zapsána v obchodním rejstříku vedeném Krajským soudem v Brně, oddíl C, vložka 47795", html, StringComparison.Ordinal);
+        Assert.Contains("src=\"/img/eu-projekt.png\"", html, StringComparison.Ordinal);
+        Assert.Contains("width=\"3840\"", html, StringComparison.Ordinal);
+        Assert.Contains("height=\"2160\"", html, StringComparison.Ordinal);
+        Assert.Contains("alt=\"Projekt Digitalizace ve společnosti Autodoprava Hrbáček s.r.o., CZ.01.02.01/01/23_026/0009265, je spolufinancován Evropskou unií.\"", html, StringComparison.Ordinal);
+        Assert.Contains("<figcaption>", html, StringComparison.Ordinal);
+        Assert.Contains("Cílem tohoto projektu je zvýšení digitální úrovně společnosti prostřednictvím nákupu a zavedení pokročilých nevýrobních digitálních technologií.", html, StringComparison.Ordinal);
+        Assert.Contains("Spolufinancováno Evropskou unií", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://www.mapaprojektu.cz\"", html, StringComparison.Ordinal);
+        var jsonStart = html.IndexOf("<script type=\"application/ld+json\">", StringComparison.Ordinal);
+        var jsonEnd = html.IndexOf("</script>", jsonStart, StringComparison.Ordinal);
+        Assert.True(jsonStart >= 0 && jsonEnd > jsonStart);
+        using (var organization = JsonDocument.Parse(html[(jsonStart + "<script type=\"application/ld+json\">".Length)..jsonEnd]))
+        {
+            var org = organization.RootElement;
+            Assert.Equal("https://schema.org", org.GetProperty("@context").GetString());
+            Assert.Equal("Organization", org.GetProperty("@type").GetString());
+            Assert.Equal("Autodoprava Hrbáček s.r.o.", org.GetProperty("name").GetString());
+            Assert.Equal("info@phmtrans.cz", org.GetProperty("email").GetString());
+            Assert.Equal("+420603475612", org.GetProperty("telephone").GetString());
+            Assert.Equal("CZ26950430", org.GetProperty("vatID").GetString());
+            Assert.Equal("26950430", org.GetProperty("identifier").GetProperty("value").GetString());
+            Assert.Equal("Nížkovice 41", org.GetProperty("address").GetProperty("streetAddress").GetString());
+            Assert.Equal("684 01", org.GetProperty("address").GetProperty("postalCode").GetString());
+            Assert.Equal("Nížkovice", org.GetProperty("address").GetProperty("addressLocality").GetString());
+            Assert.Contains("oddíl C, vložka 47795", org.GetProperty("additionalProperty").GetProperty("value").GetString(), StringComparison.Ordinal);
+        }
+
+        var withoutJsonLd = html.Remove(jsonStart, jsonEnd + "</script>".Length - jsonStart);
+        Assert.DoesNotContain("<script", withoutJsonLd, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("http://", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("https://", html.Replace("https://intranet.phmtrans.cz/", "", StringComparison.Ordinal), StringComparison.Ordinal);
-        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+        var external = html
+            .Replace("https://intranet.phmtrans.cz/", "", StringComparison.Ordinal)
+            .Replace("https://schema.org", "", StringComparison.Ordinal)
+            .Replace("https://phmtrans.cz/", "", StringComparison.Ordinal)
+            .Replace("https://www.mapaprojektu.cz", "", StringComparison.Ordinal);
+        Assert.DoesNotContain("https://", external, StringComparison.Ordinal);
         Assert.DoesNotContain("google", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("http://", css, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("https://", css, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(".eu-poster img", css, StringComparison.Ordinal);
+        Assert.Contains("object-fit: contain", css, StringComparison.Ordinal);
+        Assert.Contains("max-height: none", css, StringComparison.Ordinal);
+        Assert.Contains("height: auto", css, StringComparison.Ordinal);
+        var poster = File.ReadAllBytes(Path.Combine(root, "img", "eu-projekt.png"));
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, poster[..4]);
+        Assert.Equal(3840, BinaryPrimitives.ReadInt32BigEndian(poster.AsSpan(16, 4)));
+        Assert.Equal(2160, BinaryPrimitives.ReadInt32BigEndian(poster.AsSpan(20, 4)));
+        Assert.True(poster.Length < 200_000);
         Assert.Contains("max-width: 480px", css, StringComparison.Ordinal);
         Assert.Contains("max-width: 768px", css, StringComparison.Ordinal);
         Assert.Contains("max-width: 1024px", css, StringComparison.Ordinal);
@@ -151,7 +208,14 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             Assert.DoesNotContain("https://intranet.phmtrans.cz/ERP", html, StringComparison.Ordinal);
             Assert.DoesNotContain("https://intranet.phmtrans.cz/Dispecink", html, StringComparison.Ordinal);
             Assert.DoesNotContain("https://intranet.phmtrans.cz/CRM", html, StringComparison.Ordinal);
-            Assert.Contains("[telefon]", html, StringComparison.Ordinal);
+            Assert.Contains("Provozovatel: Autodoprava Hrbáček s.r.o.", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"tel:+420603475612\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"mailto:info@phmtrans.cz\"", html, StringComparison.Ordinal);
+            Assert.Contains("IČO: 26950430", html, StringComparison.Ordinal);
+            Assert.Contains("src=\"/img/eu-projekt.png\"", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("[telefon]", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("[e-mail]", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("[adresa]", html, StringComparison.Ordinal);
             Assert.DoesNotContain("src=\"/image.jpg\"", html, StringComparison.Ordinal);
         }
 
@@ -197,7 +261,8 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             "/landing/truck-sunset.webp",
             "/landing/truck-sunset-768.webp",
             "/landing/truck-blue-scania.webp",
-            "/landing/fonts/barlow-condensed-800.woff2"
+            "/landing/fonts/barlow-condensed-800.woff2",
+            "/img/eu-projekt.png"
         })
         {
             var file = await client.SendAsync(Request(asset, user: false, "phmtrans.cz"));
@@ -206,6 +271,12 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             var media = file.Content.Headers.ContentType?.MediaType ?? "";
             Assert.DoesNotContain("text/html", media, StringComparison.OrdinalIgnoreCase);
         }
+
+        var poster = await client.SendAsync(Request("/img/eu-projekt.png", user: false, "phmtrans.cz"));
+        Assert.Equal("image/png", poster.Content.Headers.ContentType?.MediaType);
+        var posterBytes = await poster.Content.ReadAsByteArrayAsync();
+        Assert.Equal(3840, BinaryPrimitives.ReadInt32BigEndian(posterBytes.AsSpan(16, 4)));
+        Assert.Equal(2160, BinaryPrimitives.ReadInt32BigEndian(posterBytes.AsSpan(20, 4)));
 
         var wwwLogo = await client.SendAsync(Request("/landing/logo-dark.png", user: false, "www.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.MovedPermanently, wwwLogo.StatusCode);

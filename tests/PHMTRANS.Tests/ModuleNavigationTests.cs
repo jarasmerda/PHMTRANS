@@ -84,7 +84,12 @@ public sealed class ModuleNavigationPageTests
 
         var landing = File.ReadAllText(Path.Combine(root, "landing.html"));
         Assert.DoesNotContain("Zpět na web", landing, StringComparison.Ordinal);
-        Assert.DoesNotContain("https://phmtrans.cz/", landing, StringComparison.Ordinal);
+        var jsonStart = landing.IndexOf("<script type=\"application/ld+json\">", StringComparison.Ordinal);
+        var jsonEnd = landing.IndexOf("</script>", jsonStart, StringComparison.Ordinal);
+        Assert.True(jsonStart >= 0 && jsonEnd > jsonStart);
+        var visibleLanding = landing.Remove(jsonStart, jsonEnd + "</script>".Length - jsonStart);
+        Assert.DoesNotContain("https://phmtrans.cz/", visibleLanding, StringComparison.Ordinal);
+        Assert.DoesNotContain("<script", visibleLanding, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
