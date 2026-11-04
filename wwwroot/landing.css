@@ -689,11 +689,82 @@ body.landing .cg dd {
   margin: 8px 0 0;
   color: #ffffff;
   font-family: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
-  font-size: clamp(1.7rem, 5vw, 2rem);
+  font-size: clamp(1.45rem, 4vw, 1.85rem);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.15;
   letter-spacing: 0.02em;
   text-transform: none;
+  overflow-wrap: anywhere;
+}
+
+body.landing .cg a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+}
+
+body.landing .cg a:hover,
+body.landing .cg a:focus-visible {
+  color: var(--button);
+}
+
+body.landing .operator {
+  margin-top: 22px;
+  color: var(--navy);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+body.landing .legal {
+  max-width: 46rem;
+  margin-top: 18px;
+  color: var(--navy);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+body.landing .eu h2 {
+  max-width: 20em;
+}
+
+body.landing .eu-poster {
+  margin: 28px 0 0;
+}
+
+body.landing .eu-poster img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: contain;
+  object-position: center;
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+body.landing .eu-poster figcaption {
+  max-width: 46rem;
+  margin-top: 16px;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+body.landing .eu-poster figcaption p + p {
+  margin-top: 8px;
+}
+
+body.landing .eu a {
+  color: var(--navy);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+body.landing .eu a:hover,
+body.landing .eu a:focus-visible {
+  color: var(--accent);
 }
 
 body.landing .site-footer {
@@ -707,7 +778,8 @@ body.landing .site-footer {
 body.landing .site-footer .w {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 14px;
 }
 
 body.landing .footer-brand {
@@ -729,6 +801,32 @@ body.landing .credits {
   margin: 0;
   max-width: 36rem;
   color: #c5d0e2;
+}
+
+body.landing .footer-id {
+  max-width: 46rem;
+  color: #d5deec;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+body.landing .footer-id p {
+  margin: 0;
+}
+
+body.landing .footer-id p + p {
+  margin-top: 2px;
+}
+
+body.landing .footer-id a {
+  color: #ffffff;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+body.landing .footer-id a:hover,
+body.landing .footer-id a:focus-visible {
+  color: var(--button);
 }
 
 @media (min-width: 481px) {
@@ -845,10 +943,8 @@ body.landing .credits {
   }
 
   body.landing .site-footer .w {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    gap: 24px;
+    align-items: flex-start;
+    gap: 16px;
   }
 }
 
