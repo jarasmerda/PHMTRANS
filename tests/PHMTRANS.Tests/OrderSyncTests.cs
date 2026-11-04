@@ -14,12 +14,14 @@ public sealed class OrderSyncTests
     private static readonly DateOnly Unloading = new(2026, 11, 5);
 
     [Fact]
-    public void New_order_is_not_queued_until_it_is_confirmed()
+    public void New_order_is_queued_on_create_before_confirmation()
     {
         var draft = Sample(version: 1, price: 10000m, fuel: "motorová nafta");
         var plan = OrderSyncPlanner.Plan(draft, previous: null, lastSent: null, confirmRequested: false);
 
-        Assert.Equal(OrderSyncAction.None, plan.Action);
+        Assert.Equal(OrderSyncAction.Create, plan.Action);
+        Assert.Null(plan.VersionFrom);
+        Assert.Equal(1, plan.VersionTo);
     }
 
     [Fact]
@@ -119,6 +121,7 @@ public sealed class OrderSyncTests
         Assert.Contains("receivedOrder", xml, StringComparison.Ordinal);
         Assert.Contains("Z2026-0007", xml, StringComparison.Ordinal);
         Assert.DoesNotContain("actionType", xml, StringComparison.Ordinal);
+        AssertSameDocumentNumber(document, "Z2026-0007");
         AssertOrderSchema(xml);
         Assert.Equal("42", Value(document, "partnerIdentity", "id"));
         var prices = Prices(document);
@@ -141,6 +144,7 @@ public sealed class OrderSyncTests
         Assert.Equal("prijate_objednavky", items[0].Descendants().First(element => element.Name.LocalName == "filter").Attribute("agenda")?.Value);
         Assert.Equal("15", items[0].Descendants().First(element => element.Name.LocalName == "id").Value);
         Assert.Equal("Z2026-0001", items[1].Descendants().First(element => element.Name.LocalName == "numberOrder").Value);
+        AssertSameDocumentNumber(XDocument.Parse(items[1].ToString()), "Z2026-0001");
         Assert.Contains("Leg 1:", items[1].ToString(), StringComparison.Ordinal);
         Assert.Contains("ord:delete", xml, StringComparison.Ordinal);
         Assert.Contains("ord:add", xml, StringComparison.Ordinal);
@@ -172,6 +176,7 @@ public sealed class OrderSyncTests
         Assert.Contains("Storno: Leg 1:", xml, StringComparison.Ordinal);
         Assert.Contains("Storno: Příplatky", xml, StringComparison.Ordinal);
         Assert.Contains("Z2026-0001/1", xml, StringComparison.Ordinal);
+        AssertSameDocumentNumber(XDocument.Parse(xml), "Z2026-0001/1");
         Assert.DoesNotContain("ord:delete", xml, StringComparison.Ordinal);
         Assert.DoesNotContain(">15<", xml, StringComparison.Ordinal);
         Assert.Contains("<ord:add", xml, StringComparison.Ordinal);
@@ -220,6 +225,7 @@ public sealed class OrderSyncTests
         Assert.DoesNotContain(320m, prices);
         Assert.DoesNotContain(360m, prices);
         Assert.Contains("Z2026-0001/1", xml, StringComparison.Ordinal);
+        AssertSameDocumentNumber(XDocument.Parse(xml), "Z2026-0001/1");
         Assert.DoesNotContain("ord:delete", xml, StringComparison.Ordinal);
         AssertOrderSchema(xml);
     }
@@ -393,9 +399,18 @@ public sealed class OrderSyncTests
             correction,
             order);
         var numberOrder = XDocument.Parse(correctionXml).Descendants().First(element => element.Name.LocalName == "numberOrder").Value;
-        Assert.InRange(numberOrder.Length, 1, 32);
-        Assert.StartsWith(new string('K', 30), numberOrder, StringComparison.Ordinal);
-        Assert.EndsWith("/1", numberOrder, StringComparison.Ordinal);
+        Assert.Equal(32, numberOrder.Length);
+        Assert.Equal(new string('K', 30) + "/1", numberOrder);
+        AssertSameDocumentNumber(XDocument.Parse(correctionXml), numberOrder);
+        var tooLong = new string('K', 31) + "/1";
+        Assert.Equal(33, tooLong.Length);
+        Assert.Contains("32", OrderPohodaXml.NumberTooLong(tooLong), StringComparison.Ordinal);
+        var overflow = Assert.Throws<InvalidOperationException>(() => OrderPohodaXml.Build(
+            SampleOptions(),
+            new OrderSyncPlan(OrderSyncAction.Correction, 2, 12),
+            correction with { Code = new string('K', 31) },
+            order));
+        Assert.Contains("32", overflow.Message, StringComparison.Ordinal);
         AssertOrderSchema(xml);
         AssertOrderSchema(correctionXml);
     }
@@ -461,12 +476,18 @@ public sealed class OrderSyncTests
         live.SyncMode = "Live";
         var store = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(live));
         var created = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request(), CancellationToken.None));
-        Assert.Null(created.Order.LatestSyncStatus);
+        Assert.Equal(OrderQueueStatuses.Pending, created.Order.LatestSyncStatus);
+        var createdQueue = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
+        Assert.Equal(OrderSyncActions.Create, createdQueue.Action);
+        Assert.Equal(created.Order.CurrentVersion, createdQueue.VersionTo);
+        AssertSameDocumentNumber(XDocument.Parse(createdQueue.PayloadXml), created.Order.Code);
 
         var noted = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(created.Order.Id, Request(note: "jen poznámka", driverId: "drv-1", cmr: "CMR-1"), CancellationToken.None));
-        Assert.Null(noted.Order.LatestSyncStatus);
+        Assert.Equal(OrderQueueStatuses.Pending, noted.Order.LatestSyncStatus);
         Assert.Equal(2, noted.Order.CurrentVersion);
-        Assert.Empty(await store.ListQueueAsync(CancellationToken.None));
+        var afterNote = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
+        Assert.Equal(createdQueue.Id, afterNote.Id);
+        Assert.Equal(created.Order.CurrentVersion, afterNote.VersionTo);
 
         var confirmed = Assert.IsType<OrderMutation.Success>(await store.ConfirmAsync(created.Order.Id, CancellationToken.None));
         var queue = await store.ListQueueAsync(CancellationToken.None);
@@ -719,8 +740,10 @@ public sealed class OrderSyncTests
         Assert.DoesNotContain(">30<", next.PayloadXml, StringComparison.Ordinal);
         Assert.DoesNotContain("ord:delete", next.PayloadXml, StringComparison.Ordinal);
         AssertOrderSchema(next.PayloadXml);
-        Assert.Equal(32, OrderPohodaXml.CorrectionNumber(new string('K', 30), 10).Length);
-        Assert.EndsWith("/10", OrderPohodaXml.CorrectionNumber(new string('K', 30), 10), StringComparison.Ordinal);
+        var wide = OrderPohodaXml.CorrectionNumber(new string('K', 30), 10);
+        Assert.Equal(33, wide.Length);
+        Assert.EndsWith("/10", wide, StringComparison.Ordinal);
+        Assert.Contains("32", OrderPohodaXml.NumberTooLong(wide), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -842,6 +865,16 @@ public sealed class OrderSyncTests
 
     private static string NumberOrder(string xml) =>
         XDocument.Parse(xml).Descendants().Single(element => element.Name.LocalName == "numberOrder").Value;
+
+    private static void AssertSameDocumentNumber(XDocument document, string expected)
+    {
+        var numberOrder = document.Descendants().Single(element => element.Name.LocalName == "numberOrder");
+        var requested = document.Descendants().Single(element => element.Name.LocalName == "numberRequested");
+        Assert.Equal(expected, numberOrder.Value);
+        Assert.Equal(expected, requested.Value);
+        Assert.Equal("true", requested.Attribute("checkDuplicity")?.Value);
+        Assert.InRange(expected.Length, 1, OrderPohodaXml.DocumentNumberMax);
+    }
 
     private static IReadOnlyList<(string Text, string Quantity, string Price)> Items(string xml) =>
         XDocument.Parse(xml).Descendants()

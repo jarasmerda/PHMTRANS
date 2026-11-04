@@ -160,8 +160,6 @@ public static class OrderWorkflow
             return new OrderChange.Rejected("Zakázka neexistuje.");
         if (context.Current.Status == OrderStatuses.Stornovano)
             return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
-        if (!OrderStatuses.IsConfirmed(context.Current.Status))
-            return new OrderChange.Rejected("Nejdřív zakázku potvrďte k fakturaci.");
 
         if (latest is not null && latest.Status is OrderQueueStatuses.Failed or OrderQueueStatuses.DryRun or OrderQueueStatuses.Pending)
         {
@@ -274,6 +272,13 @@ public static class OrderWorkflow
         bool confirmRequested)
     {
         var plan = WithCorrectionIndex(OrderSyncPlanner.Plan(order, previous, context.LastSent, confirmRequested), context);
+        if (plan.ActionName is not null)
+        {
+            var tooLong = OrderPohodaXml.NumberTooLong(OrderPohodaXml.RequestedNumber(plan, order));
+            if (tooLong is not null)
+                return new OrderChange.Rejected(tooLong);
+        }
+
         var queue = plan.ActionName is null ? null : Queue(context, order, plan, targetId: null);
         if (!versionAdded && queue is null)
             return new OrderChange.Saved(previous ?? order, false, null);

@@ -66,12 +66,6 @@ public sealed class OrderSyncWorker(
                     continue;
                 }
 
-                if (entry.Action == OrderSyncActions.Create && !OrderStatuses.IsConfirmed(bundle.Order.Status))
-                {
-                    await store.MarkFailedAsync(entry.Id, "Zakázka už není potvrzená k fakturaci.", cancellationToken);
-                    continue;
-                }
-
                 var source = DocumentFor(bundle, entry);
                 var lastSent = bundle.Order.LastSentVersion is int sentVersion
                     ? bundle.Versions.FirstOrDefault(version => version.CurrentVersion == sentVersion)

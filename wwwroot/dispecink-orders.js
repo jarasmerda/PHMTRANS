@@ -361,7 +361,7 @@ function renderOrders(data) {
       <td>${orderText(order.fuelType)}<br><span class="route-to">${orderLiters.format(Number(order.liters || 0))} l</span></td>
       <td class="num">${orderText(priceText(order))}</td>
       <td>${orderText(order.status)}${order.isLocked ? `<br><span class="pill">Zámek</span>` : ""}</td>
-      <td>${orderText(order.pohodaOrderNumber || "—")}<br>${syncPill(order.latestSyncStatus)}${order.latestSyncWarning ? `<div class="note warn">${orderText(order.latestSyncWarning)}</div>` : ""}</td>
+      <td>${orderText(order.pohodaOrderNumber || "—")}<br>${order.latestSyncStatus ? syncPill(order.latestSyncStatus) : `<span class="pill">neodesláno</span>`}${order.latestSyncWarning ? `<div class="note warn">${orderText(order.latestSyncWarning)}</div>` : ""}${order.latestSyncError ? `<div class="note">${orderText(order.latestSyncError)}</div>` : ""}</td>
       <td><button type="button" data-open="${orderText(order.id)}">Otevřít</button></td>
     </tr>`).join("");
   document.querySelector("#order-table-wrap").hidden = false;

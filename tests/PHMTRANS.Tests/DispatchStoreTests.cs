@@ -351,7 +351,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
         Assert.Contains("dispecink.js?v=8", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=5", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=6", html, StringComparison.Ordinal);
         Assert.Contains("id=\"create-order-list\"", html, StringComparison.Ordinal);
         Assert.Contains("Vyberte zakázky, jízda se předvyplní z první.", html, StringComparison.Ordinal);
         Assert.Contains("Stornovat", html, StringComparison.Ordinal);
@@ -408,6 +408,7 @@ public sealed class DispatchPageTests
         Assert.Contains("version.stops", orders, StringComparison.Ordinal);
         Assert.Contains("version.legs", orders, StringComparison.Ordinal);
         Assert.Contains("<th>Km</th>", orders, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"pill\">neodesláno</span>", orders, StringComparison.Ordinal);
         Assert.DoesNotContain("id=\"version-rows\"", orders, StringComparison.Ordinal);
     }
 

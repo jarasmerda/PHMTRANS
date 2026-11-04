@@ -19,7 +19,7 @@ public static class OrderPohodaXml
     // Délky z order.xsd / type.xsd / data.xsd, verze 2.0.
     private const int ItemTextMax = 90;
     private const int HeaderTextMax = 240;
-    private const int NumberOrderMax = 32;
+    public const int DocumentNumberMax = 32;
     private const int PackIdMax = 64;
     private const int CompanyMax = 255;
     private const int IcoMax = 15;
@@ -36,16 +36,19 @@ public static class OrderPohodaXml
     public static string CorrectionNumber(string code, int index)
     {
         var safeIndex = index < 1 ? 1 : index;
-        var suffix = "/" + safeIndex.ToString(CultureInfo.InvariantCulture);
-        var room = NumberOrderMax - suffix.Length;
-        if (room < 1)
-            return Trim(suffix, NumberOrderMax);
-
         var baseCode = string.IsNullOrWhiteSpace(code) ? "Z" : code.Trim();
-        if (baseCode.Length > room)
-            baseCode = baseCode[..room];
-        return baseCode + suffix;
+        return baseCode + "/" + safeIndex.ToString(CultureInfo.InvariantCulture);
     }
+
+    public static string RequestedNumber(OrderSyncPlan plan, DispatchOrder current) =>
+        plan.Action is OrderSyncAction.Correction or OrderSyncAction.Cancel
+            ? CorrectionNumber(current.Code, plan.CorrectionIndex)
+            : (string.IsNullOrWhiteSpace(current.Code) ? "Z" : current.Code.Trim());
+
+    public static string? NumberTooLong(string number) =>
+        number.Length <= DocumentNumberMax
+            ? null
+            : $"Číslo zakázky „{number}“ má {number.Length.ToString(CultureInfo.InvariantCulture)} znaků. Pohoda u čísla přijaté objednávky (number i numberOrder) dovoluje nejvýše {DocumentNumberMax.ToString(CultureInfo.InvariantCulture)}.";
 
     public static IReadOnlyList<OrderXmlLine> Lines(OrderSyncAction action, DispatchOrder current, DispatchOrder? lastSent)
     {
@@ -306,9 +309,14 @@ public static class OrderPohodaXml
     private static XElement DocumentOrder(OrderSyncPlan plan, DispatchOrder current, DispatchOrder? lastSent, bool explicitAdd)
     {
         var lines = Lines(plan.Action, current, lastSent);
+        var number = DocumentNumber(plan, current);
         var header = new XElement(Ord + "orderHeader",
             new XElement(Ord + "orderType", "receivedOrder"),
-            new XElement(Ord + "numberOrder", ExternalNumber(plan, current)),
+            new XElement(Ord + "number",
+                new XElement(Typ + "numberRequested",
+                    new XAttribute("checkDuplicity", "true"),
+                    number)),
+            new XElement(Ord + "numberOrder", number),
             new XElement(Ord + "date", Date(current.LoadingDate)),
             new XElement(Ord + "dateFrom", Date(current.LoadingDate)),
             new XElement(Ord + "dateTo", Date(current.UnloadingDate)),
@@ -411,10 +419,14 @@ public static class OrderPohodaXml
         return $"{current.Code}: {current.LoadingPlace} → {current.UnloadingPlace}, {current.FuelType}";
     }
 
-    private static string ExternalNumber(OrderSyncPlan plan, DispatchOrder current) =>
-        plan.Action is OrderSyncAction.Correction or OrderSyncAction.Cancel
-            ? CorrectionNumber(current.Code, plan.CorrectionIndex)
-            : Trim(current.Code, NumberOrderMax);
+    private static string DocumentNumber(OrderSyncPlan plan, DispatchOrder current)
+    {
+        var number = RequestedNumber(plan, current);
+        var error = NumberTooLong(number);
+        if (error is not null)
+            throw new InvalidOperationException(error);
+        return number;
+    }
 
     private static XElement Partner(DispatchOrder order)
     {
