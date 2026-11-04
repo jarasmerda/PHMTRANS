@@ -55,6 +55,49 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
     public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
         ChangeAsync((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
 
+    public Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken) =>
+        InConnection(async (connection, _, token) =>
+        {
+            var document = await LoadAsync(connection, transaction: null, token);
+            return DispatchRules.Rates(document);
+        }, cancellationToken);
+
+    public Task<string?> SaveRatesAsync(
+        decimal defaultCostPerKm,
+        IReadOnlyList<VehicleCostUpdate> vehicles,
+        CancellationToken cancellationToken) =>
+        InConnection(async (connection, transaction, token) =>
+        {
+            await TakeLockAsync(connection, transaction!, token);
+            var document = await LoadAsync(connection, transaction, token);
+            var error = DispatchRules.SaveRates(document, defaultCostPerKm, vehicles);
+            if (error is not null)
+                return error;
+
+            await connection.ExecuteAsync(Command(
+                """
+                UPDATE dbo.Disp_Setting
+                SET Value = @Value
+                WHERE [Key] = N'CostPerKm';
+                IF @@ROWCOUNT = 0
+                    INSERT INTO dbo.Disp_Setting ([Key], Value) VALUES (N'CostPerKm', @Value);
+                """,
+                transaction,
+                token,
+                new { Value = document.DefaultCostPerKm.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+            foreach (var vehicle in document.Vehicles)
+            {
+                await connection.ExecuteAsync(Command(
+                    "UPDATE dbo.Disp_Vehicle SET CostPerKm = @CostPerKm WHERE Id = @Id",
+                    transaction,
+                    token,
+                    new { vehicle.Id, vehicle.CostPerKm }));
+            }
+
+            await transaction!.CommitAsync(token);
+            return (string?)null;
+        }, cancellationToken, transaction: true);
+
     private async Task<DispatchMutation> ChangeAsync(
         Func<DispatchDocument, DateTimeOffset, DispatchMutation> change,
         CancellationToken cancellationToken) =>
@@ -161,18 +204,31 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
         CancellationToken cancellationToken)
     {
         var vehicles = (await connection.QueryAsync<DispatchVehicle>(Command(
-            "SELECT Id, Plate, Label FROM dbo.Disp_Vehicle", transaction, cancellationToken))).AsList();
+            "SELECT Id, Plate, Label, CostPerKm FROM dbo.Disp_Vehicle", transaction, cancellationToken))).AsList();
         var drivers = (await connection.QueryAsync<DispatchDriver>(Command(
             "SELECT Id, Name, Phone FROM dbo.Disp_Driver", transaction, cancellationToken))).AsList();
         var trips = (await connection.QueryAsync<DispatchTrip>(Command(
             """
-            SELECT Id, Code, OrderCode, Customer, LoadingPlace, UnloadingPlace, Cargo,
+            SELECT Id, Code, Customer, LoadingPlace, UnloadingPlace, Cargo,
                    PlannedStart, Status, VehicleId, DriverId, Note, UpdatedAt
             FROM dbo.Disp_Trip
             """,
             transaction,
             cancellationToken))).AsList();
-        return new DispatchDocument { Vehicles = vehicles, Drivers = drivers, Trips = trips };
+        var costText = await connection.ExecuteScalarAsync<string>(Command(
+            "SELECT Value FROM dbo.Disp_Setting WHERE [Key] = N'CostPerKm'",
+            transaction,
+            cancellationToken));
+        var defaultCost = decimal.TryParse(costText, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0m;
+        return new DispatchDocument
+        {
+            Vehicles = vehicles,
+            Drivers = drivers,
+            Trips = trips,
+            DefaultCostPerKm = defaultCost
+        };
     }
 
     private static Task<int> InsertTripAsync(
@@ -183,9 +239,9 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
         connection.ExecuteAsync(Command(
             """
             INSERT INTO dbo.Disp_Trip
-                (Id, Code, OrderCode, Customer, LoadingPlace, UnloadingPlace, Cargo, PlannedStart, Status, VehicleId, DriverId, Note, UpdatedAt)
+                (Id, Code, Customer, LoadingPlace, UnloadingPlace, Cargo, PlannedStart, Status, VehicleId, DriverId, Note, UpdatedAt)
             VALUES
-                (@Id, @Code, @OrderCode, @Customer, @LoadingPlace, @UnloadingPlace, @Cargo, @PlannedStart, @Status, @VehicleId, @DriverId, @Note, @UpdatedAt)
+                (@Id, @Code, @Customer, @LoadingPlace, @UnloadingPlace, @Cargo, @PlannedStart, @Status, @VehicleId, @DriverId, @Note, @UpdatedAt)
             """,
             transaction,
             cancellationToken,
@@ -199,8 +255,7 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
         connection.ExecuteAsync(Command(
             """
             UPDATE dbo.Disp_Trip
-            SET OrderCode = @OrderCode,
-                Customer = @Customer,
+            SET Customer = @Customer,
                 LoadingPlace = @LoadingPlace,
                 UnloadingPlace = @UnloadingPlace,
                 Cargo = @Cargo,

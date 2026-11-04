@@ -32,6 +32,35 @@ public sealed class MemoryDispatchStore : IDispatchStore
     public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
         Change((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
 
+    public async Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return DispatchRules.Rates(_document);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<string?> SaveRatesAsync(
+        decimal defaultCostPerKm,
+        IReadOnlyList<VehicleCostUpdate> vehicles,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return DispatchRules.SaveRates(_document, defaultCostPerKm, vehicles);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private async Task<DispatchMutation> Change(
         Func<DispatchDocument, DateTimeOffset, DispatchMutation> change,
         CancellationToken cancellationToken)
@@ -66,11 +95,11 @@ public sealed class MemoryDispatchStore : IDispatchStore
             ],
             Trips =
             [
-                Trip("trip-5", "J2026-0140", "Z2026-0140", "Doprava Demo s.r.o.", "Sklad Mělník", "ČS Hradec Králové – ukázka", "motorová nafta", now.AddDays(-1), DispatchStatuses.Zrusena, null, null, "Ukázková jízda, zákazník zrušil", now.AddHours(-6)),
-                Trip("trip-1", "J2026-0141", "Z2026-0141", "Agropodnik Demo a.s.", "Sklad Lovosice", "ČS Olomouc – ukázka", "motorová nafta", now.AddHours(-8), DispatchStatuses.Vylozena, "veh-3", "drv-3", "Ukázková jízda", now.AddHours(-2)),
-                Trip("trip-2", "J2026-0142", "Z2026-0142", "Velkoobchod Palivo s.r.o.", "Sklad Cerekvice", "ČS Praha Chodov – ukázka", "motorová nafta", now.AddHours(-1), DispatchStatuses.NaCeste, "veh-1", "drv-1", "Ukázková jízda", now.AddMinutes(-30)),
-                Trip("trip-3", "J2026-0143", "Z2026-0143", "Rafinérie Demo a.s.", "Areál Litvínov", "ČS Brno Slatina – ukázka", "benzin BA95", now.AddHours(3), DispatchStatuses.Nova, null, null, "Ukázková jízda, čeká na přiřazení", now),
-                Trip("trip-4", "J2026-0144", "Z2026-0144", "Síť stanic Demo s.r.o.", "Sklad Kralupy", "ČS Plzeň Bory – ukázka", "motorová nafta", now.AddHours(5), DispatchStatuses.Prirazena, "veh-2", "drv-2", "Ukázková jízda", now)
+                Trip("trip-5", "J2026-0140", "Doprava Demo s.r.o.", "Sklad Mělník", "ČS Hradec Králové – ukázka", "motorová nafta", now.AddDays(-1), DispatchStatuses.Zrusena, null, null, "Ukázková jízda, zákazník zrušil", now.AddHours(-6)),
+                Trip("trip-1", "J2026-0141", "Agropodnik Demo a.s.", "Sklad Lovosice", "ČS Olomouc – ukázka", "motorová nafta", now.AddHours(-8), DispatchStatuses.Vylozena, "veh-3", "drv-3", "Ukázková jízda", now.AddHours(-2)),
+                Trip("trip-2", "J2026-0142", "Velkoobchod Palivo s.r.o.", "Sklad Cerekvice", "ČS Praha Chodov – ukázka", "motorová nafta", now.AddHours(-1), DispatchStatuses.NaCeste, "veh-1", "drv-1", "Ukázková jízda", now.AddMinutes(-30)),
+                Trip("trip-3", "J2026-0143", "Rafinérie Demo a.s.", "Areál Litvínov", "ČS Brno Slatina – ukázka", "benzin BA95", now.AddHours(3), DispatchStatuses.Nova, null, null, "Ukázková jízda, čeká na přiřazení", now),
+                Trip("trip-4", "J2026-0144", "Síť stanic Demo s.r.o.", "Sklad Kralupy", "ČS Plzeň Bory – ukázka", "motorová nafta", now.AddHours(5), DispatchStatuses.Prirazena, "veh-2", "drv-2", "Ukázková jízda", now)
             ]
         };
     }
@@ -78,7 +107,6 @@ public sealed class MemoryDispatchStore : IDispatchStore
     private static DispatchTrip Trip(
         string id,
         string code,
-        string orderCode,
         string customer,
         string loadingPlace,
         string unloadingPlace,
@@ -89,5 +117,5 @@ public sealed class MemoryDispatchStore : IDispatchStore
         string? driverId,
         string note,
         DateTimeOffset updatedAt) =>
-        new(id, code, orderCode, customer, loadingPlace, unloadingPlace, cargo, plannedStart, status, vehicleId, driverId, note, updatedAt);
+        new(id, code, customer, loadingPlace, unloadingPlace, cargo, plannedStart, status, vehicleId, driverId, note, updatedAt);
 }

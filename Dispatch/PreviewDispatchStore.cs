@@ -8,14 +8,31 @@ public sealed class PreviewDispatchStore : IDispatchStore
     {
         Vehicles =
         [
-            new("veh-1", "1A2 3456", "Cisterna MAN 32 m³"),
-            new("veh-2", "2B3 4567", "Cisterna Volvo 28 m³")
+            new("veh-1", "1A2 3456", "Cisterna MAN 32 m³", 31.5m),
+            new("veh-2", "2B3 4567", "Cisterna Volvo 28 m³", 29m)
         ],
         Drivers =
         [
             new("drv-1", "Jan Novák", "+420 601 000 001"),
             new("drv-2", "Petr Svoboda", "+420 602 000 002")
-        ]
+        ],
+        Trips =
+        [
+            new(
+                "trip-preview",
+                "J2026-0201",
+                "Síť stanic Demo s.r.o.",
+                "Sklad Kralupy",
+                "ČS Plzeň Bory",
+                "motorová nafta",
+                DateTimeOffset.Now.AddHours(4),
+                DispatchStatuses.Prirazena,
+                "veh-1",
+                "drv-1",
+                "Rozvoz na víc vykládek",
+                DateTimeOffset.Now)
+        ],
+        DefaultCostPerKm = 28m
     };
 
     public async Task<DispatchSnapshot> ReadAsync(CancellationToken cancellationToken)
@@ -42,6 +59,35 @@ public sealed class PreviewDispatchStore : IDispatchStore
 
     public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
         Change((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
+
+    public async Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return DispatchRules.Rates(_document);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<string?> SaveRatesAsync(
+        decimal defaultCostPerKm,
+        IReadOnlyList<VehicleCostUpdate> vehicles,
+        CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            return DispatchRules.SaveRates(_document, defaultCostPerKm, vehicles);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
     private async Task<DispatchMutation> Change(
         Func<DispatchDocument, DateTimeOffset, DispatchMutation> change,

@@ -10,7 +10,10 @@ let requestSeq = 0;
 let saving = false;
 let vehicles = [];
 let drivers = [];
+let orders = [];
 let board = null;
+let openTripId = null;
+let rates = null;
 
 function showMessage(value) {
   message.hidden = !value;
@@ -101,11 +104,27 @@ function applyFilter() {
   empty.textContent = selected ? "V tomto stavu není žádná jízda." : "Zatím není žádná jízda.";
 }
 
+function tripOrders(tripId) {
+  return orders.filter((order) => order.tripId === tripId);
+}
+
+function sumLiters(list) {
+  return list.reduce((sum, order) => sum + Number(order.liters || 0), 0);
+}
+
+function litersLabel(value) {
+  return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 3 }).format(Number(value || 0));
+}
+
 function displayRow(trip) {
   const note = trip.note ? `<br><span class="route-to">${text(trip.note)}</span>` : "";
+  const assigned = tripOrders(trip.id);
+  const summary = assigned.length
+    ? `${assigned.length} · ${litersLabel(sumLiters(assigned))} l`
+    : "—";
   return `<tr data-id="${text(trip.id)}" data-status="${text(trip.status)}">
       <td>${text(trip.code)}</td>
-      <td>${text(trip.orderCode || "—")}</td>
+      <td>${text(summary)}</td>
       <td>${formatDate(trip.plannedStart)}</td>
       <td>${text(trip.customer)}${note}</td>
       <td>${text(trip.loadingPlace)}<br><span class="route-to">→ ${text(trip.unloadingPlace)}</span></td>
@@ -113,13 +132,16 @@ function displayRow(trip) {
       <td>${text(vehicleText(trip.vehicleId))}</td>
       <td>${text(driverText(trip.driverId))}</td>
       <td>${text(trip.status)}</td>
-      <td><button type="button" data-edit="${text(trip.id)}">Upravit</button></td>
+      <td>
+        <button type="button" data-orders="${text(trip.id)}">Zakázky</button>
+        <button type="button" data-edit="${text(trip.id)}">Upravit</button>
+      </td>
     </tr>`;
 }
 
 function editCells(trip) {
   return `<td>${text(trip.code)}</td>
-      <td><input data-field="orderCode" maxlength="40" aria-label="Zakázka ${text(trip.code)}" value="${text(trip.orderCode || "")}"></td>
+      <td>${text(tripOrders(trip.id).map((order) => order.code).join(", ") || "—")}</td>
       <td><input data-field="planned" type="datetime-local" required aria-label="Termín ${text(trip.code)}" value="${text(toLocalInput(trip.plannedStart))}"></td>
       <td><div class="stack">
         <input data-field="customer" required maxlength="160" aria-label="Zákazník ${text(trip.code)}" value="${text(trip.customer)}">
@@ -173,6 +195,87 @@ function field(row, name) {
   return row.querySelector(`[data-field="${name}"]`).value;
 }
 
+function freeOrders(exceptTripId) {
+  return orders.filter((order) => !order.tripId || order.tripId === exceptTripId);
+}
+
+function renderCreateOrders() {
+  const box = document.querySelector("#create-order-list");
+  const selected = new Set([...box.querySelectorAll("input:checked")].map((input) => input.value));
+  const available = orders.filter((order) => !order.tripId);
+  box.innerHTML = available.length
+    ? available.map((order) => `<label><input type="checkbox" value="${text(order.id)}"${selected.has(order.id) ? " checked" : ""}> ${text(order.code)} · ${text(order.customerName)} · ${litersLabel(order.liters)} l</label>`).join("")
+    : `<span class="route-to">Žádná volná zakázka.</span>`;
+}
+
+function prefillFromFirstOrder() {
+  const checked = [...document.querySelectorAll("#create-order-list input:checked")];
+  if (!checked.length) return;
+  const order = orders.find((item) => item.id === checked[0].value);
+  if (!order) return;
+  document.querySelector("#customer").value = order.customerName || "";
+  document.querySelector("#loading").value = order.loadingPlace || "";
+  document.querySelector("#unloading").value = order.unloadingPlace || "";
+  document.querySelector("#cargo").value = order.fuelType || "";
+}
+
+function showTrip(id) {
+  openTripId = id;
+  const trip = (board?.trips ?? []).find((item) => item.id === id);
+  const detail = document.querySelector("#trip-detail");
+  if (!trip) {
+    detail.hidden = true;
+    return;
+  }
+  const assigned = tripOrders(id);
+  document.querySelector("#trip-detail-title").textContent = `${trip.code} · ${trip.customer}`;
+  document.querySelector("#trip-detail-meta").textContent =
+    `${trip.loadingPlace} → ${trip.unloadingPlace} · ${vehicleText(trip.vehicleId)} · ${driverText(trip.driverId)}`;
+  document.querySelector("#trip-order-rows").innerHTML = assigned.map((order) => `<tr>
+      <td>${text(order.code)}</td>
+      <td>${text(order.customerName)}</td>
+      <td>${text(order.loadingPlace)} → ${text(order.unloadingPlace)}</td>
+      <td class="num">${litersLabel(order.liters)} l</td>
+      <td><button type="button" class="ghost" data-remove-order="${text(order.id)}">Odebrat</button></td>
+    </tr>`).join("") || `<tr><td colspan="5">Na jízdě zatím není zakázka.</td></tr>`;
+  document.querySelector("#trip-liters").textContent = `${litersLabel(sumLiters(assigned))} l`;
+  const free = orders.filter((order) => !order.tripId);
+  document.querySelector("#trip-free-orders").innerHTML =
+    `<option value="">— zakázka bez jízdy —</option>` +
+    free.map((order) => `<option value="${text(order.id)}">${text(order.code)} · ${text(order.customerName)} · ${litersLabel(order.liters)} l</option>`).join("");
+  detail.hidden = false;
+  if (location.hash !== `#jizda-${id}`)
+    history.replaceState(null, "", `#jizda-${id}`);
+}
+
+function renderRates() {
+  if (!rates) return;
+  document.querySelector("#default-cost").value = rates.defaultCostPerKm ?? 0;
+  document.querySelector("#vehicle-rates").innerHTML = (rates.vehicles ?? []).map((vehicle) =>
+    `<label>${text(vehicle.plate)} · ${text(vehicle.label)}
+      <input data-vehicle-cost="${text(vehicle.id)}" type="number" min="0" step="0.0001" placeholder="výchozí" value="${vehicle.costPerKm ?? ""}">
+    </label>`).join("");
+}
+
+async function loadTripOrders() {
+  const response = await fetch("/api/dispatch/orders", { cache: "no-store" });
+  if (response.status === 401) {
+    location.href = "/login.html";
+    return;
+  }
+  const data = await response.json().catch(() => ({}));
+  orders = response.ok && Array.isArray(data.orders) ? data.orders : [];
+  renderCreateOrders();
+  if (openTripId) showTrip(openTripId);
+}
+
+async function loadRates() {
+  const response = await fetch("/api/dispatch/rates", { cache: "no-store" });
+  if (!response.ok) return;
+  rates = await response.json().catch(() => null);
+  renderRates();
+}
+
 async function load() {
   const current = ++requestSeq;
   showMessage("Načítám jízdy…");
@@ -211,7 +314,18 @@ async function load() {
   showMessage(catalogsOk ? "" : ((vehicleData && vehicleData.message) || (driverData && driverData.message) || "Vozidla a řidiče se nepodařilo načíst."));
   render(data);
   fillTripForm(data.vehicles ?? [], data.drivers ?? []);
+  await loadTripOrders();
+  await loadRates();
+  if (current === requestSeq && board) render(board);
+  const hashTrip = location.hash.startsWith("#jizda-") ? location.hash.slice("#jizda-".length) : "";
+  if (hashTrip) showTrip(decodeURIComponent(hashTrip));
 }
+
+window.openTrip = (id) => {
+  document.querySelector("#tab-trips")?.click();
+  showTrip(id);
+  document.querySelector("#trip-detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
 
 async function send(url, body, method = "POST") {
   let response;
@@ -265,7 +379,6 @@ async function saveRow(id) {
   saving = true;
   const updated = await send(`/api/dispatch/trips/${encodeURIComponent(id)}`, {
     customer: field(row, "customer"),
-    orderCode: field(row, "orderCode"),
     loadingPlace: field(row, "loading"),
     unloadingPlace: field(row, "unloading"),
     cargo: field(row, "cargo"),
@@ -294,6 +407,11 @@ rows.addEventListener("click", (event) => {
     saveRow(save.dataset.save);
     return;
   }
+  const ordersButton = event.target.closest("[data-orders]");
+  if (ordersButton) {
+    showTrip(ordersButton.dataset.orders);
+    return;
+  }
   const edit = event.target.closest("[data-edit]");
   if (edit) {
     beginEdit(edit.dataset.edit);
@@ -313,16 +431,17 @@ document.querySelector("#create").addEventListener("submit", async (event) => {
     return;
   }
   saving = true;
+  const orderIds = [...document.querySelectorAll("#create-order-list input:checked")].map((input) => input.value);
   const created = await send("/api/dispatch/trips", {
     customer: document.querySelector("#customer").value,
-    orderCode: document.querySelector("#order-code").value,
     loadingPlace: document.querySelector("#loading").value,
     unloadingPlace: document.querySelector("#unloading").value,
     cargo: document.querySelector("#cargo").value,
     plannedStart,
     note: document.querySelector("#note").value,
     vehicleId: document.querySelector("#vehicle").value,
-    driverId: document.querySelector("#driver").value
+    driverId: document.querySelector("#driver").value,
+    orderIds
   });
   saving = false;
   if (!created) return;
@@ -332,6 +451,59 @@ document.querySelector("#create").addEventListener("submit", async (event) => {
   document.querySelector("#planned").value = defaultPlanned();
   showMessage("");
   await load();
+});
+
+document.querySelector("#create-order-list").addEventListener("change", prefillFromFirstOrder);
+document.querySelector("#trip-detail-close").addEventListener("click", () => {
+  openTripId = null;
+  document.querySelector("#trip-detail").hidden = true;
+  if (location.hash.startsWith("#jizda-")) history.replaceState(null, "", location.pathname);
+});
+document.querySelector("#trip-add-order").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!openTripId || saving) return;
+  const orderId = document.querySelector("#trip-free-orders").value;
+  if (!orderId) {
+    showMessage("Vyberte zakázku.");
+    return;
+  }
+  saving = true;
+  const added = await send(`/api/dispatch/trips/${encodeURIComponent(openTripId)}/orders`, { orderId });
+  saving = false;
+  if (!added) return;
+  showMessage("");
+  await load();
+});
+document.querySelector("#trip-order-rows").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-remove-order]");
+  if (!button || !openTripId || saving) return;
+  saving = true;
+  const removed = await send(
+    `/api/dispatch/trips/${encodeURIComponent(openTripId)}/orders/${encodeURIComponent(button.dataset.removeOrder)}`,
+    {},
+    "DELETE");
+  saving = false;
+  if (!removed) return;
+  showMessage("");
+  await load();
+});
+document.querySelector("#rates").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (saving) return;
+  const vehicles = [...document.querySelectorAll("[data-vehicle-cost]")].map((input) => ({
+    id: input.dataset.vehicleCost,
+    costPerKm: input.value.trim() === "" ? null : Number(input.value)
+  }));
+  saving = true;
+  const saved = await send("/api/dispatch/rates", {
+    defaultCostPerKm: Number(document.querySelector("#default-cost").value),
+    vehicles
+  }, "PUT");
+  saving = false;
+  if (!saved) return;
+  rates = saved;
+  renderRates();
+  showMessage("Sazby jsou uložené.");
 });
 
 load();

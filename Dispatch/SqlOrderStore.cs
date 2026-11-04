@@ -36,11 +36,16 @@ public sealed class SqlOrderStore(
                 SELECT
                     o.Id, o.Code, o.CustomerPohodaId, o.CustomerName, o.LoadingPlace, o.UnloadingPlace,
                     o.LoadingDate, o.UnloadingDate, o.FuelType, o.Liters, o.AgreedPrice, o.Surcharges,
-                    o.Note, o.CmrNumber, o.VehicleId, o.DriverId, o.TripId, o.Status, o.IsLocked,
+                    o.Note, o.CmrNumber,
+                    CASE WHEN o.TripId IS NULL THEN o.VehicleId ELSE t.VehicleId END AS VehicleId,
+                    CASE WHEN o.TripId IS NULL THEN o.DriverId ELSE t.DriverId END AS DriverId,
+                    o.TripId, o.Status, o.IsLocked,
                     o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
                     o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
+                    o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
                     q.Status AS LatestSyncStatus, q.LastError AS LatestSyncError
                 FROM dbo.Disp_Order o
+                LEFT JOIN dbo.Disp_Trip t ON t.Id = o.TripId
                 OUTER APPLY (
                     SELECT TOP (1) Status, LastError
                     FROM dbo.Disp_SyncQueue
@@ -50,7 +55,11 @@ public sealed class SqlOrderStore(
                 """,
                 transaction: null,
                 token));
-            return (IReadOnlyList<DispatchOrder>)rows.Select(row => row.ToOrder()).ToArray();
+            return (IReadOnlyList<DispatchOrder>)rows.Select(row =>
+            {
+                var order = row.ToOrder();
+                return order with { Quote = OrderPricing.Summarize(order) };
+            }).ToArray();
         }, cancellationToken);
 
     public Task<OrderBundle?> GetAsync(string id, CancellationToken cancellationToken) =>
@@ -60,6 +69,7 @@ public sealed class SqlOrderStore(
             if (order is null)
                 return null;
 
+            order = await WithRouteAsync(connection, null, order, token);
             var versions = await LoadVersionsAsync(connection, null, order, token);
             var sync = await LoadQueueAsync(connection, null, id, token);
             return new OrderBundle(order, versions, sync);
@@ -79,6 +89,27 @@ public sealed class SqlOrderStore(
 
     public Task<OrderMutation> ResendAsync(string id, CancellationToken cancellationToken) =>
         ChangeAsync(id, (context, latest) => OrderWorkflow.Resend(latest, context), cancellationToken);
+
+    public Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken) =>
+        ChangeAsync(orderId, (context, _) => OrderWorkflow.AssignTrip(tripId, onlyIfFree, context), cancellationToken);
+
+    public async Task<string?> AttachOrdersAsync(
+        string tripId,
+        IReadOnlyList<string> orderIds,
+        bool onlyIfFree,
+        CancellationToken cancellationToken)
+    {
+        foreach (var orderId in orderIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal))
+        {
+            var result = await AttachTripAsync(orderId, tripId, onlyIfFree, cancellationToken);
+            if (result is OrderMutation.Rejected rejected)
+                return rejected.Message;
+            if (result is OrderMutation.NotFound)
+                return "Zakázka neexistuje.";
+        }
+
+        return null;
+    }
 
     public async Task<IReadOnlyList<OrderSyncEntry>> ListQueueAsync(CancellationToken cancellationToken)
     {
@@ -236,6 +267,8 @@ public sealed class SqlOrderStore(
             if (id is not null)
             {
                 current = await LoadOrderAsync(connection, transaction, id, token);
+                if (current is not null)
+                    current = await WithRouteAsync(connection, transaction, current, token);
                 if (current is null)
                 {
                     await transaction!.CommitAsync(token);
@@ -270,6 +303,8 @@ public sealed class SqlOrderStore(
             else
                 await UpdateOrderAsync(connection, transaction!, order, token);
 
+            if (order.Stops is not null)
+                await ReplaceRouteAsync(connection, transaction!, order, token);
             if (saved.VersionAdded)
                 await InsertVersionAsync(connection, transaction!, order, token);
             if (saved.Queue is not null)
@@ -365,13 +400,26 @@ public sealed class SqlOrderStore(
         SqlTransaction? transaction,
         CancellationToken cancellationToken)
     {
-        var vehicles = await connection.QueryAsync<string>(Command("SELECT Id FROM dbo.Disp_Vehicle", transaction, cancellationToken));
+        var vehicles = (await connection.QueryAsync<VehicleCostRow>(Command(
+            "SELECT Id, CostPerKm FROM dbo.Disp_Vehicle", transaction, cancellationToken))).AsList();
         var drivers = await connection.QueryAsync<string>(Command("SELECT Id FROM dbo.Disp_Driver", transaction, cancellationToken));
-        var trips = await connection.QueryAsync<string>(Command("SELECT Id FROM dbo.Disp_Trip", transaction, cancellationToken));
+        var trips = (await connection.QueryAsync<TripLink>(Command(
+            "SELECT Id, VehicleId, DriverId FROM dbo.Disp_Trip", transaction, cancellationToken))).AsList();
+        var costText = await connection.ExecuteScalarAsync<string>(Command(
+            "SELECT Value FROM dbo.Disp_Setting WHERE [Key] = N'CostPerKm'",
+            transaction,
+            cancellationToken));
+        var defaultCost = decimal.TryParse(costText, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0m;
         return new OrderCatalog(
-            vehicles.ToHashSet(StringComparer.Ordinal),
+            vehicles.Select(vehicle => vehicle.Id).ToHashSet(StringComparer.Ordinal),
             drivers.ToHashSet(StringComparer.Ordinal),
-            trips.ToHashSet(StringComparer.Ordinal));
+            trips.Select(trip => trip.Id).ToHashSet(StringComparer.Ordinal),
+            trips.ToDictionary(trip => trip.Id, StringComparer.Ordinal),
+            defaultCost,
+            vehicles.Where(vehicle => vehicle.CostPerKm is not null)
+                .ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.CostPerKm!.Value, StringComparer.Ordinal));
     }
 
     private static async Task<DispatchOrder?> LoadOrderAsync(
@@ -383,13 +431,18 @@ public sealed class SqlOrderStore(
         var row = await connection.QuerySingleOrDefaultAsync<OrderRow>(Command(
             """
             SELECT
-                Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace,
-                LoadingDate, UnloadingDate, FuelType, Liters, AgreedPrice, Surcharges,
-                Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
-                CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber,
-                LastSentVersion, CreatedAt, UpdatedAt
-            FROM dbo.Disp_Order
-            WHERE Id = @Id
+                o.Id, o.Code, o.CustomerPohodaId, o.CustomerName, o.LoadingPlace, o.UnloadingPlace,
+                o.LoadingDate, o.UnloadingDate, o.FuelType, o.Liters, o.AgreedPrice, o.Surcharges,
+                o.Note, o.CmrNumber,
+                CASE WHEN o.TripId IS NULL THEN o.VehicleId ELSE t.VehicleId END AS VehicleId,
+                CASE WHEN o.TripId IS NULL THEN o.DriverId ELSE t.DriverId END AS DriverId,
+                o.TripId, o.Status, o.IsLocked,
+                o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
+                o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
+                o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm
+            FROM dbo.Disp_Order o
+            LEFT JOIN dbo.Disp_Trip t ON t.Id = o.TripId
+            WHERE o.Id = @Id
             """,
             transaction,
             cancellationToken,
@@ -409,7 +462,8 @@ public sealed class SqlOrderStore(
                 Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace,
                 LoadingDate, UnloadingDate, FuelType, Liters, AgreedPrice, Surcharges,
                 Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
-                PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc
+                PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
+                PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson
             FROM dbo.Disp_OrderVersion
             WHERE OrderId = @Id
             ORDER BY Version DESC
@@ -433,7 +487,8 @@ public sealed class SqlOrderStore(
                 Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace,
                 LoadingDate, UnloadingDate, FuelType, Liters, AgreedPrice, Surcharges,
                 Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
-                PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc
+                PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
+                PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson
             FROM dbo.Disp_OrderVersion
             WHERE OrderId = @Id AND Version = @Version
             """,
@@ -468,12 +523,12 @@ public sealed class SqlOrderStore(
                 (Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
                  FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
                  IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
-                 CreatedAt, UpdatedAt)
+                 CreatedAt, UpdatedAt, PricingMode, SalePerKm, SalePerLiter, CostPerKm)
             VALUES
                 (@Id, @Code, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
                  @FuelType, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status,
                  @IsLocked, @CurrentVersion, @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @LastSentVersion,
-                 @CreatedAt, @UpdatedAt)
+                 @CreatedAt, @UpdatedAt, @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm)
             """,
             transaction,
             cancellationToken,
@@ -509,6 +564,10 @@ public sealed class SqlOrderStore(
                 PohodaOrderNumber = @PohodaOrderNumber,
                 PohodaInvoiceNumber = @PohodaInvoiceNumber,
                 LastSentVersion = @LastSentVersion,
+                PricingMode = @PricingMode,
+                SalePerKm = @SalePerKm,
+                SalePerLiter = @SalePerLiter,
+                CostPerKm = @CostPerKm,
                 UpdatedAt = @UpdatedAt
             WHERE Id = @Id
             """,
@@ -526,15 +585,132 @@ public sealed class SqlOrderStore(
             INSERT INTO dbo.Disp_OrderVersion
                 (OrderId, Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
                  FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
-                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc)
+                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
+                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson)
             VALUES
                 (@Id, @CurrentVersion, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
                  @FuelType, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status, @IsLocked,
-                 @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @UpdatedAt)
+                 @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @UpdatedAt,
+                 @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm, @RouteJson)
             """,
             transaction,
             cancellationToken,
-            order));
+            new
+            {
+                order.Id,
+                order.CurrentVersion,
+                order.CustomerPohodaId,
+                order.CustomerName,
+                order.LoadingPlace,
+                order.UnloadingPlace,
+                order.LoadingDate,
+                order.UnloadingDate,
+                order.FuelType,
+                order.Liters,
+                order.AgreedPrice,
+                order.Surcharges,
+                order.Note,
+                order.CmrNumber,
+                order.VehicleId,
+                order.DriverId,
+                order.TripId,
+                order.Status,
+                order.IsLocked,
+                order.PohodaOrderId,
+                order.PohodaOrderNumber,
+                order.PohodaInvoiceNumber,
+                order.UpdatedAt,
+                order.PricingMode,
+                order.SalePerKm,
+                order.SalePerLiter,
+                order.CostPerKm,
+                RouteJson = OrderRoute.Write(order)
+            }));
+
+    private static async Task ReplaceRouteAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        DispatchOrder order,
+        CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(Command(
+            "DELETE FROM dbo.Disp_OrderLeg WHERE OrderId = @Id",
+            transaction,
+            cancellationToken,
+            new { order.Id }));
+        await connection.ExecuteAsync(Command(
+            "DELETE FROM dbo.Disp_OrderStop WHERE OrderId = @Id",
+            transaction,
+            cancellationToken,
+            new { order.Id }));
+        foreach (var stop in order.Stops ?? [])
+        {
+            await connection.ExecuteAsync(Command(
+                """
+                INSERT INTO dbo.Disp_OrderStop (Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt)
+                VALUES (@Id, @OrderId, @Sequence, @Place, @Liters, @Note, @ArrivalAt)
+                """,
+                transaction,
+                cancellationToken,
+                new { stop.Id, OrderId = order.Id, stop.Sequence, stop.Place, stop.Liters, stop.Note, stop.ArrivalAt }));
+        }
+
+        foreach (var leg in order.Legs ?? [])
+        {
+            await connection.ExecuteAsync(Command(
+                """
+                INSERT INTO dbo.Disp_OrderLeg
+                    (Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice)
+                VALUES
+                    (@Id, @OrderId, @Sequence, @FromPlace, @ToPlace, @Liters, @Kilometers, @SalePrice, @SaleOverridden, @CostPrice)
+                """,
+                transaction,
+                cancellationToken,
+                new
+                {
+                    leg.Id,
+                    OrderId = order.Id,
+                    leg.Sequence,
+                    leg.FromPlace,
+                    leg.ToPlace,
+                    leg.Liters,
+                    leg.Kilometers,
+                    leg.SalePrice,
+                    leg.SaleOverridden,
+                    leg.CostPrice
+                }));
+        }
+    }
+
+    private static async Task<DispatchOrder> WithRouteAsync(
+        SqlConnection connection,
+        SqlTransaction? transaction,
+        DispatchOrder order,
+        CancellationToken cancellationToken)
+    {
+        var stops = (await connection.QueryAsync<OrderStop>(Command(
+            """
+            SELECT Id, Sequence, Place, Liters, Note, ArrivalAt
+            FROM dbo.Disp_OrderStop
+            WHERE OrderId = @Id
+            ORDER BY Sequence
+            """,
+            transaction,
+            cancellationToken,
+            new { order.Id }))).AsList();
+        var legs = (await connection.QueryAsync<OrderLeg>(Command(
+            """
+            SELECT Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice
+            FROM dbo.Disp_OrderLeg
+            WHERE OrderId = @Id
+            ORDER BY Sequence
+            """,
+            transaction,
+            cancellationToken,
+            new { order.Id }))).AsList();
+        var routed = order with { Stops = stops, Legs = legs };
+        return routed with { Quote = OrderPricing.Summarize(routed) };
+    }
 
     private static async Task UpsertQueueAsync(
         SqlConnection connection,
@@ -657,12 +833,22 @@ public sealed class SqlOrderStore(
         public DateTimeOffset UpdatedAt { get; set; }
         public string? LatestSyncStatus { get; set; }
         public string? LatestSyncError { get; set; }
+        public string PricingMode { get; set; } = OrderPricing.ByKm;
+        public decimal SalePerKm { get; set; }
+        public decimal SalePerLiter { get; set; }
+        public decimal CostPerKm { get; set; }
 
         public DispatchOrder ToOrder() => new(
             Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
             FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
             IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
-            CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError);
+            CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
+    }
+
+    private sealed class VehicleCostRow
+    {
+        public string Id { get; set; } = "";
+        public decimal? CostPerKm { get; set; }
     }
 
     private sealed class VersionRow
@@ -689,12 +875,21 @@ public sealed class SqlOrderStore(
         public string? PohodaOrderNumber { get; set; }
         public string? PohodaInvoiceNumber { get; set; }
         public DateTimeOffset CreatedUtc { get; set; }
+        public string PricingMode { get; set; } = OrderPricing.ByKm;
+        public decimal SalePerKm { get; set; }
+        public decimal SalePerLiter { get; set; }
+        public decimal CostPerKm { get; set; }
+        public string? RouteJson { get; set; }
 
-        public DispatchOrder ToOrder(DispatchOrder order) => new(
-            order.Id, order.Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
-            FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
-            IsLocked, Version, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, order.LastSentVersion,
-            order.CreatedAt, CreatedUtc);
+        public DispatchOrder ToOrder(DispatchOrder order)
+        {
+            var version = new DispatchOrder(
+                order.Id, order.Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
+                FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
+                IsLocked, Version, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, order.LastSentVersion,
+                order.CreatedAt, CreatedUtc, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
+            return OrderRoute.Read(version, RouteJson);
+        }
     }
 
     private sealed class QueueRow

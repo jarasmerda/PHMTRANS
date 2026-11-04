@@ -40,10 +40,7 @@ public static class OrderPohodaXml
             ];
         }
 
-        var lines = new List<OrderXmlLine>
-        {
-            new(ItemText(current), 1m, OrderPohodaFields.Money(current.AgreedPrice))
-        };
+        var lines = OrderLegItems.SaleLines(current).ToList();
         if (current.Surcharges != 0)
             lines.Add(new OrderXmlLine("Příplatky", 1m, OrderPohodaFields.Money(current.Surcharges)));
         return lines;

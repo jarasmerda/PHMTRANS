@@ -16,6 +16,10 @@ public interface IOrderStore
 
     Task<OrderMutation> ResendAsync(string id, CancellationToken cancellationToken);
 
+    Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken);
+
+    Task<string?> AttachOrdersAsync(string tripId, IReadOnlyList<string> orderIds, bool onlyIfFree, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<OrderSyncEntry>> ListQueueAsync(CancellationToken cancellationToken);
 
     Task<IReadOnlyList<OrderSyncEntry>> ListDueAsync(DateTimeOffset now, int take, CancellationToken cancellationToken);

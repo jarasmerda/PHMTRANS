@@ -59,7 +59,31 @@
       overflow: auto;
       font-size: 0.78rem;
     }
-    #order-message, #queue-message { color: var(--alert); font-weight: 700; }
+    #order-message, #queue-message, .route-warn { color: var(--alert); font-weight: 700; }
+    #trip-detail, #rates-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    .stop-row {
+      display: grid;
+      grid-template-columns: minmax(12rem, 2fr) repeat(3, minmax(6rem, 0.8fr)) auto;
+      gap: 0.45rem;
+      align-items: end;
+      margin: 0 0 0.8rem;
+      padding-bottom: 0.7rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .stop-row .stop-note { grid-column: 1 / 3; }
+    .stop-row .stop-arrival { grid-column: 3 / 5; }
+    .stop-actions { display: flex; gap: 0.35rem; align-items: center; }
+    .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 0.45rem; margin-top: 0.6rem; }
+    .totals article { border: 1px solid var(--border); border-radius: 10px; padding: 0.45rem 0.6rem; }
+    .totals span { display: block; color: var(--text-secondary); font-size: 0.78rem; }
+    #create-order-list { display: flex; flex-direction: column; gap: 0.25rem; margin: 0.4rem 0 0.8rem; }
+    #vehicle-rates { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
     @media (max-width: 900px) {
       #order-cards { grid-template-columns: 1fr 1fr; }
     }
@@ -118,7 +142,7 @@
           <thead>
             <tr>
               <th>Jízda</th>
-              <th>Zakázka</th>
+              <th>Zakázky</th>
               <th>Termín</th>
               <th>Zákazník</th>
               <th>Trasa</th>
@@ -134,11 +158,42 @@
       </div>
       <p id="empty" hidden></p>
     </section>
+    <section id="trip-detail" hidden>
+      <h2 id="trip-detail-title">Jízda</h2>
+      <p id="trip-detail-meta" class="note"></p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Zakázka</th>
+              <th>Zákazník</th>
+              <th>Trasa</th>
+              <th>Litry</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="trip-order-rows"></tbody>
+        </table>
+      </div>
+      <p>Součet litrů: <strong id="trip-liters">0</strong></p>
+      <form id="trip-add-order">
+        <label>Přidat zakázku
+          <select id="trip-free-orders">
+            <option value="">— zakázka bez jízdy —</option>
+          </select>
+        </label>
+        <button type="submit">Přidat na jízdu</button>
+        <button type="button" id="trip-detail-close" class="ghost">Zavřít</button>
+      </form>
+    </section>
     <section id="create-wrap">
       <h2>Nová jízda</h2>
       <form id="create">
         <label>Zákazník <input id="customer" required maxlength="160"></label>
-        <label>Zakázka <input id="order-code" maxlength="40"></label>
+        <fieldset>
+          <legend>Zakázky na jízdu</legend>
+          <div id="create-order-list"></div>
+        </fieldset>
         <label>Nakládka <input id="loading" required maxlength="160"></label>
         <label>Vykládka <input id="unloading" required maxlength="160"></label>
         <label>Náklad <input id="cargo" maxlength="80" placeholder="motorová nafta"></label>
@@ -155,6 +210,15 @@
         </label>
         <label>Poznámka <input id="note" maxlength="500"></label>
         <button type="submit">Přidat jízdu</button>
+      </form>
+    </section>
+    <section id="rates-wrap">
+      <h2>Nákladová sazba</h2>
+      <p class="note">Výchozí sazba platí, když vozidlo nemá vlastní. Na zakázce ji lze přepsat a uloží se do verze.</p>
+      <form id="rates">
+        <label>Výchozí Kč/km <input id="default-cost" type="number" min="0" step="0.0001" required></label>
+        <div id="vehicle-rates"></div>
+        <button type="submit">Uložit sazby</button>
       </form>
     </section>
   </div>
@@ -273,7 +337,7 @@
       <pre id="queue-xml" class="xml" hidden></pre>
     </section>
   </div>
-  <script src="/dispecink.js?v=5"></script>
-  <script src="/dispecink-orders.js?v=1"></script>
+  <script src="/dispecink.js?v=6"></script>
+  <script src="/dispecink-orders.js?v=2"></script>
 </body>
 </html>

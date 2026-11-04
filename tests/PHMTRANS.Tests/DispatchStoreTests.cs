@@ -95,12 +95,12 @@ public sealed class DispatchStoreTests
     public async Task New_trip_gets_the_next_code_and_rejects_an_empty_customer()
     {
         var rejected = await _store.AddTripAsync(
-            new NewTripRequest(null, "  ", "Sklad", "ČS", "nafta", DateTimeOffset.Now, null),
+            new NewTripRequest("  ", "Sklad", "ČS", "nafta", DateTimeOffset.Now, null),
             CancellationToken.None);
         Assert.IsType<DispatchMutation.Rejected>(rejected);
 
         var created = await _store.AddTripAsync(
-            new NewTripRequest("Z-1", "Zákazník Test", "Sklad", "ČS", "nafta", DateTimeOffset.Now, "poznámka"),
+            new NewTripRequest("Zákazník Test", "Sklad", "ČS", "nafta", DateTimeOffset.Now, "poznámka"),
             CancellationToken.None);
         var trip = Assert.IsType<DispatchMutation.Success>(created).Trip;
         var year = DateTime.Now.Year;
@@ -119,7 +119,7 @@ public sealed class DispatchStoreTests
         var when = DateTimeOffset.Now;
 
         var blank = await _store.AddTripAsync(
-            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, when, null, " ", ""),
+            new NewTripRequest("Zákazník", "Sklad", "ČS", null, when, null, " ", ""),
             CancellationToken.None);
         var unassigned = Assert.IsType<DispatchMutation.Success>(blank).Trip;
         Assert.Null(unassigned.VehicleId);
@@ -127,7 +127,7 @@ public sealed class DispatchStoreTests
         Assert.Equal(DispatchStatuses.Nova, unassigned.Status);
 
         var onlyVehicle = await _store.AddTripAsync(
-            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", "nafta", when, null, vehicle.Id, null),
+            new NewTripRequest("Zákazník", "Sklad", "ČS", "nafta", when, null, vehicle.Id, null),
             CancellationToken.None);
         var partial = Assert.IsType<DispatchMutation.Success>(onlyVehicle).Trip;
         Assert.Equal(vehicle.Id, partial.VehicleId);
@@ -135,7 +135,7 @@ public sealed class DispatchStoreTests
         Assert.Equal(DispatchStatuses.Nova, partial.Status);
 
         var both = await _store.AddTripAsync(
-            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", "nafta", when, null, vehicle.Id, driver.Id),
+            new NewTripRequest("Zákazník", "Sklad", "ČS", "nafta", when, null, vehicle.Id, driver.Id),
             CancellationToken.None);
         var assigned = Assert.IsType<DispatchMutation.Success>(both).Trip;
         Assert.Equal(DispatchStatuses.Prirazena, assigned.Status);
@@ -148,12 +148,12 @@ public sealed class DispatchStoreTests
         Assert.Equal(driver.Id, stored.DriverId);
 
         var unknownVehicle = await _store.AddTripAsync(
-            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, when, null, "veh-missing", driver.Id),
+            new NewTripRequest("Zákazník", "Sklad", "ČS", null, when, null, "veh-missing", driver.Id),
             CancellationToken.None);
         Assert.Equal("Neznámé vozidlo.", Assert.IsType<DispatchMutation.Rejected>(unknownVehicle).Message);
 
         var unknownDriver = await _store.AddTripAsync(
-            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, when, null, vehicle.Id, "drv-missing"),
+            new NewTripRequest("Zákazník", "Sklad", "ČS", null, when, null, vehicle.Id, "drv-missing"),
             CancellationToken.None);
         Assert.Equal("Neznámý řidič.", Assert.IsType<DispatchMutation.Rejected>(unknownDriver).Message);
 
@@ -171,7 +171,6 @@ public sealed class DispatchStoreTests
         var when = trip.PlannedStart.AddHours(2);
 
         var result = await _store.UpdateTripAsync(trip.Id, new UpdateTripRequest(
-            "Z-edit",
             "  Zákazník po úpravě  ",
             "Sklad Kralupy",
             "ČS Liberec",
@@ -188,7 +187,6 @@ public sealed class DispatchStoreTests
         Assert.Equal(vehicle.Id, updated.VehicleId);
         Assert.Equal(driver.Id, updated.DriverId);
         Assert.Equal("Zákazník po úpravě", updated.Customer);
-        Assert.Equal("Z-edit", updated.OrderCode);
         Assert.Equal("Sklad Kralupy", updated.LoadingPlace);
         Assert.Equal("ČS Liberec", updated.UnloadingPlace);
         Assert.Equal("nová poznámka", updated.Note);
@@ -321,12 +319,10 @@ public sealed class DispatchStoreTests
         Assert.Equal("veh-2", parsed.VehicleId);
         Assert.Equal("", parsed.DriverId);
         Assert.Equal("Nová", parsed.Status);
-        Assert.Null(parsed.OrderCode);
     }
 
     private static UpdateTripRequest Copy(DispatchTrip trip) =>
         new(
-            trip.OrderCode,
             trip.Customer,
             trip.LoadingPlace,
             trip.UnloadingPlace,
@@ -354,8 +350,10 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=5", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=6", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"trip-detail\"", html, StringComparison.Ordinal);
+        Assert.Contains("Součet litrů", html, StringComparison.Ordinal);
         Assert.Contains("Potvrdit k fakturaci", html, StringComparison.Ordinal);
         Assert.Contains("Fronta Pohody", html, StringComparison.Ordinal);
         Assert.Contains(">Upravit</button>", js, StringComparison.Ordinal);
@@ -398,7 +396,7 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("dbo.Disp_Vehicle", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Driver", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Trip", script, StringComparison.Ordinal);
-        Assert.Equal(6, Count(script, "IF OBJECT_ID"));
+        Assert.Equal(9, Count(script, "IF OBJECT_ID"));
         Assert.Contains("dbo.Disp_Order", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_OrderVersion", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_SyncQueue", script, StringComparison.Ordinal);
@@ -406,11 +404,19 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(2, Count(script, "ALTER TABLE"));
+        Assert.Equal(12, Count(script, "ALTER TABLE"));
+        Assert.Equal(3, DispatchSchema.Batches.Length);
+        Assert.Contains("dbo.Disp_OrderStop", script, StringComparison.Ordinal);
+        Assert.Contains("dbo.Disp_OrderLeg", script, StringComparison.Ordinal);
+        Assert.Contains("dbo.Disp_Setting", script, StringComparison.Ordinal);
+        Assert.Contains("WHERE o.TripId IS NULL", DispatchSchema.Data, StringComparison.Ordinal);
+        Assert.Contains("NOT EXISTS (SELECT 1 FROM dbo.Disp_OrderStop", DispatchSchema.Data, StringComparison.Ordinal);
+        Assert.Contains("WHERE v.RouteJson IS NULL", DispatchSchema.Data, StringComparison.Ordinal);
+        Assert.DoesNotContain("ALTER TABLE", DispatchSchema.Data, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("UPDATE ", DispatchSchema.Columns, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("UPDATE ", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Smerco_", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("PohodaSQL", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("PohodaOrderId", script, StringComparison.Ordinal);
@@ -424,11 +430,11 @@ public sealed class DispatchSqlGuardTests
 
         var read = await Assert.ThrowsAsync<DispatchStoreException>(() => store.ReadAsync(CancellationToken.None));
         var created = await Assert.ThrowsAsync<DispatchStoreException>(() => store.AddTripAsync(
-            new NewTripRequest(null, "Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now, null),
+            new NewTripRequest("Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now, null),
             CancellationToken.None));
         var updated = await Assert.ThrowsAsync<DispatchStoreException>(() => store.UpdateTripAsync(
             "trip-1",
-            new UpdateTripRequest(null, "Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now, null, "veh-1", "drv-1"),
+            new UpdateTripRequest("Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now, null, "veh-1", "drv-1"),
             CancellationToken.None));
 
         Assert.Contains("ConnectionStrings:Dispatch", read.Message, StringComparison.Ordinal);
