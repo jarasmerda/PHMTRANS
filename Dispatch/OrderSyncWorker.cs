@@ -9,6 +9,7 @@ public sealed class OrderSyncWorker(
     IOptions<PohodaOptions> options,
     ILogger<OrderSyncWorker> logger) : BackgroundService
 {
+    private const int ResponseLogLimit = 4000;
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var mode = options.Value.EffectiveSyncMode();
@@ -71,11 +72,16 @@ public sealed class OrderSyncWorker(
                     continue;
                 }
 
+                logger.LogDebug("XML požadavku pro zakázku {OrderCode}: {PayloadXml}", entry.OrderCode, entry.PayloadXml);
                 var response = await pohoda.ImportXmlAsync(entry.PayloadXml, cancellationToken);
                 var result = OrderPohodaXml.ReadImport(response.Body);
                 if (!result.Ok)
                 {
                     logger.LogWarning("Pohoda odmítla zakázku {OrderCode}: {Error}", entry.OrderCode, result.Error);
+                    logger.LogWarning(
+                        "Odpověď Pohody po odmítnutí zakázky {OrderCode}: {Body}",
+                        entry.OrderCode,
+                        OrderSyncLimits.Cut(response.Body, ResponseLogLimit));
                     await store.MarkFailedAsync(entry.Id, result.Error ?? "Pohoda vrátila chybu.", cancellationToken);
                     continue;
                 }

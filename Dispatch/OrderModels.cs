@@ -52,6 +52,8 @@ public static class OrderSyncLimits
 {
     public const int MaxAttempts = 6;
 
+    public const int LastErrorMaxLength = 1000;
+
     public static bool IsDue(DateTimeOffset? processedUtc, int attempts, DateTimeOffset now)
     {
         if (processedUtc is null || attempts <= 0)
@@ -59,6 +61,28 @@ public static class OrderSyncLimits
 
         var seconds = Math.Min(900d, 15d * Math.Pow(2d, attempts - 1));
         return processedUtc.Value.AddSeconds(seconds) <= now;
+    }
+
+    public static string? TrimToColumn(string? value, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return Cut(value.Trim(), max);
+    }
+
+    public static string Cut(string value, int max)
+    {
+        if (string.IsNullOrEmpty(value) || max <= 0)
+            return "";
+
+        if (value.Length <= max)
+            return value;
+
+        if (char.IsHighSurrogate(value[max - 1]))
+            max--;
+
+        return value[..max];
     }
 }
 
