@@ -373,7 +373,7 @@ function renderOrders(data) {
   document.querySelector("#order-table-wrap").hidden = false;
   const empty = document.querySelector("#orders-empty");
   empty.hidden = orderList.length > 0;
-  empty.textContent = orderStatusFilter && orderStatusFilter.values().length
+  empty.textContent = orderStatusFilter && !orderStatusFilter.isAll()
     ? "V tomto stavu není žádná zakázka."
     : "Zatím není žádná zakázka.";
 }
@@ -911,6 +911,7 @@ document.querySelector("#order-close").addEventListener("click", () => {
 const orderStatusFilter = window.bindStatusFilter(document.querySelector("#order-status-filter"), {
   param: "zakazky",
   known: ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno", "Stornováno"],
+  excludeByDefault: ["Stornováno"],
   onChange() { loadOrders(); }
 });
 

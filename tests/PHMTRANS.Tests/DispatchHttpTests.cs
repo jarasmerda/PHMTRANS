@@ -107,6 +107,23 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
             user: true));
         Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
         Assert.Contains(DispatchStatuses.UnknownMessage, await unknown.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        var defaults = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
+        using var defaultJson = JsonDocument.Parse(await defaults.Content.ReadAsStringAsync());
+        var defaultTrips = defaultJson.RootElement.GetProperty("trips").EnumerateArray()
+            .Select(trip => trip.GetProperty("status").GetString())
+            .ToArray();
+        Assert.DoesNotContain(DispatchStatuses.Stornovano, defaultTrips);
+        Assert.Contains(DispatchStatuses.Nova, defaultTrips);
+        Assert.Equal(DispatchStatuses.All.Count, defaultJson.RootElement.GetProperty("counts").GetArrayLength());
+
+        var everything = await client.SendAsync(Request("/api/dispatch/board?status=*", "intranet.phmtrans.cz", user: true));
+        Assert.Equal(HttpStatusCode.OK, everything.StatusCode);
+        using var everythingJson = JsonDocument.Parse(await everything.Content.ReadAsStringAsync());
+        var everyStatus = everythingJson.RootElement.GetProperty("trips").EnumerateArray()
+            .Select(trip => trip.GetProperty("status").GetString())
+            .ToArray();
+        Assert.Contains(DispatchStatuses.Stornovano, everyStatus);
     }
 
     [Fact]

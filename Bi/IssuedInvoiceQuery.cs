@@ -15,14 +15,22 @@ public static class InvoiceCustomerFilter
             .OrderBy(name => name, Czech)
             .ToArray();
 
-    public static IReadOnlyList<IssuedInvoice> Apply(IReadOnlyList<IssuedInvoice> invoices, string? customer)
+    public static IReadOnlyList<IssuedInvoice> Apply(IReadOnlyList<IssuedInvoice> invoices, string? customer) =>
+        Apply(invoices, string.IsNullOrWhiteSpace(customer) ? null : [customer.Trim()]);
+
+    public static IReadOnlyList<IssuedInvoice> Apply(IReadOnlyList<IssuedInvoice> invoices, IReadOnlyCollection<string>? customers)
     {
-        if (string.IsNullOrWhiteSpace(customer))
+        if (customers is null || customers.Count == 0)
             return invoices;
 
-        var name = customer.Trim();
+        var names = new HashSet<string>(
+            customers.Select(name => name.Trim()).Where(name => name.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+        if (names.Count == 0)
+            return invoices;
+
         return invoices
-            .Where(invoice => string.Equals(invoice.Customer.Trim(), name, StringComparison.OrdinalIgnoreCase))
+            .Where(invoice => names.Contains(invoice.Customer.Trim()))
             .ToArray();
     }
 

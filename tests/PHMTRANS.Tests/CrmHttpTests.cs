@@ -48,7 +48,8 @@ public sealed class CrmHttpTests : IClassFixture<CrmApp>
         Assert.Equal(HttpStatusCode.OK, signedCrm.StatusCode);
         var crmHtml = await signedCrm.Content.ReadAsStringAsync();
         Assert.Contains("<h1>CRM</h1>", crmHtml, StringComparison.Ordinal);
-        Assert.Contains("crm.js?v=1", crmHtml, StringComparison.Ordinal);
+        Assert.Contains("crm.js?v=2", crmHtml, StringComparison.Ordinal);
+        Assert.Contains("multi-filter.js?v=1", crmHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("<h1>Dispečink</h1>", crmHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("Vydané faktury", crmHtml, StringComparison.Ordinal);
 
@@ -242,7 +243,31 @@ public sealed class CrmHttpTests : IClassFixture<CrmApp>
         Assert.Contains(callsJson.RootElement.EnumerateArray(), item => item.GetProperty("id").GetString() == "act-1");
         Assert.All(callsJson.RootElement.EnumerateArray(), item => Assert.Equal(CrmActivityKinds.Hovor, item.GetProperty("kind").GetString()));
 
-        var contacts = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/contacts?customerId=cust-1"));
+        var bothKinds = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/customers?kind=Firma&kind=Osoba"));
+        Assert.Equal(HttpStatusCode.OK, bothKinds.StatusCode);
+        using var bothKindsJson = JsonDocument.Parse(await bothKinds.Content.ReadAsStringAsync());
+        var kinds = bothKindsJson.RootElement.EnumerateArray().Select(item => item.GetProperty("kind").GetString()).ToArray();
+        Assert.Contains(CrmCustomerKinds.Firma, kinds);
+        Assert.Contains(CrmCustomerKinds.Osoba, kinds);
+
+        var allStages = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/opportunities?stage=*"));
+        Assert.Equal(HttpStatusCode.OK, allStages.StatusCode);
+        using var allStagesJson = JsonDocument.Parse(await allStages.Content.ReadAsStringAsync());
+        Assert.Contains(allStagesJson.RootElement.EnumerateArray(), item => item.GetProperty("stage").GetString() == CrmStages.Prohrano);
+        Assert.Contains(allStagesJson.RootElement.EnumerateArray(), item => item.GetProperty("stage").GetString() == CrmStages.Vyhrano);
+
+        var twoStages = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/opportunities?stage=Nový&stage=Vyhráno"));
+        using var twoStagesJson = JsonDocument.Parse(await twoStages.Content.ReadAsStringAsync());
+        Assert.All(twoStagesJson.RootElement.EnumerateArray(), item =>
+            Assert.Contains(item.GetProperty("stage").GetString(), new[] { CrmStages.Novy, CrmStages.Vyhrano }));
+
+        var twoActivities = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/activities?kind=Hovor&kind=Poznámka"));
+        using var twoActivitiesJson = JsonDocument.Parse(await twoActivities.Content.ReadAsStringAsync());
+        Assert.All(twoActivitiesJson.RootElement.EnumerateArray(), item =>
+            Assert.Contains(item.GetProperty("kind").GetString(), new[] { CrmActivityKinds.Hovor, CrmActivityKinds.Poznamka }));
+
+        var contacts = await client.SendAsync(Request(HttpMethod.Get, "/api/crm/contacts?customerId=cust-1&customerId=cust-2"));
+        Assert.Equal(HttpStatusCode.OK, contacts.StatusCode);
         using var contactsJson = JsonDocument.Parse(await contacts.Content.ReadAsStringAsync());
         Assert.Contains(contactsJson.RootElement.EnumerateArray(), item => item.GetProperty("name").GetString() == "Jan Novák");
         Assert.All(contactsJson.RootElement.EnumerateArray(), item => Assert.Equal("cust-1", item.GetProperty("customerId").GetString()));

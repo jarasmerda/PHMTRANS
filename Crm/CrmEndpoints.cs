@@ -1,4 +1,5 @@
 using System.Globalization;
+using PHMTRANS;
 
 namespace PHMTRANS.Crm;
 
@@ -34,18 +35,15 @@ public static class CrmEndpoints
     private static Task<IResult> GetBoard(ICrmStore store, CancellationToken cancellationToken) =>
         Execute(async () => Results.Ok(ToBoard(await store.ReadAsync(cancellationToken))));
 
-    private static Task<IResult> GetCustomers(string? kind, ICrmStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> GetCustomers(string[]? kind, ICrmStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            if (!string.IsNullOrWhiteSpace(kind) && !CrmCustomerKinds.IsKnown(kind.Trim()))
-                return Results.BadRequest(new { message = CrmCustomerKinds.UnknownMessage });
+            if (Reject(kind, CrmCustomerKinds.All, CrmCustomerKinds.UnknownMessage, out var selected) is { } error)
+                return error;
 
             var customers = ToBoard(await store.ReadAsync(cancellationToken)).Customers;
-            if (!string.IsNullOrWhiteSpace(kind))
-            {
-                var selected = kind.Trim();
-                customers = customers.Where(item => item.Kind == selected).ToArray();
-            }
+            if (selected.Count > 0)
+                customers = customers.Where(item => selected.Contains(item.Kind)).ToArray();
 
             return Results.Ok(customers);
         });
@@ -72,15 +70,15 @@ public static class CrmEndpoints
         CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.UpdateCustomerAsync(id, request, cancellationToken)));
 
-    private static Task<IResult> GetContacts(string? customerId, ICrmStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> GetContacts(string[]? customerId, ICrmStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
+            if (Reject(customerId, null, "", out var selected) is { } error)
+                return error;
+
             var contacts = ToBoard(await store.ReadAsync(cancellationToken)).Contacts;
-            if (!string.IsNullOrWhiteSpace(customerId))
-            {
-                var selected = customerId.Trim();
-                contacts = contacts.Where(item => item.CustomerId == selected).ToArray();
-            }
+            if (selected.Count > 0)
+                contacts = contacts.Where(item => selected.Contains(item.CustomerId)).ToArray();
 
             return Results.Ok(contacts);
         });
@@ -95,18 +93,15 @@ public static class CrmEndpoints
         CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.UpdateContactAsync(id, request, cancellationToken)));
 
-    private static Task<IResult> GetOpportunities(string? stage, ICrmStore store, CancellationToken cancellationToken) =>
+    private static Task<IResult> GetOpportunities(string[]? stage, ICrmStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            if (!string.IsNullOrWhiteSpace(stage) && !CrmStages.IsKnown(stage.Trim()))
-                return Results.BadRequest(new { message = CrmStages.UnknownMessage });
+            if (Reject(stage, CrmStages.All, CrmStages.UnknownMessage, out var selected) is { } error)
+                return error;
 
             var opportunities = ToBoard(await store.ReadAsync(cancellationToken)).Opportunities;
-            if (!string.IsNullOrWhiteSpace(stage))
-            {
-                var selected = stage.Trim();
-                opportunities = opportunities.Where(item => item.Stage == selected).ToArray();
-            }
+            if (selected.Count > 0)
+                opportunities = opportunities.Where(item => selected.Contains(item.Stage)).ToArray();
 
             return Results.Ok(opportunities);
         });
@@ -122,22 +117,21 @@ public static class CrmEndpoints
         Execute(async () => ToResult(await store.UpdateOpportunityAsync(id, request, cancellationToken)));
 
     private static Task<IResult> GetActivities(
-        string? customerId,
+        string[]? customerId,
         string? opportunityId,
-        string? kind,
+        string[]? kind,
         ICrmStore store,
         CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            if (!string.IsNullOrWhiteSpace(kind) && !CrmActivityKinds.IsKnown(kind.Trim()))
-                return Results.BadRequest(new { message = CrmActivityKinds.UnknownMessage });
+            if (Reject(kind, CrmActivityKinds.All, CrmActivityKinds.UnknownMessage, out var kinds) is { } kindError)
+                return kindError;
+            if (Reject(customerId, null, "", out var customers) is { } customerError)
+                return customerError;
 
             var activities = ToBoard(await store.ReadAsync(cancellationToken)).Activities;
-            if (!string.IsNullOrWhiteSpace(customerId))
-            {
-                var selected = customerId.Trim();
-                activities = activities.Where(item => item.CustomerId == selected).ToArray();
-            }
+            if (customers.Count > 0)
+                activities = activities.Where(item => customers.Contains(item.CustomerId)).ToArray();
 
             if (!string.IsNullOrWhiteSpace(opportunityId))
             {
@@ -145,11 +139,8 @@ public static class CrmEndpoints
                 activities = activities.Where(item => item.OpportunityId == selected).ToArray();
             }
 
-            if (!string.IsNullOrWhiteSpace(kind))
-            {
-                var selected = kind.Trim();
-                activities = activities.Where(item => item.Kind == selected).ToArray();
-            }
+            if (kinds.Count > 0)
+                activities = activities.Where(item => kinds.Contains(item.Kind)).ToArray();
 
             return Results.Ok(activities);
         });
@@ -163,6 +154,23 @@ public static class CrmEndpoints
         ICrmStore store,
         CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.UpdateActivityAsync(id, request, cancellationToken)));
+
+    private static IResult? Reject(
+        IEnumerable<string?>? raw,
+        IReadOnlyList<string>? known,
+        string unknownMessage,
+        out IReadOnlyList<string> values)
+    {
+        var selected = ValueSelection.Parse(raw, known, unknownMessage);
+        if (selected.Error is not null)
+        {
+            values = [];
+            return Results.BadRequest(new { message = selected.Error });
+        }
+
+        values = selected.ExplicitAll ? [] : selected.Values;
+        return null;
+    }
 
     private static async Task<IResult> Execute(Func<Task<IResult>> action)
     {

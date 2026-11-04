@@ -334,7 +334,15 @@ public sealed class CrmPageTests
         Assert.Contains("erp.css?v=17", html, StringComparison.Ordinal);
         Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"", html, StringComparison.Ordinal);
         Assert.Contains("class=\"site-back\" href=\"https://phmtrans.cz/\">Zpět na web</a>", html, StringComparison.Ordinal);
-        Assert.Contains("crm.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("crm.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"filter-kind\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"filter-stage\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"filter-activity\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"contact-filter\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"customer-kind\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"opp-stage\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"act-kind\"", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("https://intranet.phmtrans.cz/ERP", html, StringComparison.Ordinal);
         Assert.Contains("https://intranet.phmtrans.cz/Dispecink", html, StringComparison.Ordinal);
@@ -366,6 +374,10 @@ public sealed class CrmPageTests
         Assert.Contains("/api/crm/contacts", js, StringComparison.Ordinal);
         Assert.Contains("/api/crm/opportunities", js, StringComparison.Ordinal);
         Assert.Contains("/api/crm/activities", js, StringComparison.Ordinal);
+        Assert.Contains("param: \"druh\"", js, StringComparison.Ordinal);
+        Assert.Contains("param: \"kontakty\"", js, StringComparison.Ordinal);
+        Assert.Contains("param: \"faze\"", js, StringComparison.Ordinal);
+        Assert.Contains("param: \"aktivity\"", js, StringComparison.Ordinal);
         Assert.Contains(", \"PUT\")", js, StringComparison.Ordinal);
         Assert.Contains("https://intranet.phmtrans.cz/CRM", index, StringComparison.Ordinal);
         Assert.Contains(">CRM</a>", index, StringComparison.Ordinal);

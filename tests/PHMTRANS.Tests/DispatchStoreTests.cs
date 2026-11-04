@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using PHMTRANS.Dispatch;
 using Xunit;
+using PHMTRANS;
 
 namespace PHMTRANS.Tests;
 
@@ -24,6 +25,42 @@ public sealed class DispatchStoreTests
         var unknown = StatusSelection.Parse(["Potvrzená"], OrderStatuses.All, OrderStatuses.UnknownMessage);
         Assert.Equal(OrderStatuses.UnknownMessage, unknown.Error);
         Assert.Empty(unknown.Values);
+
+        var catalog = StatusSelection.Parse(["*"], DispatchStatuses.All, DispatchStatuses.UnknownMessage);
+        Assert.Null(catalog.Error);
+        Assert.Empty(catalog.Values);
+    }
+
+    [Fact]
+    public void Missing_list_filter_hides_cancelled_and_star_keeps_every_status()
+    {
+        var trips = StatusSelection.ParseList(null, DispatchStatuses.All, DispatchStatuses.UnknownMessage, DispatchStatuses.Stornovano);
+        Assert.Null(trips.Error);
+        Assert.True(trips.Restrict);
+        Assert.Equal(DispatchStatuses.All.Count - 1, trips.Values.Count);
+        Assert.DoesNotContain(DispatchStatuses.Stornovano, trips.Values);
+
+        var orders = StatusSelection.ParseList([], OrderStatuses.All, OrderStatuses.UnknownMessage, OrderStatuses.Stornovano);
+        Assert.True(orders.Restrict);
+        Assert.DoesNotContain(OrderStatuses.Stornovano, orders.Values);
+        Assert.Contains(OrderStatuses.Nova, orders.Values);
+
+        var star = StatusSelection.ParseList(["*"], DispatchStatuses.All, DispatchStatuses.UnknownMessage, DispatchStatuses.Stornovano);
+        Assert.Null(star.Error);
+        Assert.False(star.Restrict);
+
+        var vse = StatusSelection.ParseList(["Vše"], OrderStatuses.All, OrderStatuses.UnknownMessage, OrderStatuses.Stornovano);
+        Assert.False(vse.Restrict);
+
+        var one = StatusSelection.ParseList(["Stornováno"], OrderStatuses.All, OrderStatuses.UnknownMessage, OrderStatuses.Stornovano);
+        Assert.True(one.Restrict);
+        Assert.Equal([OrderStatuses.Stornovano], one.Values);
+
+        var names = ValueSelection.Parse(["Firma, s.r.o.", "*"], null, "");
+        Assert.True(names.ExplicitAll);
+        var kept = ValueSelection.Parse(["Firma, s.r.o."], null, "");
+        Assert.False(kept.ExplicitAll);
+        Assert.Equal(["Firma, s.r.o."], kept.Values);
     }
 
     [Fact]
@@ -366,8 +403,13 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=10", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=8", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=11", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=9", html, StringComparison.Ordinal);
+        Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("filter.css?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("value=\"Nová\" checked", html, StringComparison.Ordinal);
+        Assert.Contains("value=\"Stornováno\">", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("value=\"Stornováno\" checked", html, StringComparison.Ordinal);
         Assert.Contains("id=\"trip-status-filter\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"order-status-filter\"", html, StringComparison.Ordinal);
         Assert.Contains("data-status-all", html, StringComparison.Ordinal);
@@ -402,6 +444,10 @@ public sealed class DispatchPageTests
         Assert.Contains("data-open-order", js, StringComparison.Ordinal);
         Assert.Contains("showModal", js, StringComparison.Ordinal);
         Assert.Contains("param: \"jizdy\"", js, StringComparison.Ordinal);
+        Assert.Contains("excludeByDefault: [\"Stornováno\"]", js, StringComparison.Ordinal);
+        var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
+        Assert.Contains("param: \"zakazky\"", ordersJs, StringComparison.Ordinal);
+        Assert.Contains("excludeByDefault: [\"Stornováno\"]", ordersJs, StringComparison.Ordinal);
         Assert.DoesNotContain("data-field=\"status\"", html, StringComparison.Ordinal);
     }
 

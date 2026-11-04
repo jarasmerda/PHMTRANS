@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dispečink – PHM Trans</title>
     <link rel="stylesheet" href="/erp.css?v=17">
+    <link rel="stylesheet" href="/filter.css?v=1">
   <style>
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
     [hidden] { display: none !important; }
@@ -33,37 +34,6 @@
     .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
     .dialog-head h2 { margin: 0; }
     .section-actions { display: flex; justify-content: flex-end; margin: 0.4rem 0; }
-    .status-filter { position: relative; min-width: 14rem; }
-    button.status-filter-toggle {
-      display: block;
-      width: 100%;
-      text-align: left;
-      background: #fff;
-      color: var(--ink);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 0.55rem 0.75rem;
-      font-weight: 600;
-    }
-    .status-filter-panel {
-      position: absolute;
-      z-index: 6;
-      top: calc(100% + 0.25rem);
-      left: 0;
-      min-width: 100%;
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 0.4rem 0.7rem 0.55rem;
-      box-shadow: 0 8px 24px rgba(0, 22, 58, 0.12);
-    }
-    .status-filter-panel label {
-      display: flex;
-      align-items: center;
-      gap: 0.45rem;
-      margin: 0.28rem 0;
-      font-weight: 600;
-    }
     .trip-orders td { background: #fff; }
     .trip-order-lines { list-style: none; margin: 0.35rem 0 0; padding: 0; }
     .trip-order-lines li { margin: 0.2rem 0; }
@@ -224,14 +194,14 @@
     <form id="filter">
       <div class="status-filter" id="trip-status-filter">
         <span>Stav</span>
-        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="trip-status-panel">Vše</button>
+        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="trip-status-panel">5 stavů</button>
         <div id="trip-status-panel" class="status-filter-panel" hidden>
-          <label><input type="checkbox" data-status-all checked> Vše</label>
-          <label><input type="checkbox" data-status-value value="Nová"> Nová</label>
-          <label><input type="checkbox" data-status-value value="Přiřazená"> Přiřazená</label>
-          <label><input type="checkbox" data-status-value value="Na cestě"> Na cestě</label>
-          <label><input type="checkbox" data-status-value value="Vyložená"> Vyložená</label>
-          <label><input type="checkbox" data-status-value value="Zrušená"> Zrušená</label>
+          <label><input type="checkbox" data-status-all> Vše</label>
+          <label><input type="checkbox" data-status-value value="Nová" checked> Nová</label>
+          <label><input type="checkbox" data-status-value value="Přiřazená" checked> Přiřazená</label>
+          <label><input type="checkbox" data-status-value value="Na cestě" checked> Na cestě</label>
+          <label><input type="checkbox" data-status-value value="Vyložená" checked> Vyložená</label>
+          <label><input type="checkbox" data-status-value value="Zrušená" checked> Zrušená</label>
           <label><input type="checkbox" data-status-value value="Stornováno"> Stornováno</label>
         </div>
       </div>
@@ -349,15 +319,15 @@
     <form id="order-filter">
       <div class="status-filter" id="order-status-filter">
         <span>Stav</span>
-        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="order-status-panel">Vše</button>
+        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="order-status-panel">6 stavů</button>
         <div id="order-status-panel" class="status-filter-panel" hidden>
-          <label><input type="checkbox" data-status-all checked> Vše</label>
-          <label><input type="checkbox" data-status-value value="Nová"> Nová</label>
-          <label><input type="checkbox" data-status-value value="Naplánovaná"> Naplánovaná</label>
-          <label><input type="checkbox" data-status-value value="Na cestě"> Na cestě</label>
-          <label><input type="checkbox" data-status-value value="Doručeno"> Doručeno</label>
-          <label><input type="checkbox" data-status-value value="K fakturaci"> K fakturaci</label>
-          <label><input type="checkbox" data-status-value value="Vyfakturováno"> Vyfakturováno</label>
+          <label><input type="checkbox" data-status-all> Vše</label>
+          <label><input type="checkbox" data-status-value value="Nová" checked> Nová</label>
+          <label><input type="checkbox" data-status-value value="Naplánovaná" checked> Naplánovaná</label>
+          <label><input type="checkbox" data-status-value value="Na cestě" checked> Na cestě</label>
+          <label><input type="checkbox" data-status-value value="Doručeno" checked> Doručeno</label>
+          <label><input type="checkbox" data-status-value value="K fakturaci" checked> K fakturaci</label>
+          <label><input type="checkbox" data-status-value value="Vyfakturováno" checked> Vyfakturováno</label>
           <label><input type="checkbox" data-status-value value="Stornováno"> Stornováno</label>
         </div>
       </div>
@@ -460,7 +430,8 @@
       <pre id="queue-xml" class="xml" hidden></pre>
     </section>
   </div>
-  <script src="/dispecink.js?v=10"></script>
-  <script src="/dispecink-orders.js?v=8"></script>
+  <script src="/multi-filter.js?v=1"></script>
+  <script src="/dispecink.js?v=11"></script>
+  <script src="/dispecink-orders.js?v=9"></script>
 </body>
 </html>

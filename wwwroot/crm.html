@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CRM – PHM Trans</title>
   <link rel="stylesheet" href="/erp.css?v=17">
+  <link rel="stylesheet" href="/filter.css?v=1">
   <style>
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
     .route-to { color: var(--text-secondary); font-size: 0.82rem; }
@@ -163,13 +164,15 @@
 
   <div data-panel="zakaznici" hidden>
     <form id="customer-filter">
-      <label>Druh
-        <select id="filter-kind">
-          <option value="">Všechny druhy</option>
-          <option>Firma</option>
-          <option>Osoba</option>
-        </select>
-      </label>
+      <div class="status-filter" id="filter-kind">
+        <span>Druh</span>
+        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="kind-panel">Vše</button>
+        <div id="kind-panel" class="status-filter-panel" hidden>
+          <label><input type="checkbox" data-status-all checked> Vše</label>
+          <label><input type="checkbox" data-status-value value="Firma"> Firma</label>
+          <label><input type="checkbox" data-status-value value="Osoba"> Osoba</label>
+        </div>
+      </div>
     </form>
     <section class="panel-card" id="customer-table" hidden>
       <h2>Zákazníci</h2>
@@ -214,11 +217,13 @@
     </section>
     <section class="panel-card" id="contact-table" hidden>
       <h2>Kontakty</h2>
-      <label>Zákazník
-        <select id="contact-filter">
-          <option value="">Všichni zákazníci</option>
-        </select>
-      </label>
+      <div class="status-filter" id="contact-filter">
+        <span>Zákazník</span>
+        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="contact-panel">Vše</button>
+        <div id="contact-panel" class="status-filter-panel" hidden>
+          <label><input type="checkbox" data-status-all checked> Vše</label>
+        </div>
+      </div>
       <div class="table-scroll">
         <table id="contacts">
           <thead>
@@ -256,16 +261,18 @@
 
   <div data-panel="prilezitosti" hidden>
     <form id="opportunity-filter">
-      <label>Fáze
-        <select id="filter-stage">
-          <option value="">Všechny fáze</option>
-          <option>Nový</option>
-          <option>V jednání</option>
-          <option>Nabídka</option>
-          <option>Vyhráno</option>
-          <option>Prohráno</option>
-        </select>
-      </label>
+      <div class="status-filter" id="filter-stage">
+        <span>Fáze</span>
+        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="stage-panel">Vše</button>
+        <div id="stage-panel" class="status-filter-panel" hidden>
+          <label><input type="checkbox" data-status-all checked> Vše</label>
+          <label><input type="checkbox" data-status-value value="Nový"> Nový</label>
+          <label><input type="checkbox" data-status-value value="V jednání"> V jednání</label>
+          <label><input type="checkbox" data-status-value value="Nabídka"> Nabídka</label>
+          <label><input type="checkbox" data-status-value value="Vyhráno"> Vyhráno</label>
+          <label><input type="checkbox" data-status-value value="Prohráno"> Prohráno</label>
+        </div>
+      </div>
     </form>
     <section class="panel-card" id="opportunity-table" hidden>
       <h2>Příležitosti</h2>
@@ -315,14 +322,16 @@
 
   <div data-panel="aktivity" hidden>
     <form id="activity-filter">
-      <label>Druh
-        <select id="filter-activity">
-          <option value="">Všechny druhy</option>
-          <option>Hovor</option>
-          <option>Schůzka</option>
-          <option>Poznámka</option>
-        </select>
-      </label>
+      <div class="status-filter" id="filter-activity">
+        <span>Druh</span>
+        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="activity-panel">Vše</button>
+        <div id="activity-panel" class="status-filter-panel" hidden>
+          <label><input type="checkbox" data-status-all checked> Vše</label>
+          <label><input type="checkbox" data-status-value value="Hovor"> Hovor</label>
+          <label><input type="checkbox" data-status-value value="Schůzka"> Schůzka</label>
+          <label><input type="checkbox" data-status-value value="Poznámka"> Poznámka</label>
+        </div>
+      </div>
     </form>
     <section class="panel-card" id="activity-table" hidden>
       <h2>Aktivity</h2>
@@ -371,6 +380,7 @@
       </form>
     </section>
   </div>
-  <script src="/crm.js?v=1"></script>
+  <script src="/multi-filter.js?v=1"></script>
+  <script src="/crm.js?v=2"></script>
 </body>
 </html>

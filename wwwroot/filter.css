@@ -1,0 +1,44 @@
+.status-filter { position: relative; min-width: 14rem; }
+button.status-filter-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-weight: 600;
+}
+button.status-filter-toggle:hover {
+  background: #fff;
+  color: var(--ink);
+}
+.status-filter-panel {
+  position: absolute;
+  z-index: 6;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  min-width: 100%;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.4rem 0.7rem 0.55rem;
+  box-shadow: 0 8px 24px rgba(0, 22, 58, 0.12);
+}
+.status-filter-panel label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0.28rem 0;
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+.status-filter > span {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}

@@ -14,6 +14,14 @@ let customers = [];
 let contacts = [];
 let opportunities = [];
 let activities = [];
+let catalogCustomers = [];
+let catalogContacts = [];
+let catalogOpportunities = [];
+let catalogActivities = [];
+let kindFilter;
+let contactFilter;
+let stageFilter;
+let activityFilter;
 
 function showMessage(value) {
   message.hidden = !value;
@@ -101,12 +109,12 @@ function opportunityLabel(item) {
 }
 
 function customerName(id) {
-  const item = customers.find((customer) => customer.id === id);
+  const item = catalogCustomers.find((customer) => customer.id === id);
   return item ? item.name : (id || "—");
 }
 
 function opportunityText(id) {
-  const item = opportunities.find((opportunity) => opportunity.id === id);
+  const item = catalogOpportunities.find((opportunity) => opportunity.id === id);
   return item ? opportunityLabel(item) : (id || "—");
 }
 
@@ -150,13 +158,9 @@ function showTab(name) {
 }
 
 function openCard(card) {
-  if ("stage" in card.dataset)
-    document.querySelector("#filter-stage").value = card.dataset.stage;
-  if ("activityKind" in card.dataset)
-    document.querySelector("#filter-activity").value = card.dataset.activityKind;
+  if ("stage" in card.dataset) stageFilter.setValues(card.dataset.stage || "*");
+  if ("activityKind" in card.dataset) activityFilter.setValues(card.dataset.activityKind || "*");
   showTab(card.dataset.openTab);
-  applyOpportunityFilter();
-  applyActivityFilter();
 }
 
 function setOptions(selector, items, selected, emptyLabel, labelOf) {
@@ -164,68 +168,40 @@ function setOptions(selector, items, selected, emptyLabel, labelOf) {
 }
 
 function fillSelects() {
-  const contactFilter = document.querySelector("#contact-filter").value;
   const contactCustomer = document.querySelector("#contact-customer").value;
   const oppCustomer = document.querySelector("#opp-customer").value;
   const actCustomer = document.querySelector("#act-customer").value;
   const actOpportunity = document.querySelector("#act-opportunity").value;
-  setOptions("#contact-filter", customers, contactFilter, "Všichni zákazníci", customerLabel);
-  setOptions("#contact-customer", customers, contactCustomer, "— vyberte zákazníka —", customerLabel);
-  setOptions("#opp-customer", customers, oppCustomer, "— vyberte zákazníka —", customerLabel);
-  setOptions("#act-customer", customers, actCustomer, "— bez zákazníka —", customerLabel);
-  setOptions("#act-opportunity", opportunities, actOpportunity, "— bez příležitosti —", opportunityLabel);
+  setOptions("#contact-customer", catalogCustomers, contactCustomer, "— vyberte zákazníka —", customerLabel);
+  setOptions("#opp-customer", catalogCustomers, oppCustomer, "— vyberte zákazníka —", customerLabel);
+  setOptions("#act-customer", catalogCustomers, actCustomer, "— bez zákazníka —", customerLabel);
+  setOptions("#act-opportunity", catalogOpportunities, actOpportunity, "— bez příležitosti —", opportunityLabel);
+  if (contactFilter.setChoices(catalogCustomers.map((item) => ({ value: item.id, label: customerLabel(item) }))))
+    load();
 }
 
 function applyCustomerFilter() {
-  const selected = document.querySelector("#filter-kind").value;
-  let visible = 0;
-  for (const row of customerRows.querySelectorAll("tr[data-kind]")) {
-    const hide = selected.length > 0 && row.dataset.kind !== selected;
-    row.hidden = hide;
-    if (!hide) visible += 1;
-  }
   const empty = document.querySelector("#customer-empty");
-  empty.hidden = visible > 0;
-  empty.textContent = selected ? "V tomto druhu není žádný zákazník." : "Zatím není žádný zákazník.";
+  empty.hidden = customers.length > 0;
+  empty.textContent = kindFilter.isAll() ? "Zatím není žádný zákazník." : "Tomuto výběru neodpovídá žádný zákazník.";
 }
 
 function applyContactFilter() {
-  const selected = document.querySelector("#contact-filter").value;
-  let visible = 0;
-  for (const row of contactRows.querySelectorAll("tr[data-customer]")) {
-    const hide = selected.length > 0 && row.dataset.customer !== selected;
-    row.hidden = hide;
-    if (!hide) visible += 1;
-  }
   const empty = document.querySelector("#contact-empty");
-  empty.hidden = visible > 0;
-  empty.textContent = selected ? "Zákazník nemá žádný kontakt." : "Zatím není žádný kontakt.";
+  empty.hidden = contacts.length > 0;
+  empty.textContent = contactFilter.isAll() ? "Zatím není žádný kontakt." : "Tomuto výběru neodpovídá žádný kontakt.";
 }
 
 function applyOpportunityFilter() {
-  const selected = document.querySelector("#filter-stage").value;
-  let visible = 0;
-  for (const row of opportunityRows.querySelectorAll("tr[data-stage]")) {
-    const hide = selected.length > 0 && row.dataset.stage !== selected;
-    row.hidden = hide;
-    if (!hide) visible += 1;
-  }
   const empty = document.querySelector("#opportunity-empty");
-  empty.hidden = visible > 0;
-  empty.textContent = selected ? "V této fázi není žádná příležitost." : "Zatím není žádná příležitost.";
+  empty.hidden = opportunities.length > 0;
+  empty.textContent = stageFilter.isAll() ? "Zatím není žádná příležitost." : "Tomuto výběru neodpovídá žádná příležitost.";
 }
 
 function applyActivityFilter() {
-  const selected = document.querySelector("#filter-activity").value;
-  let visible = 0;
-  for (const row of activityRows.querySelectorAll("tr[data-kind]")) {
-    const hide = selected.length > 0 && row.dataset.kind !== selected;
-    row.hidden = hide;
-    if (!hide) visible += 1;
-  }
   const empty = document.querySelector("#activity-empty");
-  empty.hidden = visible > 0;
-  empty.textContent = selected ? "V tomto druhu není žádná aktivita." : "Zatím není žádná aktivita.";
+  empty.hidden = activities.length > 0;
+  empty.textContent = activityFilter.isAll() ? "Zatím není žádná aktivita." : "Tomuto výběru neodpovídá žádná aktivita.";
 }
 
 function actions(entity, id) {
@@ -236,7 +212,7 @@ function actions(entity, id) {
 }
 
 function customerRow(item) {
-  const people = contacts.filter((contact) => contact.customerId === item.id).length;
+  const people = catalogContacts.filter((contact) => contact.customerId === item.id).length;
   const note = item.note ? `<br><span class="route-to">${text(item.note)}</span>` : "";
   const country = item.country ? `<br><span class="route-to">${text(item.country)}</span>` : "";
   return `<tr data-id="${text(item.id)}" data-kind="${text(item.kind)}">
@@ -289,7 +265,7 @@ function contactEdit(item) {
       <td><input data-field="phone" type="tel" maxlength="40" aria-label="Telefon kontaktu" value="${text(item.phone || "")}"></td>
       <td><div class="stack">
         <input data-field="note" maxlength="500" aria-label="Poznámka kontaktu" value="${text(item.note || "")}">
-        <select data-field="customer" aria-label="Zákazník kontaktu">${options(customers, item.customerId, "— vyberte zákazníka —", customerLabel)}</select>
+        <select data-field="customer" aria-label="Zákazník kontaktu">${options(catalogCustomers, item.customerId, "— vyberte zákazníka —", customerLabel)}</select>
       </div></td>
       <td>${actions("contact", item.id)}</td>`;
 }
@@ -309,7 +285,7 @@ function opportunityRow(item) {
 
 function opportunityEdit(item) {
   return `<td>${text(item.code)}</td>
-      <td><select data-field="customer" aria-label="Zákazník ${text(item.code)}">${options(customers, item.customerId, "— vyberte zákazníka —", customerLabel)}</select></td>
+      <td><select data-field="customer" aria-label="Zákazník ${text(item.code)}">${options(catalogCustomers, item.customerId, "— vyberte zákazníka —", customerLabel)}</select></td>
       <td><div class="stack">
         <input data-field="title" required maxlength="160" aria-label="Název ${text(item.code)}" value="${text(item.title)}">
         <input data-field="note" maxlength="500" placeholder="Poznámka" aria-label="Poznámka ${text(item.code)}" value="${text(item.note || "")}">
@@ -337,8 +313,8 @@ function activityEdit(item) {
   return `<td>${text(item.code)}</td>
       <td><input data-field="when" type="datetime-local" required aria-label="Kdy ${text(item.code)}" value="${text(toLocalInput(item.occurredAt))}"></td>
       <td><select data-field="kind" aria-label="Druh ${text(item.code)}">${choiceOptions(["Hovor", "Schůzka", "Poznámka"], item.kind)}</select></td>
-      <td><select data-field="customer" aria-label="Zákazník ${text(item.code)}">${options(customers, item.customerId, "— bez zákazníka —", customerLabel)}</select></td>
-      <td><select data-field="opportunity" aria-label="Příležitost ${text(item.code)}">${options(opportunities, item.opportunityId, "— bez příležitosti —", opportunityLabel)}</select></td>
+      <td><select data-field="customer" aria-label="Zákazník ${text(item.code)}">${options(catalogCustomers, item.customerId, "— bez zákazníka —", customerLabel)}</select></td>
+      <td><select data-field="opportunity" aria-label="Příležitost ${text(item.code)}">${options(catalogOpportunities, item.opportunityId, "— bez příležitosti —", opportunityLabel)}</select></td>
       <td><div class="stack">
         <input data-field="subject" required maxlength="160" aria-label="Předmět ${text(item.code)}" value="${text(item.subject)}">
         <textarea data-field="body" maxlength="1000" aria-label="Text ${text(item.code)}">${text(item.body || "")}</textarea>
@@ -363,7 +339,7 @@ function renderCounts(data) {
 }
 
 function renderRecent() {
-  const latestDeals = [...opportunities].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 8);
+  const latestDeals = [...catalogOpportunities].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 8);
   document.querySelector("#recent-opportunity-rows").innerHTML = latestDeals.map((item) => `<tr>
       <td>${text(item.code)}</td>
       <td>${text(customerName(item.customerId))}</td>
@@ -371,7 +347,7 @@ function renderRecent() {
       <td class="num">${formatMoney(item.amount)}</td>
       <td>${stagePill(item.stage)}</td>
     </tr>`).join("");
-  document.querySelector("#recent-activity-rows").innerHTML = activities.slice(0, 8).map((item) => `<tr>
+  document.querySelector("#recent-activity-rows").innerHTML = catalogActivities.slice(0, 8).map((item) => `<tr>
       <td>${formatDate(item.occurredAt)}</td>
       <td>${text(item.kind)}</td>
       <td>${text(customerName(item.customerId))}</td>
@@ -406,6 +382,10 @@ function renderActivities() {
 }
 
 function render(data) {
+  catalogCustomers = data.catalogCustomers ?? [];
+  catalogContacts = data.catalogContacts ?? [];
+  catalogOpportunities = data.catalogOpportunities ?? [];
+  catalogActivities = data.catalogActivities ?? [];
   customers = data.customers ?? [];
   contacts = data.contacts ?? [];
   opportunities = data.opportunities ?? [];
@@ -468,11 +448,11 @@ function activityPayload(read) {
   let customerId = String(read("customer") || "").trim();
   const opportunityId = String(read("opportunity") || "").trim();
   if (!customerId && opportunityId) {
-    const deal = opportunities.find((item) => item.id === opportunityId);
+    const deal = catalogOpportunities.find((item) => item.id === opportunityId);
     if (deal) customerId = deal.customerId;
   }
   if (opportunityId && customerId) {
-    const deal = opportunities.find((item) => item.id === opportunityId);
+    const deal = catalogOpportunities.find((item) => item.id === opportunityId);
     if (deal && deal.customerId !== customerId)
       return { ok: false, message: "Zákazník aktivity nesedí se zákazníkem příležitosti." };
   }
@@ -548,6 +528,13 @@ function cancelEdit(entity) {
   else renderActivities();
 }
 
+function listQuery(filter, name) {
+  const params = new URLSearchParams();
+  for (const value of filter?.values() ?? []) params.append(name, value);
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 async function load() {
   if (saving) return;
   const current = ++requestSeq;
@@ -560,10 +547,10 @@ async function load() {
   try {
     [boardResponse, customersResponse, contactsResponse, opportunitiesResponse, activitiesResponse] = await Promise.all([
       fetch("/api/crm/board", { cache: "no-store" }),
-      fetch("/api/crm/customers", { cache: "no-store" }),
-      fetch("/api/crm/contacts", { cache: "no-store" }),
-      fetch("/api/crm/opportunities", { cache: "no-store" }),
-      fetch("/api/crm/activities", { cache: "no-store" })
+      fetch(`/api/crm/customers${listQuery(kindFilter, "kind")}`, { cache: "no-store" }),
+      fetch(`/api/crm/contacts${listQuery(contactFilter, "customerId")}`, { cache: "no-store" }),
+      fetch(`/api/crm/opportunities${listQuery(stageFilter, "stage")}`, { cache: "no-store" }),
+      fetch(`/api/crm/activities${listQuery(activityFilter, "kind")}`, { cache: "no-store" })
     ]);
   } catch {
     if (current !== requestSeq) return;
@@ -585,6 +572,10 @@ async function load() {
     showMessage(data.message || "CRM se nepodařilo načíst.");
     return;
   }
+  data.catalogCustomers = Array.isArray(data.customers) ? data.customers : [];
+  data.catalogContacts = Array.isArray(data.contacts) ? data.contacts : [];
+  data.catalogOpportunities = Array.isArray(data.opportunities) ? data.opportunities : [];
+  data.catalogActivities = Array.isArray(data.activities) ? data.activities : [];
   if (customersResponse.ok && Array.isArray(customerData)) data.customers = customerData;
   if (contactsResponse.ok && Array.isArray(contactData)) data.contacts = contactData;
   if (opportunitiesResponse.ok && Array.isArray(opportunityData)) data.opportunities = opportunityData;
@@ -680,7 +671,7 @@ async function saveEntity(entity, id) {
 
 function syncCustomer(opportunitySelect, customerSelect) {
   if (!opportunitySelect?.value || !customerSelect) return;
-  const deal = opportunities.find((item) => item.id === opportunitySelect.value);
+  const deal = catalogOpportunities.find((item) => item.id === opportunitySelect.value);
   if (deal) customerSelect.value = deal.customerId;
 }
 
@@ -720,14 +711,34 @@ document.body.addEventListener("keydown", (event) => {
   event.preventDefault();
   openCard(card);
 });
-document.querySelector("#filter-kind").addEventListener("change", applyCustomerFilter);
-document.querySelector("#filter-stage").addEventListener("change", applyOpportunityFilter);
-document.querySelector("#filter-activity").addEventListener("change", applyActivityFilter);
-document.querySelector("#contact-filter").addEventListener("change", () => {
-  applyContactFilter();
-  const selected = document.querySelector("#contact-filter").value;
-  const target = document.querySelector("#contact-customer");
-  if (selected && !target.value) target.value = selected;
+kindFilter = window.bindStatusFilter(document.querySelector("#filter-kind"), {
+  param: "druh",
+  known: ["Firma", "Osoba"],
+  noun: { few: "druhy", many: "druhů" },
+  onChange() { load(); }
+});
+contactFilter = window.bindStatusFilter(document.querySelector("#contact-filter"), {
+  param: "kontakty",
+  dynamic: true,
+  noun: { few: "zákazníci", many: "zákazníků" },
+  onChange() {
+    const selected = contactFilter.values();
+    const target = document.querySelector("#contact-customer");
+    if (selected.length === 1 && selected[0] !== "*" && target && !target.value) target.value = selected[0];
+    load();
+  }
+});
+stageFilter = window.bindStatusFilter(document.querySelector("#filter-stage"), {
+  param: "faze",
+  known: ["Nový", "V jednání", "Nabídka", "Vyhráno", "Prohráno"],
+  noun: { few: "fáze", many: "fází" },
+  onChange() { load(); }
+});
+activityFilter = window.bindStatusFilter(document.querySelector("#filter-activity"), {
+  param: "aktivity",
+  known: ["Hovor", "Schůzka", "Poznámka"],
+  noun: { few: "druhy", many: "druhů" },
+  onChange() { load(); }
 });
 document.querySelector("#act-opportunity").addEventListener("change", (event) => {
   syncCustomer(event.target, document.querySelector("#act-customer"));
@@ -777,8 +788,9 @@ document.querySelector("#contact-create").addEventListener("submit", async (even
   saving = false;
   if (!created) return;
   event.target.reset();
-  const selectedCustomer = document.querySelector("#contact-filter").value;
-  if (selectedCustomer) document.querySelector("#contact-customer").value = selectedCustomer;
+  const selectedCustomer = contactFilter.values();
+  if (selectedCustomer.length === 1 && selectedCustomer[0] !== "*")
+    document.querySelector("#contact-customer").value = selectedCustomer[0];
   showMessage("");
   await load();
 });
