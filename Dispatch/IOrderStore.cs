@@ -27,4 +27,8 @@ public interface IOrderStore
     Task MarkSentAsync(OrderSyncEntry entry, PohodaImportResult result, CancellationToken cancellationToken);
 
     Task MarkFailedAsync(long id, string error, CancellationToken cancellationToken);
+
+    Task SavePayloadAsync(long id, string payloadXml, CancellationToken cancellationToken);
+
+    Task MarkDeleteCommittedAsync(OrderSyncEntry entry, string error, string addOnlyXml, CancellationToken cancellationToken);
 }

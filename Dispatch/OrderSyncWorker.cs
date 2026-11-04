@@ -72,8 +72,26 @@ public sealed class OrderSyncWorker(
                     continue;
                 }
 
-                logger.LogDebug("XML požadavku pro zakázku {OrderCode}: {PayloadXml}", entry.OrderCode, entry.PayloadXml);
-                var response = await pohoda.ImportXmlAsync(entry.PayloadXml, cancellationToken);
+                var source = DocumentFor(bundle, entry);
+                var lastSent = bundle.Order.LastSentVersion is int sentVersion
+                    ? bundle.Versions.FirstOrDefault(version => version.CurrentVersion == sentVersion)
+                    : null;
+                var sentCorrections = bundle.Sync.Count(item =>
+                    item.Action == OrderSyncActions.Correction && item.Status == OrderQueueStatuses.Sent);
+                var current = entry;
+                var payload = OrderPohodaXml.EnsureCurrent(options.Value, current, source, lastSent, sentCorrections);
+                if (!string.Equals(payload, current.PayloadXml, StringComparison.Ordinal))
+                {
+                    logger.LogInformation(
+                        "Fronta zakázky {OrderCode} má zastaralé XML ({Action}), posílá se aktuální požadavek.",
+                        current.OrderCode,
+                        current.Action);
+                    await store.SavePayloadAsync(current.Id, payload, cancellationToken);
+                    current = current with { PayloadXml = payload };
+                }
+
+                logger.LogDebug("XML požadavku pro zakázku {OrderCode}: {PayloadXml}", current.OrderCode, current.PayloadXml);
+                var response = await pohoda.ImportXmlAsync(current.PayloadXml, cancellationToken);
                 var result = OrderPohodaXml.ReadImport(response.Body);
                 if (!result.Ok)
                 {
@@ -82,11 +100,24 @@ public sealed class OrderSyncWorker(
                         "Odpověď Pohody po odmítnutí zakázky {OrderCode}: {Body}",
                         entry.OrderCode,
                         OrderSyncLimits.Cut(response.Body, ResponseLogLimit));
-                    await store.MarkFailedAsync(entry.Id, result.Error ?? "Pohoda vrátila chybu.", cancellationToken);
+                    if (result.DeleteCommitted)
+                    {
+                        var addOnly = OrderPohodaXml.AddOnly(options.Value, current, source, lastSent, sentCorrections);
+                        await store.MarkDeleteCommittedAsync(
+                            current,
+                            result.Error ?? "Smazání v Pohodě proběhlo, založení nové verze selhalo.",
+                            addOnly,
+                            cancellationToken);
+                    }
+                    else
+                    {
+                        await store.MarkFailedAsync(current.Id, result.Error ?? "Pohoda vrátila chybu.", cancellationToken);
+                    }
+
                     continue;
                 }
 
-                await store.MarkSentAsync(entry, result, cancellationToken);
+                await store.MarkSentAsync(current, result, cancellationToken);
                 logger.LogInformation(
                     "Zakázka {OrderCode} verze {Version} ({Action}) je v Pohodě jako {Number}.",
                     entry.OrderCode,
@@ -111,5 +142,16 @@ public sealed class OrderSyncWorker(
                 }
             }
         }
+    }
+
+    private static DispatchOrder DocumentFor(OrderBundle bundle, OrderSyncEntry entry)
+    {
+        var version = bundle.Versions.FirstOrDefault(item => item.CurrentVersion == entry.VersionTo) ?? bundle.Order;
+        return version with
+        {
+            Code = bundle.Order.Code,
+            PohodaOrderId = bundle.Order.PohodaOrderId,
+            PohodaOrderNumber = bundle.Order.PohodaOrderNumber
+        };
     }
 }

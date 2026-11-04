@@ -43,11 +43,11 @@ public sealed class SqlOrderStore(
                     o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
                     o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
                     o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
-                    q.Status AS LatestSyncStatus, q.LastError AS LatestSyncError
+                    q.Status AS LatestSyncStatus, q.LastError AS LatestSyncError, q.Warning AS LatestSyncWarning
                 FROM dbo.Disp_Order o
                 LEFT JOIN dbo.Disp_Trip t ON t.Id = o.TripId
                 OUTER APPLY (
-                    SELECT TOP (1) Status, LastError
+                    SELECT TOP (1) Status, LastError, Warning
                     FROM dbo.Disp_SyncQueue
                     WHERE OrderId = o.Id
                     ORDER BY Id DESC
@@ -72,7 +72,7 @@ public sealed class SqlOrderStore(
             order = await WithRouteAsync(connection, null, order, token);
             var versions = await LoadVersionsAsync(connection, null, order, token);
             var sync = await LoadQueueAsync(connection, null, id, token);
-            return new OrderBundle(order, versions, sync);
+            return new OrderBundle(WithLatestSync(order, sync), versions, sync);
         }, cancellationToken);
 
     public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken) =>
@@ -182,10 +182,8 @@ public sealed class SqlOrderStore(
                 """
                 UPDATE dbo.Disp_Order
                 SET LastSentVersion = @VersionTo,
-                    PohodaOrderId = CASE WHEN @Action = N'Create' AND @PohodaId IS NOT NULL THEN @PohodaId ELSE PohodaOrderId END,
-                    PohodaOrderNumber = CASE
-                        WHEN @Action IN (N'Create', N'Update') AND @Number IS NOT NULL THEN @Number
-                        ELSE PohodaOrderNumber END,
+                    PohodaOrderId = COALESCE(@PohodaId, PohodaOrderId),
+                    PohodaOrderNumber = COALESCE(@Number, PohodaOrderNumber),
                     UpdatedAt = @Now
                 WHERE Id = @OrderId
                 """,
@@ -195,7 +193,6 @@ public sealed class SqlOrderStore(
                 {
                     entry.OrderId,
                     entry.VersionTo,
-                    entry.Action,
                     PohodaId = result.Id,
                     Number = Trim(result.Number, 40),
                     Now = now
@@ -203,10 +200,8 @@ public sealed class SqlOrderStore(
             await connection.ExecuteAsync(Command(
                 """
                 UPDATE dbo.Disp_OrderVersion
-                SET PohodaOrderId = CASE WHEN @Action = N'Create' AND @PohodaId IS NOT NULL THEN @PohodaId ELSE PohodaOrderId END,
-                    PohodaOrderNumber = CASE
-                        WHEN @Action IN (N'Create', N'Update') AND @Number IS NOT NULL THEN @Number
-                        ELSE PohodaOrderNumber END
+                SET PohodaOrderId = COALESCE(@PohodaId, PohodaOrderId),
+                    PohodaOrderNumber = COALESCE(@Number, PohodaOrderNumber)
                 WHERE OrderId = @OrderId AND Version = @VersionTo
                 """,
                 transaction,
@@ -215,7 +210,6 @@ public sealed class SqlOrderStore(
                 {
                     entry.OrderId,
                     entry.VersionTo,
-                    entry.Action,
                     PohodaId = result.Id,
                     Number = Trim(result.Number, 40)
                 }));
@@ -244,6 +238,64 @@ public sealed class SqlOrderStore(
                     Now = DateTimeOffset.UtcNow,
                     Max = OrderSyncLimits.MaxAttempts
                 }));
+            await transaction!.CommitAsync(token);
+            return 0;
+        }, cancellationToken, transaction: true);
+
+    public Task SavePayloadAsync(long id, string payloadXml, CancellationToken cancellationToken) =>
+        InConnection(async (connection, transaction, token) =>
+        {
+            await connection.ExecuteAsync(Command(
+                """
+                UPDATE dbo.Disp_SyncQueue
+                SET PayloadXml = @PayloadXml
+                WHERE Id = @Id AND Status = N'Pending'
+                """,
+                transaction,
+                token,
+                new { Id = id, PayloadXml = payloadXml }));
+            await transaction!.CommitAsync(token);
+            return 0;
+        }, cancellationToken, transaction: true);
+
+    public Task MarkDeleteCommittedAsync(
+        OrderSyncEntry entry,
+        string error,
+        string addOnlyXml,
+        CancellationToken cancellationToken) =>
+        InConnection(async (connection, transaction, token) =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            await connection.ExecuteAsync(Command(
+                """
+                UPDATE dbo.Disp_SyncQueue
+                SET PayloadXml = @PayloadXml,
+                    Attempts = Attempts + 1,
+                    LastError = @LastError,
+                    ProcessedUtc = @Now,
+                    Status = CASE WHEN Attempts + 1 >= @Max THEN N'Failed' ELSE N'Pending' END
+                WHERE Id = @Id AND Status = N'Pending'
+                """,
+                transaction,
+                token,
+                new
+                {
+                    entry.Id,
+                    PayloadXml = addOnlyXml,
+                    LastError = Trim(error, OrderSyncLimits.LastErrorMaxLength),
+                    Now = now,
+                    Max = OrderSyncLimits.MaxAttempts
+                }));
+            await connection.ExecuteAsync(Command(
+                """
+                UPDATE dbo.Disp_Order
+                SET PohodaOrderId = NULL,
+                    UpdatedAt = @Now
+                WHERE Id = @OrderId
+                """,
+                transaction,
+                token,
+                new { entry.OrderId, Now = now }));
             await transaction!.CommitAsync(token);
             return 0;
         }, cancellationToken, transaction: true);
@@ -280,6 +332,17 @@ public sealed class SqlOrderStore(
                 latest = (await LoadQueueAsync(connection, transaction, id, token)).FirstOrDefault();
             }
 
+            var sentCorrections = id is null
+                ? 0
+                : await connection.ExecuteScalarAsync<int>(Command(
+                    """
+                    SELECT COUNT(*)
+                    FROM dbo.Disp_SyncQueue
+                    WHERE OrderId = @OrderId AND Action = N'Correction' AND Status = N'Sent'
+                    """,
+                    transaction,
+                    token,
+                    new { OrderId = id }));
             var context = new OrderEditContext
             {
                 Catalog = catalog,
@@ -288,7 +351,8 @@ public sealed class SqlOrderStore(
                 Now = DateTimeOffset.Now,
                 ExistingCodes = codes,
                 Current = current,
-                LastSent = lastSent
+                LastSent = lastSent,
+                SentCorrections = sentCorrections
             };
             var result = change(context, latest);
             if (result is not OrderChange.Saved saved)
@@ -318,7 +382,25 @@ public sealed class SqlOrderStore(
     {
         if (saved.Queue is null)
             return saved.Order;
-        return saved.Order with { LatestSyncStatus = saved.Queue.Status, LatestSyncError = null };
+        return saved.Order with
+        {
+            LatestSyncStatus = saved.Queue.Status,
+            LatestSyncError = null,
+            LatestSyncWarning = saved.Queue.Warning
+        };
+    }
+
+    private static DispatchOrder WithLatestSync(DispatchOrder order, IReadOnlyList<OrderSyncEntry> sync)
+    {
+        var latest = sync.FirstOrDefault();
+        if (latest is null)
+            return order;
+        return order with
+        {
+            LatestSyncStatus = latest.Status,
+            LatestSyncError = latest.LastError,
+            LatestSyncWarning = latest.Warning
+        };
     }
 
     private async Task<T> InConnection<T>(
@@ -739,9 +821,9 @@ public sealed class SqlOrderStore(
             await connection.ExecuteAsync(Command(
                 """
                 INSERT INTO dbo.Disp_SyncQueue
-                    (OrderId, VersionFrom, VersionTo, Action, PayloadXml, Status, Attempts, LastError, CreatedUtc, ProcessedUtc, PohodaDocNumber)
+                    (OrderId, VersionFrom, VersionTo, Action, PayloadXml, Status, Attempts, LastError, CreatedUtc, ProcessedUtc, PohodaDocNumber, Warning)
                 VALUES
-                    (@OrderId, @VersionFrom, @VersionTo, @Action, @PayloadXml, @Status, 0, NULL, @CreatedUtc, NULL, NULL)
+                    (@OrderId, @VersionFrom, @VersionTo, @Action, @PayloadXml, @Status, 0, NULL, @CreatedUtc, NULL, NULL, @Warning)
                 """,
                 transaction,
                 cancellationToken,
@@ -753,7 +835,8 @@ public sealed class SqlOrderStore(
                     queue.Action,
                     queue.PayloadXml,
                     queue.Status,
-                    CreatedUtc = DateTimeOffset.UtcNow
+                    CreatedUtc = DateTimeOffset.UtcNow,
+                    Warning = Trim(queue.Warning, OrderSyncLimits.LastErrorMaxLength)
                 }));
             return;
         }
@@ -766,6 +849,7 @@ public sealed class SqlOrderStore(
                 Action = @Action,
                 PayloadXml = @PayloadXml,
                 Status = @Status,
+                Warning = @Warning,
                 Attempts = CASE WHEN @Reset = 1 THEN 0 ELSE Attempts END,
                 LastError = CASE WHEN @Reset = 1 THEN NULL ELSE LastError END,
                 ProcessedUtc = CASE WHEN @Reset = 1 THEN NULL ELSE ProcessedUtc END
@@ -781,6 +865,7 @@ public sealed class SqlOrderStore(
                 queue.Action,
                 queue.PayloadXml,
                 queue.Status,
+                Warning = Trim(queue.Warning, OrderSyncLimits.LastErrorMaxLength),
                 Reset = queue.ResetAttempts ? 1 : 0
             }));
     }
@@ -789,7 +874,7 @@ public sealed class SqlOrderStore(
         """
         SELECT
             q.Id, q.OrderId, o.Code AS OrderCode, q.VersionFrom, q.VersionTo, q.Action, q.PayloadXml,
-            q.Status, q.Attempts, q.LastError, q.CreatedUtc, q.ProcessedUtc, q.PohodaDocNumber
+            q.Status, q.Attempts, q.LastError, q.CreatedUtc, q.ProcessedUtc, q.PohodaDocNumber, q.Warning
         FROM dbo.Disp_SyncQueue q
         INNER JOIN dbo.Disp_Order o ON o.Id = q.OrderId
         """;
@@ -833,6 +918,7 @@ public sealed class SqlOrderStore(
         public DateTimeOffset UpdatedAt { get; set; }
         public string? LatestSyncStatus { get; set; }
         public string? LatestSyncError { get; set; }
+        public string? LatestSyncWarning { get; set; }
         public string PricingMode { get; set; } = OrderPricing.ByKm;
         public decimal SalePerKm { get; set; }
         public decimal SalePerLiter { get; set; }
@@ -842,7 +928,7 @@ public sealed class SqlOrderStore(
             Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
             FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
             IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
-            CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
+            CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, LatestSyncWarning, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
     }
 
     private sealed class VehicleCostRow
@@ -887,7 +973,7 @@ public sealed class SqlOrderStore(
                 order.Id, order.Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
                 FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
                 IsLocked, Version, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, order.LastSentVersion,
-                order.CreatedAt, CreatedUtc, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
+                order.CreatedAt, CreatedUtc, null, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm);
             return OrderRoute.Read(version, RouteJson);
         }
     }
@@ -907,10 +993,11 @@ public sealed class SqlOrderStore(
         public DateTimeOffset CreatedUtc { get; set; }
         public DateTimeOffset? ProcessedUtc { get; set; }
         public string? PohodaDocNumber { get; set; }
+        public string? Warning { get; set; }
 
         public OrderSyncEntry ToEntry() => new(
             Id, OrderId, OrderCode, VersionFrom, VersionTo, Action, PayloadXml, Status, Attempts, LastError,
-            CreatedUtc, ProcessedUtc, PohodaDocNumber);
+            CreatedUtc, ProcessedUtc, PohodaDocNumber, Warning);
     }
 
     private sealed class DateOnlyHandler : SqlMapper.TypeHandler<DateOnly>

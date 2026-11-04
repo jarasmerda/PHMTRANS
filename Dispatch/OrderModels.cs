@@ -115,6 +115,7 @@ public sealed record DispatchOrder(
     DateTimeOffset UpdatedAt,
     string? LatestSyncStatus = null,
     string? LatestSyncError = null,
+    string? LatestSyncWarning = null,
     string PricingMode = OrderPricing.ByKm,
     decimal SalePerKm = 0m,
     decimal SalePerLiter = 0m,
@@ -161,7 +162,8 @@ public sealed record OrderSyncEntry(
     string? LastError,
     DateTimeOffset CreatedUtc,
     DateTimeOffset? ProcessedUtc,
-    string? PohodaDocNumber);
+    string? PohodaDocNumber,
+    string? Warning = null);
 
 public sealed record OrderStatusCount(string Status, int Count);
 
@@ -183,11 +185,12 @@ public sealed record OrderBundle(
     IReadOnlyList<DispatchOrder> Versions,
     IReadOnlyList<OrderSyncEntry> Sync);
 
-public sealed record PohodaImportResult(bool Ok, int? Id, string? Number, string? Error)
+public sealed record PohodaImportResult(bool Ok, int? Id, string? Number, string? Error, bool DeleteCommitted = false)
 {
     public static PohodaImportResult Success(int? id, string? number) => new(true, id, number, null);
 
-    public static PohodaImportResult Failure(string error) => new(false, null, null, error);
+    public static PohodaImportResult Failure(string error, bool deleteCommitted = false) =>
+        new(false, null, null, error, deleteCommitted);
 }
 
 public abstract record OrderMutation

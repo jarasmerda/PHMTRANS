@@ -59,7 +59,7 @@
       overflow: auto;
       font-size: 0.78rem;
     }
-    #order-message, #queue-message, .route-warn { color: var(--alert); font-weight: 700; }
+    #order-message, #queue-message, .route-warn, .note.warn { color: var(--alert); font-weight: 700; }
     #trip-detail, #rates-wrap {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -272,6 +272,7 @@
     <section id="order-detail" hidden>
       <h2 id="order-detail-title">Zakázka</h2>
       <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
+      <p id="order-sync-warning" class="note warn" hidden></p>
       <form id="order-edit"></form>
       <div class="order-actions">
         <button type="button" id="order-save">Uložit změny</button>

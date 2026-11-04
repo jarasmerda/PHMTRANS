@@ -354,6 +354,7 @@ public sealed class DispatchPageTests
         Assert.Contains("dispecink-orders.js?v=2", html, StringComparison.Ordinal);
         Assert.Contains("id=\"trip-detail\"", html, StringComparison.Ordinal);
         Assert.Contains("Součet litrů", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"order-sync-warning\"", html, StringComparison.Ordinal);
         Assert.Contains("Potvrdit k fakturaci", html, StringComparison.Ordinal);
         Assert.Contains("Fronta Pohody", html, StringComparison.Ordinal);
         Assert.Contains(">Upravit</button>", js, StringComparison.Ordinal);
@@ -404,7 +405,7 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(12, Count(script, "ALTER TABLE"));
+        Assert.Equal(13, Count(script, "ALTER TABLE"));
         Assert.Equal(3, DispatchSchema.Batches.Length);
         Assert.Contains("dbo.Disp_OrderStop", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_OrderLeg", script, StringComparison.Ordinal);
@@ -414,6 +415,8 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("WHERE v.RouteJson IS NULL", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.DoesNotContain("ALTER TABLE", DispatchSchema.Data, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("UPDATE ", DispatchSchema.Columns, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("IF COL_LENGTH(N'dbo.Disp_SyncQueue', N'Warning') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE dbo.Disp_SyncQueue ADD Warning nvarchar(1000) NULL", script, StringComparison.Ordinal);
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);

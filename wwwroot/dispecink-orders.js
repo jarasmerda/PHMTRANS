@@ -63,6 +63,11 @@ function actionLabel(action) {
   return { Create: "Založení", Update: "Aktualizace", Correction: "Oprava" }[action] || action;
 }
 
+function versionWarning(data, version) {
+  const text = (data.sync ?? []).find((item) => item.versionTo === version.currentVersion && item.warning)?.warning;
+  return text ? `<div class="note warn">${orderText(text)}</div>` : "";
+}
+
 function syncPill(status) {
   if (!status) return "—";
   const kind = status === "Failed" ? "warn" : status === "Sent" ? "ok" : "";
@@ -322,7 +327,7 @@ function renderOrders(data) {
       <td>${orderText(order.fuelType)}<br><span class="route-to">${orderLiters.format(Number(order.liters || 0))} l</span></td>
       <td class="num">${orderText(priceText(order))}</td>
       <td>${orderText(order.status)}${order.isLocked ? `<br><span class="pill">Zámek</span>` : ""}</td>
-      <td>${orderText(order.pohodaOrderNumber || "—")}<br>${syncPill(order.latestSyncStatus)}</td>
+      <td>${orderText(order.pohodaOrderNumber || "—")}<br>${syncPill(order.latestSyncStatus)}${order.latestSyncWarning ? `<div class="note warn">${orderText(order.latestSyncWarning)}</div>` : ""}</td>
       <td><button type="button" data-open="${orderText(order.id)}">Otevřít</button></td>
     </tr>`).join("");
   document.querySelector("#order-table-wrap").hidden = false;
@@ -338,6 +343,10 @@ function renderDetail(data) {
   const order = data.order;
   document.querySelector("#order-detail").hidden = false;
   document.querySelector("#order-detail-title").textContent = `${order.code} · verze ${order.currentVersion}`;
+  const syncWarning = (data.sync ?? []).find((item) => item.warning)?.warning || order.latestSyncWarning || "";
+  const warningNote = document.querySelector("#order-sync-warning");
+  warningNote.hidden = !syncWarning;
+  warningNote.textContent = syncWarning;
   document.querySelector("#order-lock-note").hidden = !order.isLocked;
   document.querySelector("#order-confirm").disabled = !!order.isLocked;
   document.querySelector("#order-edit").innerHTML = formFields("edit", order);
@@ -352,13 +361,14 @@ function renderDetail(data) {
       <td>${orderText(version.fuelType)}, ${orderLiters.format(Number(version.liters || 0))} l</td>
       <td class="num">${orderMoney.format(Number(version.agreedPrice || 0))}</td>
       <td class="num">${orderMoney.format(Number(version.surcharges || 0))}</td>
-      <td>${orderText(version.status)}</td>
+      <td>${orderText(version.status)}${versionWarning(data, version)}</td>
     </tr>`).join("");
   document.querySelector("#order-sync").innerHTML = (data.sync ?? []).length === 0
     ? `<p class="note">Do Pohody se zatím nic neposílalo. Poznámka, řidič a CMR se do fronty nedávají.</p>`
     : (data.sync ?? []).map((item) => `<article>
         <p><strong>${orderText(actionLabel(item.action))}</strong> verze ${orderText(item.versionFrom ?? "—")} → ${orderText(item.versionTo)}
         ${syncPill(item.status)} pokus ${orderText(item.attempts)}${item.pohodaDocNumber ? `, doklad ${orderText(item.pohodaDocNumber)}` : ""}</p>
+        ${item.warning ? `<p class="note warn">${orderText(item.warning)}</p>` : ""}
         ${item.lastError ? `<p class="note">${orderText(item.lastError)}</p>` : ""}
         <pre class="xml">${orderText(item.payloadXml)}</pre>
       </article>`).join("");
@@ -375,7 +385,7 @@ function renderQueue(data) {
       <td>${syncPill(item.status)}</td>
       <td class="num">${orderText(item.attempts)}</td>
       <td>${orderText(item.pohodaDocNumber || "—")}</td>
-      <td>${orderText(item.lastError || "")}</td>
+      <td>${item.warning ? `<div class="note warn">${orderText(item.warning)}</div>` : ""}${orderText(item.lastError || "")}</td>
       <td><button type="button" class="ghost" data-xml="${orderText(item.id)}">XML</button></td>
     </tr>`).join("");
   document.querySelector("#queue-empty").hidden = queueItems.length > 0;
