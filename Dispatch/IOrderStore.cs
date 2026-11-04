@@ -6,9 +6,13 @@ public interface IOrderStore
 
     Task<OrderBundle?> GetAsync(string id, CancellationToken cancellationToken);
 
-    Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken);
+    Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken, string? updatedBy = null);
 
-    Task<OrderMutation> UpdateAsync(string id, OrderSaveRequest request, CancellationToken cancellationToken);
+    Task<OrderMutation> UpdateAsync(string id, OrderSaveRequest request, CancellationToken cancellationToken, string? updatedBy = null);
+
+    Task<IReadOnlyList<FuelTypeItem>> ListFuelTypesAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken);
 
     Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken);
 

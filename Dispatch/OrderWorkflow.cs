@@ -8,7 +8,8 @@ public sealed record OrderCatalog(
     IReadOnlySet<string> TripIds,
     IReadOnlyDictionary<string, TripLink>? Trips = null,
     decimal DefaultCostPerKm = 0m,
-    IReadOnlyDictionary<string, decimal>? VehicleCostPerKm = null)
+    IReadOnlyDictionary<string, decimal>? VehicleCostPerKm = null,
+    IReadOnlyList<FuelTypeItem>? FuelTypes = null)
 {
     public static OrderCatalog Empty { get; } = new(
         new HashSet<string>(StringComparer.Ordinal),
@@ -43,6 +44,9 @@ public sealed class OrderEditContext
     public DispatchOrder? LastSent { get; init; }
 
     public int SentCorrections { get; init; }
+
+    public IReadOnlyDictionary<string, decimal> Distances { get; init; } =
+        new Dictionary<string, decimal>(StringComparer.Ordinal);
 }
 
 public abstract record OrderChange
@@ -51,7 +55,12 @@ public abstract record OrderChange
     {
     }
 
-    public sealed record Saved(DispatchOrder Order, bool VersionAdded, QueueUpsert? Queue, bool DropOpenQueue = false) : OrderChange;
+    public sealed record Saved(
+        DispatchOrder Order,
+        bool VersionAdded,
+        QueueUpsert? Queue,
+        bool DropOpenQueue = false,
+        IReadOnlyList<DistanceWrite>? Distances = null) : OrderChange;
 
     public sealed record Deleted(string Id) : OrderChange;
 
@@ -65,7 +74,7 @@ public static class OrderWorkflow
         if (context.Current is not null)
             return new OrderChange.Rejected("Nová zakázka už má id.");
 
-        var draft = Read(request, current: null);
+        var draft = Read(request, current: null, context.Catalog);
         if (draft.Error is not null)
             return new OrderChange.Rejected(draft.Error);
 
@@ -74,10 +83,10 @@ public static class OrderWorkflow
             return new OrderChange.Rejected(assignment);
 
         var order = Build(draft, context, id: NewId(), code: NextCode(context.ExistingCodes, context.Now), version: 1, createdAt: context.Now);
-        var routed = OrderRoute.Materialize(order, request, context.Catalog);
+        var routed = OrderRoute.Materialize(order, request, context.Catalog, distances: context.Distances);
         if (routed.Error is not null)
             return new OrderChange.Rejected(routed.Error);
-        return Finish(routed.Order!, previous: null, context, versionAdded: true, confirmRequested: false);
+        return WithDistances(Finish(routed.Order!, previous: null, context, versionAdded: true, confirmRequested: false), routed.Distances);
     }
 
     public static OrderChange Save(OrderSaveRequest request, OrderEditContext context)
@@ -87,7 +96,7 @@ public static class OrderWorkflow
         if (context.Current.Status == OrderStatuses.Stornovano)
             return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
 
-        var draft = Read(request, context.Current);
+        var draft = Read(request, context.Current, context.Catalog);
         if (draft.Error is not null)
             return new OrderChange.Rejected(draft.Error);
 
@@ -96,13 +105,13 @@ public static class OrderWorkflow
             return new OrderChange.Rejected(assignment);
 
         var order = Build(draft, context, context.Current.Id, context.Current.Code, context.Current.CurrentVersion + 1, context.Current.CreatedAt);
-        var routed = OrderRoute.Materialize(order, request, context.Catalog, context.Current);
+        var routed = OrderRoute.Materialize(order, request, context.Catalog, context.Current, context.Distances);
         if (routed.Error is not null)
             return new OrderChange.Rejected(routed.Error);
         if (OrderPohodaFields.SameDocument(context.Current, routed.Order!))
-            return new OrderChange.Saved(context.Current, false, null);
+            return WithDistances(new OrderChange.Saved(context.Current, false, null), routed.Distances);
 
-        return Finish(routed.Order!, context.Current, context, versionAdded: true, confirmRequested: false);
+        return WithDistances(Finish(routed.Order!, context.Current, context, versionAdded: true, confirmRequested: false), routed.Distances);
     }
 
     public static OrderChange Confirm(OrderEditContext context)
@@ -348,7 +357,8 @@ public static class OrderWorkflow
             CustomerCity: draft.CustomerCity,
             CustomerZip: draft.CustomerZip,
             CustomerEmail: draft.CustomerEmail,
-            CustomerPhone: draft.CustomerPhone);
+            CustomerPhone: draft.CustomerPhone,
+            FuelTypeId: draft.FuelTypeId);
     }
 
     private static (string Status, bool Locked, string? Invoice) ResolveState(
@@ -372,7 +382,7 @@ public static class OrderWorkflow
         return (status, locked, invoice);
     }
 
-    private static Draft Read(OrderSaveRequest request, DispatchOrder? current)
+    private static Draft Read(OrderSaveRequest request, DispatchOrder? current, OrderCatalog catalog)
     {
         if (request.CustomerPohodaId is 0 or < 0)
             return Draft.Fail("Id zákazníka v Pohodě musí být kladné číslo.");
@@ -414,7 +424,11 @@ public static class OrderWorkflow
         var unloading = Required(unloadingSource, 160, "Vyplňte místo vykládky.", "Místo vykládky může mít nejvýše 160 znaků.");
         if (unloading.Error is not null)
             return Draft.Fail(unloading.Error);
-        var fuel = Required(request.FuelType, 80, "Vyplňte druh paliva.", "Druh paliva může mít nejvýše 80 znaků.");
+        var requestedFuel = request.FuelTypeId is null && string.IsNullOrWhiteSpace(request.FuelType);
+        var fuel = ResolveFuel(
+            requestedFuel ? current?.FuelTypeId : request.FuelTypeId,
+            requestedFuel ? current?.FuelType : request.FuelType,
+            catalog.FuelTypes);
         if (fuel.Error is not null)
             return Draft.Fail(fuel.Error);
 
@@ -461,7 +475,7 @@ public static class OrderWorkflow
             unloading.Value,
             request.LoadingDate,
             request.UnloadingDate,
-            fuel.Value,
+            fuel.Name,
             decimal.Round(request.Liters.Value, 3, MidpointRounding.AwayFromZero),
             OrderPohodaFields.Money(agreedPrice),
             OrderPohodaFields.Money(surcharges),
@@ -478,7 +492,29 @@ public static class OrderWorkflow
             city.Value,
             zip.Value,
             email.Value,
-            phone.Value);
+            phone.Value,
+            fuel.Id);
+    }
+
+    private static OrderChange WithDistances(OrderChange change, IReadOnlyList<DistanceWrite>? distances)
+    {
+        if (change is not OrderChange.Saved saved || distances is not { Count: > 0 })
+            return change;
+        return saved with { Distances = distances };
+    }
+
+    private static (int? Id, string? Name, string? Error) ResolveFuel(int? id, string? name, IReadOnlyList<FuelTypeItem>? types)
+    {
+        if (types is not { Count: > 0 })
+        {
+            var free = Required(name, 80, "Vyplňte druh paliva.", "Druh paliva může mít nejvýše 80 znaků.");
+            return (null, free.Value, free.Error);
+        }
+
+        var match = FuelTypeCatalog.Find(types, id, name);
+        return match is null
+            ? (null, null, "Vyberte druh paliva.")
+            : (match.Id, match.Name, null);
     }
 
     private static string? CheckLinks(Draft draft, OrderCatalog catalog)
@@ -560,7 +596,8 @@ public static class OrderWorkflow
         string? CustomerCity = null,
         string? CustomerZip = null,
         string? CustomerEmail = null,
-        string? CustomerPhone = null)
+        string? CustomerPhone = null,
+        int? FuelTypeId = null)
     {
         public static Draft Fail(string error) => new(error, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }

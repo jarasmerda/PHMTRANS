@@ -10,12 +10,13 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
     private readonly List<DispatchOrder> _orders = [];
     private readonly List<DispatchOrder> _versions = [];
     private readonly List<OrderSyncEntry> _queue = [];
+    private readonly DistanceBook _distances = new();
     private long _nextQueueId;
 
     public Task<IReadOnlyList<DispatchOrder>> ListAsync(CancellationToken cancellationToken) =>
         With(async token =>
         {
-            var catalog = await Catalog(token);
+            var catalog = FuelTypeCatalog.WithSeed(await Catalog(token));
             var list = _orders.Select(order => OrderRoute.Display(order with
             {
                 LatestSyncStatus = Latest(order.Id)?.Status,
@@ -31,7 +32,7 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
             var order = _orders.FirstOrDefault(item => item.Id == id);
             if (order is null)
                 return (OrderBundle?)null;
-            var catalog = await Catalog(token);
+            var catalog = FuelTypeCatalog.WithSeed(await Catalog(token));
             var versions = _versions.Where(item => item.Id == id).OrderByDescending(item => item.CurrentVersion).ToArray();
             var sync = _queue.Where(item => item.OrderId == id).OrderByDescending(item => item.Id).ToArray();
             var latest = sync.FirstOrDefault();
@@ -46,11 +47,17 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
             return (OrderBundle?)new OrderBundle(OrderRoute.Display(shown, catalog), versions, sync);
         }, cancellationToken);
 
-    public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken) =>
-        Change(null, (context, _) => OrderWorkflow.Create(request, context), cancellationToken);
+    public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken, string? updatedBy = null) =>
+        Change(null, (context, _) => OrderWorkflow.Create(request, context), cancellationToken, updatedBy);
 
-    public Task<OrderMutation> UpdateAsync(string id, OrderSaveRequest request, CancellationToken cancellationToken) =>
-        Change(id, (context, _) => OrderWorkflow.Save(request, context), cancellationToken);
+    public Task<OrderMutation> UpdateAsync(string id, OrderSaveRequest request, CancellationToken cancellationToken, string? updatedBy = null) =>
+        Change(id, (context, _) => OrderWorkflow.Save(request, context), cancellationToken, updatedBy);
+
+    public Task<IReadOnlyList<FuelTypeItem>> ListFuelTypesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(FuelTypeCatalog.Seed);
+
+    public Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken) =>
+        Task.FromResult(_distances.Lookup(pairs));
 
     public Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken) =>
         Change(id, (context, _) => OrderWorkflow.Confirm(context), cancellationToken);
@@ -176,12 +183,13 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
     private async Task<OrderMutation> Change(
         string? id,
         Func<OrderEditContext, OrderSyncEntry?, OrderChange> change,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? updatedBy = null)
     {
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var catalog = OrderCatalogs.From(await dispatch.ReadAsync(cancellationToken));
+            var catalog = FuelTypeCatalog.WithSeed(OrderCatalogs.From(await dispatch.ReadAsync(cancellationToken)));
             DispatchOrder? current = null;
             DispatchOrder? lastSent = null;
             OrderSyncEntry? latest = null;
@@ -206,7 +214,8 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
                 LastSent = lastSent,
                 SentCorrections = id is null
                     ? 0
-                    : _queue.Count(item => item.OrderId == id && OrderSyncActions.CountsTowardCorrectionIndex(item.Action) && item.Status == OrderQueueStatuses.Sent)
+                    : _queue.Count(item => item.OrderId == id && OrderSyncActions.CountsTowardCorrectionIndex(item.Action) && item.Status == OrderQueueStatuses.Sent),
+                Distances = _distances.Map()
             };
             var result = change(context, latest);
             if (result is OrderChange.Deleted deleted)
@@ -234,6 +243,7 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
                 DropOpen(order.Id);
             if (saved.Queue is not null)
                 Upsert(order, saved.Queue);
+            _distances.Apply(saved.Distances, context.Now, updatedBy);
             return new OrderMutation.Success(_orders.First(item => item.Id == order.Id));
         }
         finally

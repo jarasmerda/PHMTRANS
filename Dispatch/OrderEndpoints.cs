@@ -10,6 +10,8 @@ public static class OrderEndpoints
         var api = app.MapGroup("/api/dispatch");
         api.MapGet("/orders", ListOrders);
         api.MapGet("/orders/{id}", GetOrder);
+        api.MapGet("/fuel-types", ListFuelTypes);
+        api.MapPost("/distances/lookup", LookupDistances);
         api.MapPost("/orders", CreateOrder);
         api.MapPut("/orders/{id}", UpdateOrder);
         api.MapPost("/orders/{id}/confirm", ConfirmOrder);
@@ -63,15 +65,42 @@ public static class OrderEndpoints
             return Results.Ok(new OrderDetailResponse(bundle.Order, bundle.Versions, bundle.Sync, mode, OrderSyncMode.Describe(mode)));
         });
 
-    private static Task<IResult> CreateOrder(OrderSaveRequest request, IOrderStore store, CancellationToken cancellationToken) =>
-        Execute(async () => ToResult(await store.CreateAsync(request, cancellationToken)));
+    private static Task<IResult> ListFuelTypes(IOrderStore store, CancellationToken cancellationToken) =>
+        Execute(async () => Results.Ok(await store.ListFuelTypesAsync(cancellationToken)));
+
+    private static Task<IResult> LookupDistances(
+        DistanceLookupRequest? request,
+        IOrderStore store,
+        CancellationToken cancellationToken) =>
+        Execute(async () =>
+        {
+            var pairs = request?.Pairs ?? [];
+            if (pairs.Count > 40)
+                return Results.BadRequest(new { message = "Najednou lze ověřit nejvýše 40 úseků." });
+            return Results.Ok(new { pairs = await store.LookupDistancesAsync(pairs, cancellationToken) });
+        });
+
+    private static Task<IResult> CreateOrder(
+        OrderSaveRequest request,
+        IOrderStore store,
+        HttpContext httpContext,
+        CancellationToken cancellationToken) =>
+        Execute(async () => ToResult(await store.CreateAsync(request, cancellationToken, Actor(httpContext))));
 
     private static Task<IResult> UpdateOrder(
         string id,
         OrderSaveRequest request,
         IOrderStore store,
+        HttpContext httpContext,
         CancellationToken cancellationToken) =>
-        Execute(async () => ToResult(await store.UpdateAsync(id, request, cancellationToken)));
+        Execute(async () => ToResult(await store.UpdateAsync(id, request, cancellationToken, Actor(httpContext))));
+
+    private static string? Actor(HttpContext httpContext)
+    {
+        var display = httpContext.User.FindFirst("display_name")?.Value;
+        var name = string.IsNullOrWhiteSpace(display) ? httpContext.User.Identity?.Name : display;
+        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+    }
 
     private static Task<IResult> ConfirmOrder(string id, IOrderStore store, CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.ConfirmAsync(id, cancellationToken)));
@@ -146,6 +175,8 @@ public static class OrderEndpoints
 }
 
 public sealed record MarkInvoicedRequest(string? InvoiceNumber);
+
+public sealed record DistanceLookupRequest(IReadOnlyList<DistanceQuery>? Pairs);
 
 public sealed record OrderSyncResponse(
     string SyncMode,

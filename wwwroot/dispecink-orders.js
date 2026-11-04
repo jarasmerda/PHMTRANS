@@ -7,7 +7,11 @@ const orderTime = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeSty
 const orderStatuses = ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno"];
 const orderMessage = document.querySelector("#order-message");
 const queueMessage = document.querySelector("#queue-message");
-let orderCatalog = { vehicles: [], drivers: [], trips: [] };
+let orderCatalog = { vehicles: [], drivers: [], trips: [], fuelTypes: [] };
+const distanceCache = new Map();
+const distanceTimers = {};
+const distanceGeneration = {};
+let applyingMatrixKm = false;
 let orderList = [];
 let orderDetail = null;
 let orderSaving = false;
@@ -129,7 +133,7 @@ function formFields(prefix, order) {
     <label>Nakládka <input id="${prefix}-loading" required maxlength="160" value="${orderText(order?.loadingPlace || "")}"></label>
     <label>Datum nakládky <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}"></label>
     <label>Datum vykládky <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}"></label>
-    <label>Druh paliva <input id="${prefix}-fuel" required maxlength="80" value="${orderText(order?.fuelType || "")}" placeholder="motorová nafta"></label>
+    <label>Druh paliva <select id="${prefix}-fuel" required>${fuelOptions(order?.fuelTypeId, order?.fuelType, !order)}</select></label>
     <label>Naložené litry <input id="${prefix}-liters" type="number" min="0" step="0.001" required value="${orderText(order?.liters ?? "")}"></label>
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
@@ -151,7 +155,7 @@ function formFields(prefix, order) {
     <label class="wide">Poznámka <input id="${prefix}-note" maxlength="500" value="${orderText(order?.note || "")}"></label>
     <div class="wide" id="${prefix}-route" data-route="${prefix}">
       <h3>Vykládky a úseky</h3>
-      <div id="${prefix}-stops">${stops.map((stop, index) => stopRow(prefix, stop, legs[index])).join("")}</div>
+      <div id="${prefix}-stops">${stops.map((stop, index) => stopRow(prefix, stop, legs[index], order?.fuelTypeId, order?.fuelType)).join("")}</div>
       <button type="button" data-add-stop="${prefix}">Přidat vykládku</button>
       <div id="${prefix}-totals" class="totals"></div>
       <p id="${prefix}-liter-warn" class="route-warn" hidden>Součet litrů na vykládkách je vyšší než naložené litry.</p>
@@ -160,12 +164,43 @@ function formFields(prefix, order) {
   `;
 }
 
-function stopRow(prefix, stop, leg) {
+function fuelOptions(selectedId, fallbackName, preferFirst) {
+  const items = orderCatalog.fuelTypes || [];
+  const fallback = String(fallbackName || "").trim();
+  const byId = selectedId ? items.find((item) => item.id === selectedId) : null;
+  const byName = !byId && fallback
+    ? items.find((item) => item.name.localeCompare(fallback, "cs", { sensitivity: "accent" }) === 0)
+    : null;
+  const match = byId || byName || (preferFirst ? items[0] : null);
+  const selected = match ? match.id : "";
+  const placeholder = match
+    ? `<option value="">— vyberte —</option>`
+    : `<option value="" selected>${orderText(fallback || "— vyberte —")}</option>`;
+  const body = items.map((item) =>
+    `<option value="${item.id}"${item.id === selected ? " selected" : ""}>${orderText(item.name)}</option>`).join("");
+  return placeholder + body;
+}
+
+function stopFuelId(stop, headerFuelId, headerFuelName) {
+  if (stop?.fuelTypeId) return stop.fuelTypeId;
+  const items = orderCatalog.fuelTypes || [];
+  const named = headerFuelName
+    ? items.find((item) => item.name.localeCompare(String(headerFuelName).trim(), "cs", { sensitivity: "accent" }) === 0)
+    : null;
+  return headerFuelId || named?.id || items[0]?.id || "";
+}
+
+function stopRow(prefix, stop, leg, headerFuelId, headerFuelName) {
   const arrival = stop?.arrivalAt ? toOrderLocal(stop.arrivalAt) : "";
-  return `<div class="stop-row" data-stop-row>
+  const headerDefault = stopFuelId(null, headerFuelId, headerFuelName);
+  const fuelId = stop?.fuelTypeId || headerDefault;
+  const linked = !stop?.fuelTypeId || String(stop.fuelTypeId) === String(headerDefault) ? "1" : "0";
+  const source = leg?.kmSource === "Matrix" || leg?.kmSource === "Manual" ? leg.kmSource : "";
+  return `<div class="stop-row" data-stop-row data-km-source="${orderText(source)}">
       <label>Místo <input data-stop-place maxlength="160" value="${orderText(stop?.place || "")}"></label>
+      <label>Palivo <select data-stop-fuel data-fuel-linked="${linked}">${fuelOptions(fuelId, stop?.fuelType || headerFuelName, false)}</select></label>
       <label>Litry <input data-stop-liters type="number" min="0" step="0.001" value="${orderText(stop?.liters ?? "")}"></label>
-      <label>Km <input data-leg-km type="number" min="0" step="0.001" value="${orderText(leg?.kilometers ?? "")}"></label>
+      <label>Km <input data-leg-km type="number" min="0" step="0.001" value="${orderText(leg?.kilometers ?? "")}"><span class="km-source" data-km-label></span></label>
       <label>Prodej Kč <input data-leg-sale type="number" min="0" step="0.01" value="${orderText(leg?.salePrice ?? "")}"${leg?.saleOverridden ? "" : " readonly"}></label>
       <label class="stop-override"><input data-leg-override type="checkbox"${leg?.saleOverridden ? " checked" : ""}> Ruční cena</label>
       <label class="stop-note">Poznámka <input data-stop-note maxlength="500" value="${orderText(stop?.note || "")}"></label>
@@ -183,6 +218,135 @@ function toOrderLocal(value) {
   if (Number.isNaN(date.getTime())) return "";
   const pad = (part) => String(part).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function normalizePlace(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function canonicalKey(from, to) {
+  const left = normalizePlace(from);
+  const right = normalizePlace(to);
+  if (!left || !right) return "";
+  return left <= right ? `${left}\n${right}` : `${right}\n${left}`;
+}
+
+function legPairs(prefix) {
+  const rows = [...document.querySelectorAll(`#${prefix}-stops [data-stop-row]`)];
+  const loading = document.querySelector(`#${prefix}-loading`)?.value.trim() || "";
+  return rows.map((row, index) => {
+    const to = row.querySelector("[data-stop-place]")?.value.trim() || "";
+    const from = index === 0 ? loading : (rows[index - 1].querySelector("[data-stop-place]")?.value.trim() || "");
+    return { row, from, to, key: canonicalKey(from, to) };
+  });
+}
+
+function paintKmSource(row) {
+  const label = row.querySelector("[data-km-label]");
+  if (!label) return;
+  const source = row.dataset.kmSource || "";
+  const km = row.querySelector("[data-leg-km]")?.value.trim() ?? "";
+  const place = row.querySelector("[data-stop-place]")?.value.trim() ?? "";
+  label.classList.toggle("manual", source === "Manual");
+  if (source === "Matrix") label.textContent = "z matice";
+  else if (source === "Manual") label.textContent = "ručně";
+  else if (place && km === "") label.textContent = "není v matici";
+  else label.textContent = "";
+}
+
+function applyLookedUpKm(row, km) {
+  const input = row.querySelector("[data-leg-km]");
+  if (!input) return;
+  applyingMatrixKm = true;
+  if (km === null || km === undefined) {
+    input.value = "";
+    row.dataset.kmSource = "";
+  } else {
+    input.value = String(km);
+    row.dataset.kmSource = "Matrix";
+  }
+  applyingMatrixKm = false;
+  paintKmSource(row);
+}
+
+function stampPairs(prefix) {
+  for (const item of legPairs(prefix)) {
+    if (item.key) item.row.dataset.kmPair = item.key;
+  }
+}
+
+function scheduleDistanceFill(prefix) {
+  clearTimeout(distanceTimers[prefix]);
+  distanceTimers[prefix] = setTimeout(() => { fillDistances(prefix); }, 250);
+}
+
+async function fillDistances(prefix) {
+  const generation = (distanceGeneration[prefix] || 0) + 1;
+  distanceGeneration[prefix] = generation;
+  const items = legPairs(prefix);
+  const pending = [];
+  for (const item of items) {
+    if (!item.key) {
+      paintKmSource(item.row);
+      continue;
+    }
+    if (item.row.dataset.kmPair === item.key) continue;
+    item.row.dataset.kmPair = item.key;
+    if (distanceCache.has(item.key)) {
+      applyLookedUpKm(item.row, distanceCache.get(item.key));
+      continue;
+    }
+    pending.push(item);
+  }
+  if (pending.length) {
+    const result = await orderFetch("/api/dispatch/distances/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairs: pending.map((item) => ({ from: item.from, to: item.to })) })
+    });
+    if (distanceGeneration[prefix] !== generation) return;
+    const hits = Array.isArray(result.data?.pairs) ? result.data.pairs : [];
+    pending.forEach((item, index) => {
+      const hit = hits[index];
+      const km = result.ok && hit && hit.km !== null && hit.km !== undefined ? hit.km : null;
+      distanceCache.set(item.key, km);
+      if (item.row.dataset.kmPair === item.key) applyLookedUpKm(item.row, km);
+    });
+  }
+  if (distanceGeneration[prefix] !== generation) return;
+  refreshRoute(prefix);
+}
+
+async function labelKnownKm(prefix) {
+  const items = legPairs(prefix).filter((item) => item.key && !item.row.dataset.kmSource);
+  if (!items.length) return;
+  const pending = items.filter((item) => !distanceCache.has(item.key));
+  if (pending.length) {
+    const result = await orderFetch("/api/dispatch/distances/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pairs: pending.map((item) => ({ from: item.from, to: item.to })) })
+    });
+    const hits = Array.isArray(result.data?.pairs) ? result.data.pairs : [];
+    pending.forEach((item, index) => {
+      const hit = hits[index];
+      const km = result.ok && hit && hit.km !== null && hit.km !== undefined ? hit.km : null;
+      distanceCache.set(item.key, km);
+    });
+  }
+  for (const item of items) {
+    if (item.row.dataset.kmSource) continue;
+    const known = distanceCache.has(item.key) ? distanceCache.get(item.key) : undefined;
+    const current = item.row.querySelector("[data-leg-km]").value.trim();
+    if (current === "") {
+      if (known !== null && known !== undefined) applyLookedUpKm(item.row, known);
+      else paintKmSource(item.row);
+      continue;
+    }
+    item.row.dataset.kmSource = known !== null && known !== undefined && Number(known) === Number(current) ? "Matrix" : "Manual";
+    paintKmSource(item.row);
+  }
+  refreshRoute(prefix);
 }
 
 function roundMoney(value) {
@@ -203,6 +367,7 @@ function routeState(prefix) {
     const liters = Number(row.querySelector("[data-stop-liters]").value);
     const kmText = row.querySelector("[data-leg-km]").value.trim();
     const kilometers = kmText === "" ? null : Number(kmText);
+    const fuelValue = Number(row.querySelector("[data-stop-fuel]")?.value);
     const overridden = row.querySelector("[data-leg-override]").checked;
     const overridePrice = Number(row.querySelector("[data-leg-sale]").value || 0);
     const from = index === 0 ? loading : stops[index - 1].place;
@@ -217,6 +382,7 @@ function routeState(prefix) {
     stops.push({
       place,
       liters: Number.isFinite(liters) ? liters : null,
+      fuelTypeId: Number.isInteger(fuelValue) && fuelValue > 0 ? fuelValue : null,
       note: row.querySelector("[data-stop-note]").value,
       arrivalAt: row.querySelector("[data-stop-arrival]").value
         ? new Date(row.querySelector("[data-stop-arrival]").value).toISOString()
@@ -228,8 +394,10 @@ function routeState(prefix) {
       kilometers,
       salePrice: sale,
       saleOverridden: overridden,
-      cost
+      cost,
+      kmSource: row.dataset.kmSource || null
     });
+    paintKmSource(row);
     row.querySelector("[data-leg-sale]").readOnly = !overridden;
     if (!overridden) row.querySelector("[data-leg-sale]").value = sale;
   });
@@ -276,6 +444,8 @@ function customerSnapshot(order) {
 
 function readForm(prefix) {
   const value = (name) => document.querySelector(`#${prefix}-${name}`).value;
+  const fuelSelect = document.querySelector(`#${prefix}-fuel`);
+  const fuelTypeId = Number(fuelSelect?.value);
   const idText = value("customer-id").trim();
   const liters = Number(value("liters"));
   const surcharges = value("surcharges").trim() === "" ? 0 : Number(value("surcharges"));
@@ -296,7 +466,8 @@ function readForm(prefix) {
     unloadingPlace: last,
     loadingDate: value("loading-date"),
     unloadingDate: value("unloading-date"),
-    fuelType: value("fuel"),
+    fuelType: fuelSelect?.selectedOptions?.[0]?.textContent?.trim() || "",
+    fuelTypeId: Number.isInteger(fuelTypeId) && fuelTypeId > 0 ? fuelTypeId : null,
     liters: Number.isFinite(liters) ? liters : null,
     agreedPrice: agreed,
     surcharges: Number.isFinite(surcharges) ? surcharges : null,
@@ -315,7 +486,8 @@ function readForm(prefix) {
     legs: route.legs.map((leg) => ({
       kilometers: leg.kilometers,
       salePrice: leg.salePrice,
-      saleOverridden: leg.saleOverridden
+      saleOverridden: leg.saleOverridden,
+      kmSource: leg.kmSource
     }))
   };
 }
@@ -404,7 +576,9 @@ function renderDetail(data) {
     });
   }
   applyTripCrew("edit");
+  stampPairs("edit");
   refreshRoute("edit");
+  labelKnownKm("edit");
   document.querySelector("#version-page").hidden = true;
   showOrderChrome();
   renderVersionLinks(data);
@@ -437,11 +611,14 @@ function versionLines(version) {
   if (!legs.length && !stops.length) return "";
   const rows = (legs.length ? legs : stops.map((stop) => ({ sequence: stop.sequence, toPlace: stop.place, liters: stop.liters }))).map((leg, index) => {
     const stop = stops.find((item) => item.sequence === leg.sequence) || stops[index] || {};
-    const km = leg.kilometers === null || leg.kilometers === undefined || leg.kilometers === "" ? "—" : `${orderLiters.format(Number(leg.kilometers))} km`;
+    const source = leg.kmSource === "Matrix" ? " · z matice" : leg.kmSource === "Manual" ? " · ručně" : "";
+    const km = leg.kilometers === null || leg.kilometers === undefined || leg.kilometers === "" ? "—" : `${orderLiters.format(Number(leg.kilometers))} km${source}`;
+    const fuel = stop.fuelType || version.fuelType || "";
     return `<tr>
       <td>${orderText(leg.sequence || index + 1)}</td>
       <td>${orderText(leg.fromPlace || "")}</td>
       <td>${orderText(leg.toPlace || stop.place || "")}</td>
+      <td>${orderText(fuel)}</td>
       <td class="num">${orderText(km)}</td>
       <td class="num">${orderLiters.format(Number(leg.liters ?? stop.liters ?? 0))} l</td>
       <td class="num">${orderMoney.format(Number(leg.salePrice || 0))} Kč${leg.saleOverridden ? " · ruční" : ""}</td>
@@ -450,7 +627,7 @@ function versionLines(version) {
     </tr>`;
   }).join("");
   return `<table id="version-lines">
-    <thead><tr><th>Úsek</th><th>Odkud</th><th>Kam</th><th>Km</th><th>Litry</th><th>Prodej</th><th>Náklad</th><th>Poznámka</th></tr></thead>
+    <thead><tr><th>Úsek</th><th>Odkud</th><th>Kam</th><th>Palivo</th><th>Km</th><th>Litry</th><th>Prodej</th><th>Náklad</th><th>Poznámka</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
 }
@@ -595,21 +772,25 @@ async function orderFetch(url, options) {
 }
 
 async function fetchCatalog() {
-  const [vehicles, drivers, trips] = await Promise.all([
+  const [vehicles, drivers, trips, fuels] = await Promise.all([
     orderFetch("/api/dispatch/vehicles"),
     orderFetch("/api/dispatch/drivers"),
-    orderFetch("/api/dispatch/trips")
+    orderFetch("/api/dispatch/trips"),
+    orderFetch("/api/dispatch/fuel-types")
   ]);
   if (Array.isArray(vehicles.data)) orderCatalog.vehicles = vehicles.data;
   if (Array.isArray(drivers.data)) orderCatalog.drivers = drivers.data;
   if (Array.isArray(trips.data)) orderCatalog.trips = trips.data;
+  if (Array.isArray(fuels.data)) orderCatalog.fuelTypes = fuels.data;
 }
 
 async function loadCatalog() {
   await fetchCatalog();
   document.querySelector("#order-create").innerHTML = formFields("create");
   applyTripCrew("create");
+  stampPairs("create");
   refreshRoute("create");
+  labelKnownKm("create");
 }
 
 async function loadOrders() {
@@ -763,8 +944,10 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
   const prefix = route.dataset.route;
   const row = event.target.closest("[data-stop-row]");
   if (event.target.closest("[data-add-stop]")) {
-    document.querySelector(`#${prefix}-stops`).insertAdjacentHTML("beforeend", stopRow(prefix, {}, null));
+    const headerFuel = document.querySelector(`#${prefix}-fuel`);
+    document.querySelector(`#${prefix}-stops`).insertAdjacentHTML("beforeend", stopRow(prefix, {}, null, headerFuel?.value, headerFuel?.selectedOptions?.[0]?.textContent));
     refreshRoute(prefix);
+    scheduleDistanceFill(prefix);
     return;
   }
   if (!row) {
@@ -775,6 +958,7 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     if (document.querySelectorAll(`#${prefix}-stops [data-stop-row]`).length > 1)
       row.remove();
     refreshRoute(prefix);
+    scheduleDistanceFill(prefix);
     return;
   }
   const move = (direction) => {
@@ -790,6 +974,8 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     sale.readOnly = !event.target.checked;
   }
   refreshRoute(prefix);
+  if (event.target.closest("[data-stop-remove], [data-stop-up], [data-stop-down]"))
+    scheduleDistanceFill(prefix);
 });
 
 document.querySelector("#orders-view").addEventListener("input", (event) => {
@@ -802,15 +988,34 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
     }
   }
   if (event.target.matches("[id$='-cost-km']")) event.target.dataset.touched = "1";
+  if (event.target.matches("[data-leg-km]") && !applyingMatrixKm) {
+    const kmRow = event.target.closest("[data-stop-row]");
+    if (kmRow) {
+      kmRow.dataset.kmSource = event.target.value.trim() === "" ? "" : "Manual";
+      paintKmSource(kmRow);
+    }
+  }
   const route = event.target.closest("[data-route]") || event.target.closest("form");
   const prefix = event.target.id?.startsWith("edit-") ? "edit" : event.target.id?.startsWith("create-") ? "create" : route?.dataset?.route;
   if (prefix) refreshRoute(prefix);
+  if (prefix && event.target.matches("[data-stop-place], [id$='-loading']")) scheduleDistanceFill(prefix);
 });
 
 document.querySelector("#orders-view").addEventListener("change", (event) => {
   if (event.target.matches("[id$='-trip']")) {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
     applyTripCrew(prefix);
+  }
+  if (event.target.matches("[id$='-fuel']") && !event.target.matches("[data-stop-fuel]")) {
+    const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
+    document.querySelectorAll(`#${prefix}-stops [data-stop-fuel][data-fuel-linked="1"]`).forEach((select) => {
+      select.value = event.target.value;
+    });
+  }
+  if (event.target.matches("[data-stop-fuel]")) {
+    const prefix = event.target.closest("[data-route]")?.dataset.route;
+    const header = prefix ? document.querySelector(`#${prefix}-fuel`) : null;
+    event.target.dataset.fuelLinked = header && event.target.value === header.value ? "1" : "0";
   }
 });
 
@@ -832,7 +1037,10 @@ document.querySelector("#order-create").addEventListener("submit", async (event)
   }
   const created = await saveOrder("/api/dispatch/orders", body, "POST");
   if (!created) return;
+  distanceCache.clear();
   document.querySelector("#order-create").innerHTML = formFields("create");
+  stampPairs("create");
+  refreshRoute("create");
   document.querySelector("#order-create-dialog")?.close();
   orderShow(orderMessage, `Zakázka ${created.code} je založená.`);
   await loadOrders();

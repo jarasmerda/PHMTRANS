@@ -55,6 +55,16 @@ public static class DispatchSchema
             CREATE UNIQUE INDEX UX_Disp_Trip_Code ON dbo.Disp_Trip (Code);
         END;
 
+        IF OBJECT_ID(N'dbo.Disp_FuelType', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_FuelType
+            (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Disp_FuelType PRIMARY KEY,
+                Name nvarchar(80) NOT NULL
+            );
+            CREATE UNIQUE INDEX UX_Disp_FuelType_Name ON dbo.Disp_FuelType (Name);
+        END;
+
         IF OBJECT_ID(N'dbo.Disp_Order', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.Disp_Order
@@ -97,7 +107,9 @@ public static class DispatchSchema
                 CustomerZip nvarchar(15) NULL,
                 CustomerEmail nvarchar(98) NULL,
                 CustomerPhone nvarchar(40) NULL,
+                FuelTypeId int NULL,
                 CONSTRAINT FK_Disp_Order_Vehicle FOREIGN KEY (VehicleId) REFERENCES dbo.Disp_Vehicle (Id),
+                CONSTRAINT FK_Disp_Order_FuelType FOREIGN KEY (FuelTypeId) REFERENCES dbo.Disp_FuelType (Id),
                 CONSTRAINT FK_Disp_Order_Driver FOREIGN KEY (DriverId) REFERENCES dbo.Disp_Driver (Id),
                 CONSTRAINT FK_Disp_Order_Trip FOREIGN KEY (TripId) REFERENCES dbo.Disp_Trip (Id)
             );
@@ -144,7 +156,9 @@ public static class DispatchSchema
                 CustomerZip nvarchar(15) NULL,
                 CustomerEmail nvarchar(98) NULL,
                 CustomerPhone nvarchar(40) NULL,
+                FuelTypeId int NULL,
                 RouteJson nvarchar(max) NULL,
+                CONSTRAINT FK_Disp_OrderVersion_FuelType FOREIGN KEY (FuelTypeId) REFERENCES dbo.Disp_FuelType (Id),
                 CONSTRAINT PK_Disp_OrderVersion PRIMARY KEY (OrderId, Version),
                 CONSTRAINT FK_Disp_OrderVersion_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
             );
@@ -184,7 +198,9 @@ public static class DispatchSchema
                 Liters decimal(18,3) NOT NULL,
                 Note nvarchar(500) NULL,
                 ArrivalAt datetimeoffset(3) NULL,
-                CONSTRAINT FK_Disp_OrderStop_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
+                FuelTypeId int NULL,
+                CONSTRAINT FK_Disp_OrderStop_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id),
+                CONSTRAINT FK_Disp_OrderStop_FuelType FOREIGN KEY (FuelTypeId) REFERENCES dbo.Disp_FuelType (Id)
             );
             CREATE UNIQUE INDEX UX_Disp_OrderStop_OrderSeq ON dbo.Disp_OrderStop (OrderId, Sequence);
         END;
@@ -203,6 +219,7 @@ public static class DispatchSchema
                 SalePrice decimal(18,2) NOT NULL,
                 SaleOverridden bit NOT NULL,
                 CostPrice decimal(18,2) NOT NULL,
+                KmSource nvarchar(16) NULL,
                 CONSTRAINT FK_Disp_OrderLeg_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
             );
             CREATE UNIQUE INDEX UX_Disp_OrderLeg_OrderSeq ON dbo.Disp_OrderLeg (OrderId, Sequence);
@@ -215,6 +232,20 @@ public static class DispatchSchema
                 [Key] nvarchar(64) NOT NULL CONSTRAINT PK_Disp_Setting PRIMARY KEY,
                 Value nvarchar(200) NOT NULL
             );
+        END;
+
+        IF OBJECT_ID(N'dbo.Disp_Distance', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_Distance
+            (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Disp_Distance PRIMARY KEY,
+                FromPlace nvarchar(160) NOT NULL,
+                ToPlace nvarchar(160) NOT NULL,
+                Km decimal(18,3) NOT NULL,
+                UpdatedAt datetimeoffset(3) NOT NULL,
+                UpdatedBy nvarchar(160) NULL
+            );
+            CREATE UNIQUE INDEX UX_Disp_Distance_Pair ON dbo.Disp_Distance (FromPlace, ToPlace);
         END;
         """;
 
@@ -296,6 +327,22 @@ public static class DispatchSchema
             SELECT 1 FROM sys.indexes
             WHERE name = N'IX_Disp_Order_Trip' AND object_id = OBJECT_ID(N'dbo.Disp_Order'))
             CREATE INDEX IX_Disp_Order_Trip ON dbo.Disp_Order (TripId);
+
+        IF COL_LENGTH(N'dbo.Disp_Order', N'FuelTypeId') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD FuelTypeId int NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderStop', N'FuelTypeId') IS NULL
+            ALTER TABLE dbo.Disp_OrderStop ADD FuelTypeId int NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'FuelTypeId') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD FuelTypeId int NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderLeg', N'KmSource') IS NULL
+            ALTER TABLE dbo.Disp_OrderLeg ADD KmSource nvarchar(16) NULL;
+
+        IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Disp_Order_FuelType')
+            ALTER TABLE dbo.Disp_Order ADD CONSTRAINT FK_Disp_Order_FuelType FOREIGN KEY (FuelTypeId) REFERENCES dbo.Disp_FuelType (Id);
+        IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Disp_OrderStop_FuelType')
+            ALTER TABLE dbo.Disp_OrderStop ADD CONSTRAINT FK_Disp_OrderStop_FuelType FOREIGN KEY (FuelTypeId) REFERENCES dbo.Disp_FuelType (Id);
+        IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_Disp_OrderVersion_FuelType')
+            ALTER TABLE dbo.Disp_OrderVersion ADD CONSTRAINT FK_Disp_OrderVersion_FuelType FOREIGN KEY (FuelTypeId) REFERENCES dbo.Disp_FuelType (Id);
         """;
 
     // Textový OrderCode jen doplní chybějící TripId. Řádky, které už jízdu mají, se nemění.
@@ -381,6 +428,30 @@ public static class DispatchSchema
         )
         FROM dbo.Disp_OrderVersion v
         WHERE v.RouteJson IS NULL;
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.Disp_FuelType WHERE Name = N'Motorová nafta')
+            INSERT INTO dbo.Disp_FuelType (Name) VALUES (N'Motorová nafta');
+        IF NOT EXISTS (SELECT 1 FROM dbo.Disp_FuelType WHERE Name = N'Benzín')
+            INSERT INTO dbo.Disp_FuelType (Name) VALUES (N'Benzín');
+
+        UPDATE o
+        SET FuelTypeId = f.Id
+        FROM dbo.Disp_Order o
+        INNER JOIN dbo.Disp_FuelType f ON LOWER(LTRIM(RTRIM(o.FuelType))) = LOWER(LTRIM(RTRIM(f.Name)))
+        WHERE o.FuelTypeId IS NULL;
+
+        UPDATE v
+        SET FuelTypeId = f.Id
+        FROM dbo.Disp_OrderVersion v
+        INNER JOIN dbo.Disp_FuelType f ON LOWER(LTRIM(RTRIM(v.FuelType))) = LOWER(LTRIM(RTRIM(f.Name)))
+        WHERE v.FuelTypeId IS NULL;
+
+        UPDATE s
+        SET FuelTypeId = o.FuelTypeId
+        FROM dbo.Disp_OrderStop s
+        INNER JOIN dbo.Disp_Order o ON o.Id = s.OrderId
+        WHERE s.FuelTypeId IS NULL
+          AND o.FuelTypeId IS NOT NULL;
 
         COMMIT TRANSACTION;
         """;
