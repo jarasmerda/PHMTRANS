@@ -69,6 +69,15 @@ function actionLabel(action) {
   return { Create: "Založení", Update: "Aktualizace", Correction: "Oprava", Delete: "Smazání v Pohodě", Cancel: "Opravné storno" }[action] || action;
 }
 
+function versionSync(data, version) {
+  return (data.sync ?? []).find((item) => item.versionTo === version.currentVersion) || null;
+}
+
+function versionStatus(data, version) {
+  const sync = versionSync(data, version);
+  return sync ? syncLabel(sync.status) : "neodesláno";
+}
+
 function versionWarning(data, version) {
   const text = (data.sync ?? []).find((item) => item.versionTo === version.currentVersion && item.warning)?.warning;
   return text ? `<div class="note warn">${orderText(text)}</div>` : "";
@@ -390,17 +399,9 @@ function renderDetail(data) {
   }
   applyTripCrew("edit");
   refreshRoute("edit");
-  document.querySelector("#version-rows").innerHTML = (data.versions ?? []).map((version) => `<tr>
-      <td>${orderText(version.currentVersion)}</td>
-      <td>${orderWhen(version.updatedAt)}</td>
-      <td>${orderText(version.customerName)}</td>
-      <td>${orderText(version.loadingPlace)} → ${orderText(version.unloadingPlace)}</td>
-      <td>${orderDay(version.loadingDate)} – ${orderDay(version.unloadingDate)}</td>
-      <td>${orderText(version.fuelType)}, ${orderLiters.format(Number(version.liters || 0))} l</td>
-      <td class="num">${orderMoney.format(Number(version.agreedPrice || 0))}</td>
-      <td class="num">${orderMoney.format(Number(version.surcharges || 0))}</td>
-      <td>${orderText(version.status)}${versionWarning(data, version)}</td>
-    </tr>`).join("");
+  document.querySelector("#version-page").hidden = true;
+  showOrderChrome();
+  renderVersionLinks(data);
   document.querySelector("#order-sync").innerHTML = (data.sync ?? []).length === 0
     ? `<p class="note">Do Pohody se zatím nic neposílalo. Poznámka, řidič a CMR se do fronty nedávají.</p>`
     : (data.sync ?? []).map((item) => `<article>
@@ -410,6 +411,135 @@ function renderDetail(data) {
         ${item.lastError ? `<p class="note">${orderText(item.lastError)}</p>` : ""}
         <pre class="xml">${orderText(item.payloadXml)}</pre>
       </article>`).join("");
+}
+
+function renderVersionLinks(data) {
+  const current = data.order?.currentVersion;
+  const previous = (data.versions ?? []).filter((version) => version.currentVersion !== current);
+  const list = document.querySelector("#version-links");
+  list.innerHTML = previous.map((version) => {
+    const href = `#verze-${encodeURIComponent(data.order.id)}-${version.currentVersion}`;
+    const label = `Verze ${version.currentVersion} – ${orderWhen(version.updatedAt)} – ${versionStatus(data, version)}`;
+    return `<li><a href="${orderText(href)}" data-version="${orderText(version.currentVersion)}">${orderText(label)}</a></li>`;
+  }).join("");
+  document.querySelector("#version-empty").hidden = previous.length > 0;
+}
+
+function versionLines(version) {
+  const legs = version.legs || [];
+  const stops = version.stops || [];
+  if (!legs.length && !stops.length) return "";
+  const rows = (legs.length ? legs : stops.map((stop) => ({ sequence: stop.sequence, toPlace: stop.place, liters: stop.liters }))).map((leg, index) => {
+    const stop = stops.find((item) => item.sequence === leg.sequence) || stops[index] || {};
+    const km = leg.kilometers === null || leg.kilometers === undefined || leg.kilometers === "" ? "—" : `${orderLiters.format(Number(leg.kilometers))} km`;
+    return `<tr>
+      <td>${orderText(leg.sequence || index + 1)}</td>
+      <td>${orderText(leg.fromPlace || "")}</td>
+      <td>${orderText(leg.toPlace || stop.place || "")}</td>
+      <td class="num">${orderText(km)}</td>
+      <td class="num">${orderLiters.format(Number(leg.liters ?? stop.liters ?? 0))} l</td>
+      <td class="num">${orderMoney.format(Number(leg.salePrice || 0))} Kč${leg.saleOverridden ? " · ruční" : ""}</td>
+      <td class="num">${orderMoney.format(Number(leg.costPrice || 0))} Kč</td>
+      <td>${orderText(stop.note || "")}</td>
+    </tr>`;
+  }).join("");
+  return `<table id="version-lines">
+    <thead><tr><th>Úsek</th><th>Odkud</th><th>Kam</th><th>Km</th><th>Litry</th><th>Prodej</th><th>Náklad</th><th>Poznámka</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function versionFact(label, value) {
+  return `<p><span>${orderText(label)}</span>${orderText(value || "—")}</p>`;
+}
+
+function versionPage(data, version) {
+  const order = data.order;
+  const quote = version.quote || {};
+  const mode = version.pricingMode === "Liters" ? "Za litr" : "Za kilometr";
+  const address = [version.customerStreet, version.customerCity, version.customerZip].filter(Boolean).join(", ");
+  const sync = versionSync(data, version);
+  const syncText = sync ? syncLabel(sync.status) : "neodesláno";
+  const totals = [
+    ["Km", orderLiters.format(Number(quote.totalKm || 0))],
+    ["Naloženo l", orderLiters.format(Number(quote.loadedLiters ?? version.liters ?? 0))],
+    ["Vyloženo l", orderLiters.format(Number(quote.deliveredLiters || 0))],
+    ["Náklad Kč", orderMoney.format(Number(quote.totalCost || 0))],
+    ["Prodej Kč", orderMoney.format(Number(quote.totalSale ?? version.agreedPrice ?? 0))],
+    ["Příplatky Kč", orderMoney.format(Number(version.surcharges || 0))],
+    ["Marže Kč", orderMoney.format(Number(quote.margin || 0))]
+  ];
+  return `
+    <p><button type="button" class="ghost" data-version-back>Zpět na zakázku</button></p>
+    <h2>${orderText(order.code)} · verze ${orderText(version.currentVersion)}</h2>
+    <p class="note">Uložený snímek verze, jen ke čtení. ${orderText(orderWhen(version.updatedAt))}. ${orderText(syncText)}</p>
+    ${versionWarning(data, version)}
+    <div class="snapshot">
+      ${versionFact("Zákazník", version.customerName)}
+      ${versionFact("IČO", version.customerIco)}
+      ${versionFact("DIČ", version.customerDic)}
+      ${versionFact("Adresa", address)}
+      ${versionFact("Nakládka", version.loadingPlace)}
+      ${versionFact("Vykládka", version.unloadingPlace)}
+      ${versionFact("Datum nakládky", orderDay(version.loadingDate))}
+      ${versionFact("Datum vykládky", orderDay(version.unloadingDate))}
+      ${versionFact("Palivo", version.fuelType)}
+      ${versionFact("Naložené litry", orderLiters.format(Number(version.liters || 0)))}
+      ${versionFact("Režim", mode)}
+      ${versionFact("Prodej Kč/km", orderMoney.format(Number(version.salePerKm || 0)))}
+      ${versionFact("Prodej Kč/l", orderMoney.format(Number(version.salePerLiter || 0)))}
+      ${versionFact("Náklad Kč/km", orderMoney.format(Number(version.costPerKm || 0)))}
+      ${versionFact("Příplatky", `${orderMoney.format(Number(version.surcharges || 0))} Kč`)}
+      ${versionFact("Dohodnutá cena", `${orderMoney.format(Number(version.agreedPrice || 0))} Kč`)}
+      ${versionFact("Stav", version.status)}
+      ${versionFact("Číslo CMR", version.cmrNumber)}
+      ${versionFact("Poznámka", version.note)}
+    </div>
+    <div class="totals">${totals.map(([label, value]) => `<article><span>${orderText(label)}</span><strong>${orderText(value)}</strong></article>`).join("")}</div>
+    <h3>Úseky</h3>
+    ${versionLines(version) || `<p class="note">Úseky v této verzi nejsou.</p>`}
+  `;
+}
+
+function showOrderChrome() {
+  for (const id of ["order-filter", "order-cards", "order-table-wrap", "order-create-wrap", "order-sync-note"]) {
+    const element = document.querySelector(`#${id}`);
+    if (element) element.hidden = false;
+  }
+}
+
+function hideOrderChrome() {
+  for (const id of ["order-filter", "order-cards", "order-table-wrap", "order-create-wrap", "order-detail", "order-sync-note"]) {
+    const element = document.querySelector(`#${id}`);
+    if (element) element.hidden = true;
+  }
+}
+
+function showVersion(versionNumber) {
+  const data = orderDetail;
+  const version = (data?.versions ?? []).find((item) => item.currentVersion === Number(versionNumber));
+  const page = document.querySelector("#version-page");
+  if (!data?.order || !version || !page) {
+    orderShow(orderMessage, "Tuto verzi se nepodařilo otevřít.");
+    return;
+  }
+  hideOrderChrome();
+  page.innerHTML = versionPage(data, version);
+  page.hidden = false;
+  history.replaceState(null, "", `#verze-${encodeURIComponent(data.order.id)}-${version.currentVersion}`);
+  page.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function closeVersion() {
+  const page = document.querySelector("#version-page");
+  if (page) {
+    page.hidden = true;
+    page.innerHTML = "";
+  }
+  showOrderChrome();
+  const detail = document.querySelector("#order-detail");
+  if (detail && orderDetail?.order) detail.hidden = false;
+  if (location.hash.startsWith("#verze-")) history.replaceState(null, "", "#zakazky");
 }
 
 function renderQueue(data) {
@@ -569,6 +699,16 @@ document.querySelector("#order-status").addEventListener("change", () => loadOrd
 document.querySelector("#queue-reload").addEventListener("click", () => loadQueue());
 
 document.querySelector("#orders-view").addEventListener("click", (event) => {
+  const versionLink = event.target.closest("[data-version]");
+  if (versionLink) {
+    event.preventDefault();
+    showVersion(versionLink.dataset.version);
+    return;
+  }
+  if (event.target.closest("[data-version-back]")) {
+    closeVersion();
+    return;
+  }
   const open = event.target.closest("[data-open]");
   if (open) {
     openOrder(open.dataset.open, true);
@@ -758,6 +898,7 @@ document.querySelector("#order-cancel").addEventListener("click", async () => {
 document.querySelector("#order-close").addEventListener("click", () => {
   orderDetail = null;
   document.querySelector("#order-detail").hidden = true;
+  closeVersion();
 });
 
 loadCatalog().then(() => {

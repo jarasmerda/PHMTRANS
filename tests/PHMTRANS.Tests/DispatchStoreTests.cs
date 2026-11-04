@@ -351,7 +351,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
         Assert.Contains("dispecink.js?v=8", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=4", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=5", html, StringComparison.Ordinal);
         Assert.Contains("id=\"create-order-list\"", html, StringComparison.Ordinal);
         Assert.Contains("Vyberte zakázky, jízda se předvyplní z první.", html, StringComparison.Ordinal);
         Assert.Contains("Stornovat", html, StringComparison.Ordinal);
@@ -387,6 +387,28 @@ public sealed class DispatchPageTests
         Assert.Contains("const tripId = selected || assigned;", orders, StringComparison.Ordinal);
         Assert.Contains("Nejdřív vyberte jízdu.", orders, StringComparison.Ordinal);
         Assert.Contains("window.openTrip = async (id) => {", trips, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_history_is_a_list_of_links_to_a_read_only_snapshot()
+    {
+        var root = FindWwwRoot();
+        var html = File.ReadAllText(Path.Combine(root, "dispecink.html"));
+        var orders = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
+
+        Assert.Contains("id=\"version-links\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"version-page\"", html, StringComparison.Ordinal);
+        Assert.Contains("Starší verze zatím nejsou.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"version-rows\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-version=", orders, StringComparison.Ordinal);
+        Assert.Contains("Verze ${version.currentVersion} – ${orderWhen(version.updatedAt)} – ${versionStatus(data, version)}", orders, StringComparison.Ordinal);
+        Assert.Contains("jen ke čtení", orders, StringComparison.Ordinal);
+        Assert.Contains("Zpět na zakázku", orders, StringComparison.Ordinal);
+        Assert.Contains("Dohodnutá cena", orders, StringComparison.Ordinal);
+        Assert.Contains("version.stops", orders, StringComparison.Ordinal);
+        Assert.Contains("version.legs", orders, StringComparison.Ordinal);
+        Assert.Contains("<th>Km</th>", orders, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"version-rows\"", orders, StringComparison.Ordinal);
     }
 
     private static string FindWwwRoot()
