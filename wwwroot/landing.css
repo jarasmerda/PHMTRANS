@@ -724,35 +724,9 @@ body.landing .legal {
 }
 
 body.landing .eu h2 {
-  max-width: 20em;
-}
-
-body.landing .eu-poster {
-  margin: 28px 0 0;
-}
-
-body.landing .eu-poster img {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  max-height: none;
-  object-fit: contain;
-  object-position: center;
-  background: #ffffff;
-  border: 1px solid var(--border);
-}
-
-body.landing .eu-poster figcaption {
-  max-width: 46rem;
-  margin-top: 16px;
-  color: var(--text-secondary);
-  font-size: 1rem;
-  line-height: 1.55;
-}
-
-body.landing .eu-poster figcaption p + p {
-  margin-top: 8px;
+  max-width: 24em;
+  margin: 0;
+  font-size: 1.15rem;
 }
 
 body.landing .eu a {

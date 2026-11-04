@@ -368,7 +368,9 @@ public sealed class OrderAssignmentTests
             Assert.Equal("veh-1", order.VehicleId);
             Assert.Equal("drv-1", order.DriverId);
         });
-        Assert.Empty(await orders.ListQueueAsync(CancellationToken.None));
+        var queued = await orders.ListQueueAsync(CancellationToken.None);
+        Assert.Equal(3, queued.Count);
+        Assert.All(queued, item => Assert.Equal(OrderSyncActions.Create, item.Action));
 
         var removed = Assert.IsType<OrderMutation.Success>(
             await orders.AttachTripAsync(first.Order.Id, null, onlyIfFree: false, CancellationToken.None));

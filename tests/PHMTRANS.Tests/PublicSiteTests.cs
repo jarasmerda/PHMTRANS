@@ -27,7 +27,7 @@ public sealed class PublicSitePageTests
 
         Assert.Contains("lang=\"cs\"", html, StringComparison.Ordinal);
         Assert.Contains("erp.css?v=17", html, StringComparison.Ordinal);
-        Assert.Contains("landing.css?v=13", html, StringComparison.Ordinal);
+        Assert.Contains("landing.css?v=14", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"https://intranet.phmtrans.cz/\">Intranet</a>", html, StringComparison.Ordinal);
@@ -76,14 +76,14 @@ public sealed class PublicSitePageTests
         Assert.Contains("IČO: 26950430", html, StringComparison.Ordinal);
         Assert.Contains("DIČ: CZ26950430", html, StringComparison.Ordinal);
         Assert.Contains("zapsána v obchodním rejstříku vedeném Krajským soudem v Brně, oddíl C, vložka 47795", html, StringComparison.Ordinal);
-        Assert.Contains("src=\"/img/eu-projekt.png\"", html, StringComparison.Ordinal);
-        Assert.Contains("width=\"3840\"", html, StringComparison.Ordinal);
-        Assert.Contains("height=\"2160\"", html, StringComparison.Ordinal);
-        Assert.Contains("alt=\"Projekt Digitalizace ve společnosti Autodoprava Hrbáček s.r.o., CZ.01.02.01/01/23_026/0009265, je spolufinancován Evropskou unií.\"", html, StringComparison.Ordinal);
-        Assert.Contains("<figcaption>", html, StringComparison.Ordinal);
-        Assert.Contains("Cílem tohoto projektu je zvýšení digitální úrovně společnosti prostřednictvím nákupu a zavedení pokročilých nevýrobních digitálních technologií.", html, StringComparison.Ordinal);
-        Assert.Contains("Spolufinancováno Evropskou unií", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"https://www.mapaprojektu.cz\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/img/eu-projekt.png\"", html, StringComparison.Ordinal);
+        Assert.Contains("target=\"_blank\"", html, StringComparison.Ordinal);
+        Assert.Contains("rel=\"noopener\"", html, StringComparison.Ordinal);
+        Assert.Contains("Projekt spolufinancovaný Evropskou unií", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("eu-poster", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<img src=\"/img/eu-projekt.png\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("width=\"3840\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<figcaption>", html, StringComparison.Ordinal);
         var jsonStart = html.IndexOf("<script type=\"application/ld+json\">", StringComparison.Ordinal);
         var jsonEnd = html.IndexOf("</script>", jsonStart, StringComparison.Ordinal);
         Assert.True(jsonStart >= 0 && jsonEnd > jsonStart);
@@ -115,9 +115,7 @@ public sealed class PublicSitePageTests
         Assert.DoesNotContain("google", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("http://", css, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("https://", css, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(".eu-poster img", css, StringComparison.Ordinal);
-        Assert.Contains("object-fit: contain", css, StringComparison.Ordinal);
-        Assert.Contains("max-height: none", css, StringComparison.Ordinal);
+        Assert.DoesNotContain(".eu-poster", css, StringComparison.Ordinal);
         Assert.Contains("height: auto", css, StringComparison.Ordinal);
         var poster = File.ReadAllBytes(Path.Combine(root, "img", "eu-projekt.png"));
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, poster[..4]);
@@ -212,7 +210,8 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             Assert.Contains("href=\"tel:+420603475612\"", html, StringComparison.Ordinal);
             Assert.Contains("href=\"mailto:info@phmtrans.cz\"", html, StringComparison.Ordinal);
             Assert.Contains("IČO: 26950430", html, StringComparison.Ordinal);
-            Assert.Contains("src=\"/img/eu-projekt.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("href=\"/img/eu-projekt.png\"", html, StringComparison.Ordinal);
+            Assert.Contains("target=\"_blank\"", html, StringComparison.Ordinal);
             Assert.DoesNotContain("[telefon]", html, StringComparison.Ordinal);
             Assert.DoesNotContain("[e-mail]", html, StringComparison.Ordinal);
             Assert.DoesNotContain("[adresa]", html, StringComparison.Ordinal);

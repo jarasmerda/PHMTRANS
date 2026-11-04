@@ -39,7 +39,6 @@ public static class OrderSyncPlanner
         bool confirmRequested)
     {
         var hasDocument = current.PohodaOrderId is > 0;
-        var confirmed = confirmRequested || OrderStatuses.IsConfirmed(current.Status);
         var differsFromSent = lastSent is not null && !OrderPohodaFields.Same(lastSent, current);
 
         // Storno se počítá z poslední odeslané verze, ne z předchozí lokální.
@@ -57,11 +56,12 @@ public static class OrderSyncPlanner
             && (previous is null || !OrderPohodaFields.Same(previous, current)))
             return new OrderSyncPlan(OrderSyncAction.Update, previous?.CurrentVersion, current.CurrentVersion);
 
-        if (!hasDocument && confirmed)
+        // Nová zakázka jde do fronty hned při založení a znovu, když se změní údaje pro Pohodu.
+        // Stav „K fakturaci“ už není podmínka odeslání.
+        if (!hasDocument)
         {
-            var becameConfirmed = confirmRequested || previous is null || !OrderStatuses.IsConfirmed(previous.Status);
             var fieldsChanged = previous is null || !OrderPohodaFields.Same(previous, current);
-            if (becameConfirmed || fieldsChanged)
+            if (fieldsChanged || confirmRequested)
                 return new OrderSyncPlan(OrderSyncAction.Create, null, current.CurrentVersion);
         }
 
