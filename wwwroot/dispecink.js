@@ -13,11 +13,20 @@ let drivers = [];
 let orders = [];
 let board = null;
 let openTripId = null;
+let expandedTripId = null;
 let rates = null;
+
+const moneyLabel = new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function showMessage(value) {
   message.hidden = !value;
   message.textContent = value ?? "";
+  const local = document.querySelector("#trip-create-message");
+  const dialog = document.querySelector("#trip-create-dialog");
+  if (local && dialog?.open) {
+    local.hidden = !value;
+    local.textContent = value ?? "";
+  }
 }
 
 function formatDate(value) {
@@ -95,9 +104,11 @@ function count(data, status) {
 function applyFilter() {
   const selected = statusInput.value;
   let visible = 0;
-  for (const row of rows.querySelectorAll("tr[data-status]")) {
+  for (const row of rows.querySelectorAll("tr[data-id]")) {
     const hide = selected.length > 0 && row.dataset.status !== selected;
     row.hidden = hide;
+    const extra = rows.querySelector(`tr[data-for="${CSS.escape(row.dataset.id)}"]`);
+    if (extra) extra.hidden = hide || extra.dataset.open !== "1";
     if (!hide) visible += 1;
   }
   empty.hidden = visible > 0;
@@ -116,6 +127,99 @@ function sumLiters(list) {
   return list.filter(countsInTotals).reduce((sum, order) => sum + Number(order.liters || 0), 0);
 }
 
+function uniqueTexts(values) {
+  const seen = [];
+  for (const value of values) {
+    const textValue = String(value || "").trim();
+    if (textValue && !seen.includes(textValue)) seen.push(textValue);
+  }
+  return seen;
+}
+
+function routeText(order) {
+  const stops = (order.stops || []).map((stop) => stop.place);
+  const tail = uniqueTexts(stops.length ? stops : [order.unloadingPlace]).join(" → ");
+  if (!order.loadingPlace) return tail || "—";
+  return tail ? `${order.loadingPlace} → ${tail}` : order.loadingPlace;
+}
+
+function orderKm(order) {
+  return (order.legs || []).reduce((sum, leg) => sum + Number(leg.kilometers || 0), 0);
+}
+
+function orderSale(order) {
+  return Number(order.agreedPrice || 0) + Number(order.surcharges || 0);
+}
+
+function tripTotals(tripId) {
+  const assigned = tripOrders(tripId).filter(countsInTotals);
+  return {
+    count: assigned.length,
+    liters: sumLiters(assigned),
+    km: assigned.reduce((sum, order) => sum + orderKm(order), 0),
+    price: assigned.reduce((sum, order) => sum + orderSale(order), 0)
+  };
+}
+
+function totalsText(totals) {
+  return `${litersLabel(totals.km)} km · ${litersLabel(totals.liters)} l · ${moneyLabel.format(totals.price)} Kč`;
+}
+
+function tripFace(trip) {
+  const assigned = tripOrders(trip.id).filter(countsInTotals);
+  if (!assigned.length) {
+    return {
+      customer: trip.customer,
+      loading: trip.loadingPlace,
+      unloading: trip.unloadingPlace,
+      cargo: trip.cargo || ""
+    };
+  }
+  const stops = assigned.flatMap((order) => (order.stops || []).map((stop) => stop.place));
+  const ends = uniqueTexts(stops.length ? stops : assigned.map((order) => order.unloadingPlace));
+  return {
+    customer: uniqueTexts(assigned.map((order) => order.customerName)).join(", ") || trip.customer,
+    loading: uniqueTexts(assigned.map((order) => order.loadingPlace)).join(", ") || trip.loadingPlace,
+    unloading: ends.join(", ") || trip.unloadingPlace,
+    cargo: uniqueTexts(assigned.map((order) => order.fuelType)).join(", ") || trip.cargo || ""
+  };
+}
+
+function orderLine(order, tripId) {
+  const remove = tripId
+    ? `<button type="button" class="ghost" data-remove-order="${text(order.id)}" data-from-trip="${text(tripId)}">Odebrat</button>`
+    : "";
+  return `<tr>
+      <td><button type="button" class="linkish" data-open-order="${text(order.id)}">${text(order.code)}</button></td>
+      <td>${text(order.customerName)}</td>
+      <td>${text(routeText(order))}</td>
+      <td class="num">${litersLabel(order.liters)} l</td>
+      <td class="num">${moneyLabel.format(orderSale(order))} Kč</td>
+      <td>${remove}</td>
+    </tr>`;
+}
+
+function orderTable(tripId) {
+  const assigned = tripOrders(tripId);
+  const totals = tripTotals(tripId);
+  const free = orders.filter((order) => !order.tripId && countsInTotals(order));
+  const add = `<form data-add-order="${text(tripId)}">
+      <label>Přidat zakázku
+        <select data-free-order>
+          <option value="">— zakázka bez jízdy —</option>
+          ${free.map((order) => `<option value="${text(order.id)}">${text(order.code)} · ${text(order.customerName)} · ${litersLabel(order.liters)} l</option>`).join("")}
+        </select>
+      </label>
+      <button type="submit">Přidat na jízdu</button>
+    </form>`;
+  return `<p>Součet: <strong>${text(totalsText(totals))}</strong> <span class="route-to">Ze zakázek. Stornované se nepočítají.</span></p>
+    <table>
+      <thead><tr><th>Zakázka</th><th>Zákazník</th><th>Trasa</th><th>Litry</th><th>Prodej</th><th></th></tr></thead>
+      <tbody>${assigned.map((order) => orderLine(order, tripId)).join("") || `<tr><td colspan="6">Na jízdě zatím není zakázka.</td></tr>`}</tbody>
+    </table>
+    ${add}`;
+}
+
 function litersLabel(value) {
   return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 3 }).format(Number(value || 0));
 }
@@ -123,16 +227,19 @@ function litersLabel(value) {
 function displayRow(trip) {
   const note = trip.note ? `<br><span class="route-to">${text(trip.note)}</span>` : "";
   const assigned = tripOrders(trip.id);
+  const face = tripFace(trip);
+  const totals = tripTotals(trip.id);
   const summary = assigned.length
-    ? `${assigned.length} · ${litersLabel(sumLiters(assigned))} l`
+    ? `${assigned.length} · ${totalsText(totals)}`
     : "—";
+  const fromOrders = assigned.length ? `<br><span class="route-to">Ze zakázek</span>` : "";
   return `<tr data-id="${text(trip.id)}" data-status="${text(trip.status)}">
       <td>${text(trip.code)}</td>
-      <td>${text(summary)}</td>
+      <td><button type="button" data-expand="${text(trip.id)}">${text(summary)}</button></td>
       <td>${formatDate(trip.plannedStart)}</td>
-      <td>${text(trip.customer)}${note}</td>
-      <td>${text(trip.loadingPlace)}<br><span class="route-to">→ ${text(trip.unloadingPlace)}</span></td>
-      <td>${text(trip.cargo)}</td>
+      <td>${text(face.customer)}${note}${fromOrders}</td>
+      <td>${text(face.loading)}<br><span class="route-to">→ ${text(face.unloading)}</span></td>
+      <td>${text(face.cargo)}</td>
       <td>${text(vehicleText(trip.vehicleId))}</td>
       <td>${text(driverText(trip.driverId))}</td>
       <td>${text(trip.status)}</td>
@@ -141,22 +248,36 @@ function displayRow(trip) {
         ${trip.status === "Stornováno" ? "" : `<button type="button" data-edit="${text(trip.id)}">Upravit</button>`}
         ${trip.status === "Stornováno" ? "" : `<button type="button" class="ghost" data-storno="${text(trip.id)}">Stornovat</button>`}
       </td>
+    </tr>
+    <tr class="trip-orders" data-for="${text(trip.id)}" data-status="${text(trip.status)}" data-open="${expandedTripId === trip.id ? "1" : "0"}"${expandedTripId === trip.id ? "" : " hidden"}>
+      <td colspan="10">${orderTable(trip.id)}</td>
     </tr>`;
 }
 
 function editCells(trip) {
-  return `<td>${text(trip.code)}</td>
-      <td>${text(tripOrders(trip.id).map((order) => order.code).join(", ") || "—")}</td>
-      <td><input data-field="planned" type="datetime-local" required aria-label="Termín ${text(trip.code)}" value="${text(toLocalInput(trip.plannedStart))}"></td>
-      <td><div class="stack">
+  const assigned = tripOrders(trip.id);
+  const face = tripFace(trip);
+  const identity = assigned.length
+    ? `<div class="stack"><strong>${text(face.customer)}</strong><span class="route-to">Ze zakázek</span><input data-field="note" maxlength="500" placeholder="Poznámka" aria-label="Poznámka ${text(trip.code)}" value="${text(trip.note || "")}"></div>`
+    : `<div class="stack">
         <input data-field="customer" required maxlength="160" aria-label="Zákazník ${text(trip.code)}" value="${text(trip.customer)}">
         <input data-field="note" maxlength="500" placeholder="Poznámka" aria-label="Poznámka ${text(trip.code)}" value="${text(trip.note || "")}">
-      </div></td>
-      <td><div class="stack">
+      </div>`;
+  const route = assigned.length
+    ? `<div class="stack"><span>${text(face.loading)}</span><span class="route-to">→ ${text(face.unloading)}</span></div>`
+    : `<div class="stack">
         <input data-field="loading" required maxlength="160" placeholder="Nakládka" aria-label="Nakládka ${text(trip.code)}" value="${text(trip.loadingPlace)}">
         <input data-field="unloading" required maxlength="160" placeholder="Vykládka" aria-label="Vykládka ${text(trip.code)}" value="${text(trip.unloadingPlace)}">
-      </div></td>
-      <td><input data-field="cargo" maxlength="80" aria-label="Náklad ${text(trip.code)}" value="${text(trip.cargo || "")}"></td>
+      </div>`;
+  const cargo = assigned.length
+    ? text(face.cargo)
+    : `<input data-field="cargo" maxlength="80" aria-label="Náklad ${text(trip.code)}" value="${text(trip.cargo || "")}">`;
+  return `<td>${text(trip.code)}</td>
+      <td>${orderTable(trip.id)}</td>
+      <td><input data-field="planned" type="datetime-local" required aria-label="Termín ${text(trip.code)}" value="${text(toLocalInput(trip.plannedStart))}"></td>
+      <td>${identity}</td>
+      <td>${route}</td>
+      <td>${cargo}</td>
       <td><select data-field="vehicle" aria-label="Vozidlo ${text(trip.code)}">${options(vehicles, trip.vehicleId, "Nepřiřazeno", vehicleLabel)}</select></td>
       <td><select data-field="driver" aria-label="Řidič ${text(trip.code)}">${options(drivers, trip.driverId, "Nepřiřazeno", (item) => item.name, (item) => item.phone || "")}</select></td>
       <td><select data-field="status" aria-label="Stav ${text(trip.code)}">${statusOptions(trip.status)}</select></td>
@@ -245,17 +366,13 @@ function showTrip(id) {
     return;
   }
   const assigned = tripOrders(id);
-  document.querySelector("#trip-detail-title").textContent = `${trip.code} · ${trip.customer}`;
+  const face = tripFace(trip);
+  document.querySelector("#trip-detail-title").textContent = `${trip.code} · ${face.customer}`;
   document.querySelector("#trip-detail-meta").textContent =
-    `${trip.loadingPlace} → ${trip.unloadingPlace} · ${vehicleText(trip.vehicleId)} · ${driverText(trip.driverId)}`;
-  document.querySelector("#trip-order-rows").innerHTML = assigned.map((order) => `<tr>
-      <td>${text(order.code)}</td>
-      <td>${text(order.customerName)}</td>
-      <td>${text(order.loadingPlace)} → ${text(order.unloadingPlace)}</td>
-      <td class="num">${litersLabel(order.liters)} l</td>
-      <td><button type="button" class="ghost" data-remove-order="${text(order.id)}">Odebrat</button></td>
-    </tr>`).join("") || `<tr><td colspan="5">Na jízdě zatím není zakázka.</td></tr>`;
-  document.querySelector("#trip-liters").textContent = `${litersLabel(sumLiters(assigned.filter(countsInTotals)))} l`;
+    `${face.loading} → ${face.unloading} · ${vehicleText(trip.vehicleId)} · ${driverText(trip.driverId)}`;
+  document.querySelector("#trip-order-rows").innerHTML = assigned.map((order) => orderLine(order, id)).join("")
+    || `<tr><td colspan="6">Na jízdě zatím není zakázka.</td></tr>`;
+  document.querySelector("#trip-totals").textContent = totalsText(tripTotals(id));
   const cancelledTrip = trip.status === "Stornováno";
   document.querySelector("#trip-add-order label").hidden = cancelledTrip;
   document.querySelector("#trip-add-order button[type=submit]").hidden = cancelledTrip;
@@ -384,18 +501,24 @@ async function saveRow(id) {
   if (saving) return;
   const row = rows.querySelector(`tr[data-id="${CSS.escape(id)}"]`);
   if (!row) return;
+  const trip = (board?.trips ?? []).find((item) => item.id === id);
+  const fromOrders = tripOrders(id).length > 0;
+  const customer = fromOrders ? (trip?.customer || "") : field(row, "customer");
+  const loadingPlace = fromOrders ? (trip?.loadingPlace || "") : field(row, "loading");
+  const unloadingPlace = fromOrders ? (trip?.unloadingPlace || "") : field(row, "unloading");
+  const cargo = fromOrders ? (trip?.cargo || "") : field(row, "cargo");
   const status = field(row, "status");
   if (status === "Zrušená" && row.dataset.status !== "Zrušená" && !window.confirm("Označit jízdu jako zrušenou?"))
     return;
-  if (!field(row, "customer").trim()) {
+  if (!fromOrders && !customer.trim()) {
     showMessage("Vyplňte zákazníka.");
     return;
   }
-  if (!field(row, "loading").trim()) {
+  if (!fromOrders && !loadingPlace.trim()) {
     showMessage("Vyplňte místo nakládky.");
     return;
   }
-  if (!field(row, "unloading").trim()) {
+  if (!fromOrders && !unloadingPlace.trim()) {
     showMessage("Vyplňte místo vykládky.");
     return;
   }
@@ -407,10 +530,10 @@ async function saveRow(id) {
 
   saving = true;
   const updated = await send(`/api/dispatch/trips/${encodeURIComponent(id)}`, {
-    customer: field(row, "customer"),
-    loadingPlace: field(row, "loading"),
-    unloadingPlace: field(row, "unloading"),
-    cargo: field(row, "cargo"),
+    customer,
+    loadingPlace,
+    unloadingPlace,
+    cargo,
     plannedStart,
     note: field(row, "note"),
     vehicleId: field(row, "vehicle"),
@@ -430,7 +553,39 @@ document.querySelector("#logout").addEventListener("click", async () => {
 
 document.querySelector("#reload").addEventListener("click", () => load());
 statusInput.addEventListener("change", applyFilter);
+rows.addEventListener("submit", (event) => {
+  const form = event.target.closest("[data-add-order]");
+  if (!form) return;
+  event.preventDefault();
+  const orderId = form.querySelector("[data-free-order]")?.value;
+  if (!orderId) {
+    showMessage("Vyberte zakázku.");
+    return;
+  }
+  addOrderToTrip(form.dataset.addOrder, orderId);
+});
+
 rows.addEventListener("click", (event) => {
+  const expand = event.target.closest("[data-expand]");
+  if (expand) {
+    const extra = rows.querySelector(`tr[data-for="${CSS.escape(expand.dataset.expand)}"]`);
+    if (!extra) return;
+    const open = extra.dataset.open !== "1";
+    extra.dataset.open = open ? "1" : "0";
+    extra.hidden = !open;
+    expandedTripId = open ? expand.dataset.expand : null;
+    return;
+  }
+  const openOrder = event.target.closest("[data-open-order]");
+  if (openOrder && window.showOrder) {
+    window.showOrder(openOrder.dataset.openOrder);
+    return;
+  }
+  const remove = event.target.closest("[data-remove-order]");
+  if (remove) {
+    removeOrderFromTrip(remove.dataset.fromTrip || openTripId, remove.dataset.removeOrder);
+    return;
+  }
   const save = event.target.closest("[data-save]");
   if (save) {
     saveRow(save.dataset.save);
@@ -483,6 +638,7 @@ document.querySelector("#create").addEventListener("submit", async (event) => {
   document.querySelector("#vehicle").value = "";
   document.querySelector("#driver").value = "";
   document.querySelector("#planned").value = defaultPlanned();
+  document.querySelector("#trip-create-dialog")?.close();
   showMessage("");
   await load();
 });
@@ -536,6 +692,31 @@ document.querySelector("#trip-detail-close").addEventListener("click", () => {
   document.querySelector("#trip-detail").hidden = true;
   if (location.hash.startsWith("#jizda-")) history.replaceState(null, "", location.pathname);
 });
+async function addOrderToTrip(tripId, orderId) {
+  if (!tripId || !orderId || saving) return;
+  saving = true;
+  const added = await send(`/api/dispatch/trips/${encodeURIComponent(tripId)}/orders`, { orderId });
+  saving = false;
+  if (!added) return;
+  showMessage("");
+  await load();
+  if (openTripId === tripId) showTrip(tripId);
+}
+
+async function removeOrderFromTrip(tripId, orderId) {
+  if (!tripId || !orderId || saving) return;
+  saving = true;
+  const removed = await send(
+    `/api/dispatch/trips/${encodeURIComponent(tripId)}/orders/${encodeURIComponent(orderId)}`,
+    {},
+    "DELETE");
+  saving = false;
+  if (!removed) return;
+  showMessage("");
+  await load();
+  if (openTripId === tripId) showTrip(tripId);
+}
+
 document.querySelector("#trip-add-order").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!openTripId || saving) return;
@@ -544,26 +725,25 @@ document.querySelector("#trip-add-order").addEventListener("submit", async (even
     showMessage("Vyberte zakázku.");
     return;
   }
-  saving = true;
-  const added = await send(`/api/dispatch/trips/${encodeURIComponent(openTripId)}/orders`, { orderId });
-  saving = false;
-  if (!added) return;
-  showMessage("");
-  await load();
+  await addOrderToTrip(openTripId, orderId);
 });
-document.querySelector("#trip-order-rows").addEventListener("click", async (event) => {
+document.querySelector("#trip-order-rows").addEventListener("click", (event) => {
+  const openOrder = event.target.closest("[data-open-order]");
+  if (openOrder && window.showOrder) {
+    window.showOrder(openOrder.dataset.openOrder);
+    return;
+  }
   const button = event.target.closest("[data-remove-order]");
-  if (!button || !openTripId || saving) return;
-  saving = true;
-  const removed = await send(
-    `/api/dispatch/trips/${encodeURIComponent(openTripId)}/orders/${encodeURIComponent(button.dataset.removeOrder)}`,
-    {},
-    "DELETE");
-  saving = false;
-  if (!removed) return;
-  showMessage("");
-  await load();
+  if (!button || saving) return;
+  removeOrderFromTrip(button.dataset.fromTrip || openTripId, button.dataset.removeOrder);
 });
+document.querySelector("#open-trip-create")?.addEventListener("click", () => {
+  document.querySelector("#trip-create-message").hidden = true;
+  document.querySelector("#trip-create-dialog")?.showModal();
+});
+for (const button of document.querySelectorAll("[data-close-dialog]")) {
+  button.addEventListener("click", () => button.closest("dialog")?.close());
+}
 document.querySelector("#rates").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (saving) return;

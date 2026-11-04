@@ -350,8 +350,12 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=8", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=6", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=9", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=7", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"trip-create-dialog\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"order-create-dialog\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"open-trip-create\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"open-order-create\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"create-order-list\"", html, StringComparison.Ordinal);
         Assert.Contains("Vyberte zakázky, jízda se předvyplní z první.", html, StringComparison.Ordinal);
         Assert.Contains("Stornovat", html, StringComparison.Ordinal);
@@ -373,6 +377,20 @@ public sealed class DispatchPageTests
         Assert.Contains("driverId: document.querySelector(\"#driver\").value", js, StringComparison.Ordinal);
         Assert.Contains("item.plate} · ${item.label}", js, StringComparison.Ordinal);
         Assert.Contains("item.name", js, StringComparison.Ordinal);
+        Assert.Contains("data-expand", js, StringComparison.Ordinal);
+        Assert.Contains("Ze zakázek", js, StringComparison.Ordinal);
+        Assert.Contains("data-open-order", js, StringComparison.Ordinal);
+        Assert.Contains("showModal", js, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Order_list_query_includes_stops_and_legs()
+    {
+        var repo = Directory.GetParent(FindWwwRoot())!.FullName;
+        var source = File.ReadAllText(Path.Combine(repo, "Dispatch", "SqlOrderStore.cs"));
+        Assert.Contains("WHERE OrderId IN @Ids", source, StringComparison.Ordinal);
+        Assert.Contains("FROM dbo.Disp_OrderStop", source, StringComparison.Ordinal);
+        Assert.Contains("FROM dbo.Disp_OrderLeg", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -382,6 +400,7 @@ public sealed class DispatchPageTests
         var orders = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
         var trips = File.ReadAllText(Path.Combine(root, "dispecink.js"));
 
+        Assert.Contains("window.showOrder = async (id)", orders, StringComparison.Ordinal);
         Assert.Contains("Otevřít jízdu", orders, StringComparison.Ordinal);
         Assert.Contains("const assigned = prefix === \"edit\" ? (orderDetail?.order?.tripId || \"\") : \"\";", orders, StringComparison.Ordinal);
         Assert.Contains("const tripId = selected || assigned;", orders, StringComparison.Ordinal);
