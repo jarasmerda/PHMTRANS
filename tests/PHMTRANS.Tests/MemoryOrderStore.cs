@@ -101,7 +101,7 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
             _queue[index] = current with
             {
                 Attempts = attempts,
-                LastError = error,
+                LastError = OrderSyncLimits.TrimToColumn(error, OrderSyncLimits.LastErrorMaxLength),
                 ProcessedUtc = DateTimeOffset.UtcNow,
                 Status = attempts >= OrderSyncLimits.MaxAttempts ? OrderQueueStatuses.Failed : OrderQueueStatuses.Pending
             };

@@ -181,6 +181,175 @@ public sealed class OrderSyncTests
     }
 
     [Fact]
+    public void Import_error_reads_note_attributes_and_import_details()
+    {
+        var failed = OrderPohodaXml.ReadImport("""
+            <?xml version="1.0" encoding="Windows-1250"?>
+            <rsp:responsePack version="2.0" id="order-Z2026-0007-v2" state="error" note="Import dokladu se nezdařil." xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd" xmlns:rdc="http://www.stormware.cz/schema/version_2/documentresponse.xsd" xmlns:ord="http://www.stormware.cz/schema/version_2/order.xsd">
+              <rsp:responsePackItem version="2.0" id="Z2026-0007" state="error" note="XML není validní podle XSD schématu.">
+                <ord:orderResponse version="2.0" state="error">
+                  <rdc:importDetails>
+                    <rdc:detail>
+                      <rdc:state>error</rdc:state>
+                      <rdc:errno>120</rdc:errno>
+                      <rdc:note>Hodnota elementu je delší než povolených 90 znaků.</rdc:note>
+                      <rdc:XPath>/dat:dataPack/dat:dataPackItem[1]/ord:order/ord:orderDetail/ord:orderItem[1]/ord:text</rdc:XPath>
+                      <rdc:valueRequested>motorová nafta, 12000 l, Sklad Cerekvice</rdc:valueRequested>
+                    </rdc:detail>
+                    <rdc:detail>
+                      <rdc:state>warning</rdc:state>
+                      <rdc:errno>5</rdc:errno>
+                      <rdc:note>Nebyla nalezena měrná jednotka, použije se výchozí.</rdc:note>
+                      <rdc:XPath>/dat:dataPack/dat:dataPackItem[1]/ord:order/ord:orderDetail/ord:orderItem[1]/ord:unit</rdc:XPath>
+                      <rdc:valueRequested>ks</rdc:valueRequested>
+                      <rdc:valueProduced></rdc:valueProduced>
+                    </rdc:detail>
+                    <rdc:detail>
+                      <rdc:state>ok</rdc:state>
+                      <rdc:note>Tuto hlášku do chyby nedávat.</rdc:note>
+                    </rdc:detail>
+                  </rdc:importDetails>
+                </ord:orderResponse>
+              </rsp:responsePackItem>
+            </rsp:responsePack>
+            """);
+
+        Assert.False(failed.Ok);
+        var error = failed.Error ?? "";
+        Assert.Contains("Import dokladu se nezdařil.", error, StringComparison.Ordinal);
+        Assert.Contains("Z2026-0007: XML není validní podle XSD schématu.", error, StringComparison.Ordinal);
+        Assert.Contains("[error] errno 120: Hodnota elementu je delší než povolených 90 znaků.", error, StringComparison.Ordinal);
+        Assert.Contains("XPath=/dat:dataPack/dat:dataPackItem[1]/ord:order/ord:orderDetail/ord:orderItem[1]/ord:text", error, StringComparison.Ordinal);
+        Assert.Contains("valueRequested=motorová nafta, 12000 l, Sklad Cerekvice", error, StringComparison.Ordinal);
+        Assert.Contains("[warning] errno 5: Nebyla nalezena měrná jednotka, použije se výchozí.", error, StringComparison.Ordinal);
+        Assert.Contains("XPath=/dat:dataPack/dat:dataPackItem[1]/ord:order/ord:orderDetail/ord:orderItem[1]/ord:unit", error, StringComparison.Ordinal);
+        Assert.Contains("valueRequested=ks", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("valueProduced=", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("Tuto hlášku do chyby nedávat.", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("Pohoda vrátila chybu při importu objednávky.", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Import_error_without_a_note_falls_back_to_the_raw_body()
+    {
+        const string body = """
+            <rsp:responsePack state="error" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd">
+              <rsp:responsePackItem id="Z2026-0007" state="error"/>
+            </rsp:responsePack>
+            """;
+
+        var failed = OrderPohodaXml.ReadImport(body);
+
+        Assert.False(failed.Ok);
+        Assert.Contains("Z2026-0007", failed.Error, StringComparison.Ordinal);
+        Assert.Contains("responsePackItem", failed.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("Pohoda vrátila chybu při importu objednávky.", failed.Error, StringComparison.Ordinal);
+
+        var invalid = OrderPohodaXml.ReadImport("tohle neni xml");
+        Assert.Contains("mServer nevrátil platné XML.", invalid.Error, StringComparison.Ordinal);
+        Assert.Contains("tohle neni xml", invalid.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Successful_import_keeps_the_document_number_when_details_only_warn()
+    {
+        var ok = OrderPohodaXml.ReadImport("""
+            <rsp:responsePack state="ok" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd" xmlns:rdc="http://www.stormware.cz/schema/version_2/documentresponse.xsd">
+              <rsp:responsePackItem state="ok">
+                <rdc:producedDetails>
+                  <rdc:id>15</rdc:id>
+                  <rdc:number>242100045</rdc:number>
+                </rdc:producedDetails>
+                <rdc:importDetails>
+                  <rdc:detail>
+                    <rdc:state>warning</rdc:state>
+                    <rdc:errno>5</rdc:errno>
+                    <rdc:note>Jen upozornění.</rdc:note>
+                  </rdc:detail>
+                </rdc:importDetails>
+              </rsp:responsePackItem>
+            </rsp:responsePack>
+            """);
+
+        Assert.True(ok.Ok);
+        Assert.Equal(15, ok.Id);
+        Assert.Equal("242100045", ok.Number);
+    }
+
+    [Fact]
+    public void Create_xml_stays_inside_the_pohoda_order_schema()
+    {
+        var order = Sample(version: 2, price: 10000m, fuel: new string('F', 80)) with
+        {
+            Code = new string('K', 30),
+            Status = OrderStatuses.KFakturaci,
+            CustomerPohodaId = null,
+            CustomerName = new string('C', 300),
+            LoadingPlace = new string('N', 160),
+            UnloadingPlace = new string('V', 160),
+            Surcharges = 250m
+        };
+        var options = SampleOptions();
+        options.Ico = "12345678901234567890";
+        options.Application = new string('A', 120);
+        var plan = new OrderSyncPlan(OrderSyncAction.Create, null, 2);
+        var xml = OrderPohodaXml.Build(options, plan, order, lastSent: null);
+        var document = XDocument.Parse(xml);
+        var pack = document.Root!;
+
+        Assert.Equal("2.0", pack.Attribute("version")?.Value);
+        Assert.Equal("123456789012345", pack.Attribute("ico")?.Value);
+        Assert.Equal(new string('A', 100), pack.Attribute("application")?.Value);
+        Assert.False(string.IsNullOrWhiteSpace(pack.Attribute("note")?.Value));
+        Assert.InRange(pack.Attribute("id")?.Value.Length ?? 0, 1, 64);
+        Assert.InRange(pack.Elements().First().Attribute("id")?.Value.Length ?? 0, 1, 64);
+
+        var header = document.Descendants().First(element => element.Name.LocalName == "orderHeader");
+        var orderElement = header.Parent!;
+        Assert.Equal("2.0", orderElement.Attribute("version")?.Value);
+        Assert.Equal("receivedOrder", header.Elements().First(element => element.Name.LocalName == "orderType").Value);
+        Assert.Matches("^\\d{4}-\\d{2}-\\d{2}$", header.Elements().First(element => element.Name.LocalName == "date").Value);
+        Assert.NotNull(header.Elements().First(element => element.Name.LocalName == "partnerIdentity"));
+        Assert.Equal(255, header.Descendants().First(element => element.Name.LocalName == "company").Value.Length);
+        Assert.InRange(header.Elements().First(element => element.Name.LocalName == "numberOrder").Value.Length, 1, 32);
+        Assert.InRange(header.Elements().First(element => element.Name.LocalName == "text").Value.Length, 1, 240);
+        Assert.DoesNotContain(document.Descendants().Where(element => element.Name.LocalName == "orderItem"), item =>
+            item.Elements().First(element => element.Name.LocalName == "text").Value.Length > 90);
+
+        var correction = order with { CurrentVersion = 12, PohodaOrderNumber = "242100045" };
+        var correctionXml = OrderPohodaXml.Build(
+            SampleOptions(),
+            new OrderSyncPlan(OrderSyncAction.Correction, 2, 12),
+            correction,
+            order);
+        var numberOrder = XDocument.Parse(correctionXml).Descendants().First(element => element.Name.LocalName == "numberOrder").Value;
+        Assert.InRange(numberOrder.Length, 1, 32);
+        Assert.StartsWith(new string('K', 30), numberOrder, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Mark_failed_trims_last_error_to_the_queue_column()
+    {
+        var live = SampleOptions();
+        live.SyncMode = "Live";
+        var store = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(live));
+        var created = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request(), CancellationToken.None));
+        Assert.IsType<OrderMutation.Success>(await store.ConfirmAsync(created.Order.Id, CancellationToken.None));
+        var entry = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
+
+        var boundary = new string('á', 999) + "\uD800\uDC00" + "konec";
+        await store.MarkFailedAsync(entry.Id, boundary, CancellationToken.None);
+
+        var stored = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
+        Assert.Equal(999, stored.LastError!.Length);
+        Assert.Equal('á', stored.LastError[^1]);
+        Assert.Equal(new string('á', 999), stored.LastError);
+        Assert.Null(OrderSyncLimits.TrimToColumn("   ", OrderSyncLimits.LastErrorMaxLength));
+        Assert.Equal(1000, OrderSyncLimits.TrimToColumn(new string('x', 1000), OrderSyncLimits.LastErrorMaxLength)!.Length);
+        Assert.Equal(1000, OrderSyncLimits.TrimToColumn(new string('x', 1400), OrderSyncLimits.LastErrorMaxLength)!.Length);
+    }
+
+    [Fact]
     public void Live_is_the_default_and_write_credentials_fall_back()
     {
         var options = new PohodaOptions { Username = "cteni", Password = "heslo-cteni" };

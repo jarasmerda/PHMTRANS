@@ -209,7 +209,7 @@ public sealed class SqlOrderStore(
                 new
                 {
                     Id = id,
-                    LastError = Trim(error, 1000),
+                    LastError = Trim(error, OrderSyncLimits.LastErrorMaxLength),
                     Now = DateTimeOffset.UtcNow,
                     Max = OrderSyncLimits.MaxAttempts
                 }));
@@ -625,13 +625,7 @@ public sealed class SqlOrderStore(
         object? parameters = null) =>
         new(sql, parameters, transaction, cancellationToken: cancellationToken);
 
-    private static string? Trim(string? value, int max)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        var trimmed = value.Trim();
-        return trimmed.Length <= max ? trimmed : trimmed[..max];
-    }
+    private static string? Trim(string? value, int max) => OrderSyncLimits.TrimToColumn(value, max);
 
     private sealed class OrderRow
     {
