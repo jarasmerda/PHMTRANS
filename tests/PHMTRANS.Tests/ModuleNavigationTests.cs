@@ -100,7 +100,10 @@ public sealed class ModuleNavigationPageTests
         var js = File.ReadAllText(Path.Combine(root, "erp.js"));
 
         Assert.Contains("<h1>ERP</h1>", html, StringComparison.Ordinal);
-        Assert.Contains("erp.js?v=5", html, StringComparison.Ordinal);
+        Assert.Contains("erp.js?v=6", html, StringComparison.Ordinal);
+        Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"from\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"to\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Části ERP\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"#bi\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"#zpracovani-objednavek\">Zpracování objednávek</a>", html, StringComparison.Ordinal);
@@ -121,6 +124,7 @@ public sealed class ModuleNavigationPageTests
         Assert.Contains("vytvareni-objednavek", js, StringComparison.Ordinal);
         Assert.Contains("uctovani-faktur", js, StringComparison.Ordinal);
         Assert.Contains("/api/bi/issued-invoices", js, StringComparison.Ordinal);
+        Assert.Contains("param: \"odberatel\"", js, StringComparison.Ordinal);
     }
 
     private static int Count(string text, string value)

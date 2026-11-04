@@ -110,94 +110,11 @@ function applyFilter() {
     visible += 1;
   }
   empty.hidden = visible > 0;
-  const filtered = tripStatusFilter && tripStatusFilter.values().length > 0;
+  const filtered = tripStatusFilter && !tripStatusFilter.isAll();
   empty.textContent = filtered ? "V tomto stavu není žádná jízda." : "Zatím není žádná jízda.";
 }
 
 window.keepQuery = (hash) => `${location.pathname}${location.search}${hash || ""}`;
-
-window.bindStatusFilter = function (root, options) {
-  const toggle = root.querySelector(".status-filter-toggle");
-  const panel = root.querySelector(".status-filter-panel");
-  const all = root.querySelector("[data-status-all]");
-  const boxes = [...root.querySelectorAll("[data-status-value]")];
-  const known = options.known;
-
-  function chosen() {
-    return boxes.filter((box) => box.checked).map((box) => box.value);
-  }
-
-  function summary() {
-    const values = chosen();
-    if (all.checked || values.length === 0) return "Vše";
-    if (values.length === 1) return values[0];
-    if (values.length === 2) return values.join(", ");
-    const word = values.length >= 5 ? "stavů" : "stavy";
-    return `${values.length} ${word}`;
-  }
-
-  function paint() {
-    toggle.textContent = summary();
-  }
-
-  function readQuery() {
-    const params = new URLSearchParams(location.search);
-    const values = params.getAll(options.param)
-      .flatMap((value) => value.split(","))
-      .map((value) => value.trim())
-      .filter((value) => known.includes(value));
-    if (!values.length) {
-      all.checked = true;
-      boxes.forEach((box) => { box.checked = false; });
-    } else {
-      all.checked = false;
-      boxes.forEach((box) => { box.checked = values.includes(box.value); });
-    }
-    paint();
-  }
-
-  function writeQuery() {
-    const params = new URLSearchParams(location.search);
-    params.delete(options.param);
-    if (!all.checked) {
-      for (const value of chosen()) params.append(options.param, value);
-    }
-    const query = params.toString();
-    history.replaceState(null, "", query ? `${location.pathname}?${query}${location.hash}` : `${location.pathname}${location.hash}`);
-  }
-
-  function publish() {
-    paint();
-    writeQuery();
-    options.onChange();
-  }
-
-  all.addEventListener("change", () => {
-    if (all.checked) boxes.forEach((box) => { box.checked = false; });
-    else if (!chosen().length) all.checked = true;
-    publish();
-  });
-  for (const box of boxes) {
-    box.addEventListener("change", () => {
-      if (box.checked) all.checked = false;
-      if (!chosen().length) all.checked = true;
-      publish();
-    });
-  }
-  toggle.addEventListener("click", () => {
-    const open = panel.hidden;
-    panel.hidden = !open;
-    toggle.setAttribute("aria-expanded", open ? "true" : "false");
-  });
-  document.addEventListener("click", (event) => {
-    if (!root.contains(event.target)) {
-      panel.hidden = true;
-      toggle.setAttribute("aria-expanded", "false");
-    }
-  });
-  readQuery();
-  return { values: () => (all.checked ? [] : chosen()) };
-};
 
 function statusQuery(filter) {
   const params = new URLSearchParams();
@@ -856,6 +773,7 @@ document.querySelector("#rates").addEventListener("submit", async (event) => {
 tripStatusFilter = window.bindStatusFilter(document.querySelector("#trip-status-filter"), {
   param: "jizdy",
   known: ["Nová", "Přiřazená", "Na cestě", "Vyložená", "Zrušená", "Stornováno"],
+  excludeByDefault: ["Stornováno"],
   onChange() { load(); }
 });
 

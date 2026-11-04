@@ -27,7 +27,7 @@ public static class OrderEndpoints
         CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            var selected = StatusSelection.Parse(status, OrderStatuses.All, OrderStatuses.UnknownMessage);
+            var selected = StatusSelection.ParseList(status, OrderStatuses.All, OrderStatuses.UnknownMessage, OrderStatuses.Stornovano);
             if (selected.Error is not null)
                 return Results.BadRequest(new { message = selected.Error });
 
@@ -35,7 +35,9 @@ public static class OrderEndpoints
             var counts = OrderStatuses.All
                 .Select(item => new OrderStatusCount(item, orders.Count(order => order.Status == item)))
                 .ToArray();
-            orders = OrderListFilter.Apply(orders, selected.Values);
+            orders = selected.Restrict
+                ? OrderListFilter.Apply(orders, selected.Values)
+                : orders.ToArray();
 
             var sorted = orders
                 .OrderBy(order => OrderStatuses.Rank(order.Status))

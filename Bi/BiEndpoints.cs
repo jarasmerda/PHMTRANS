@@ -1,4 +1,5 @@
 using PHMTRANS.Pohoda;
+using PHMTRANS;
 
 namespace PHMTRANS.Bi;
 
@@ -9,7 +10,7 @@ public static class BiEndpoints
         app.MapGet("/api/bi/issued-invoices", async (
             DateOnly? from,
             DateOnly? to,
-            string? customer,
+            string[]? customer,
             bool? refresh,
             IssuedInvoiceCache cache,
             PohodaMServerClient pohoda,
@@ -29,8 +30,9 @@ public static class BiEndpoints
                     refresh ?? true,
                     token => pohoda.ListIssuedInvoicesAsync(start, end, token),
                     cancellationToken);
-                var selected = string.IsNullOrWhiteSpace(customer) ? null : customer.Trim();
-                return Results.Ok(CreateReport(start, end, invoices, selected));
+                var selected = ValueSelection.Parse(customer, null, "");
+                var names = selected.ExplicitAll || selected.Values.Count == 0 ? null : selected.Values;
+                return Results.Ok(CreateReport(start, end, invoices, names));
             }
             catch (PohodaException exception)
             {
@@ -43,7 +45,7 @@ public static class BiEndpoints
         DateOnly from,
         DateOnly to,
         IReadOnlyList<IssuedInvoice> invoices,
-        string? customer)
+        IReadOnlyList<string>? customer)
     {
         var customers = InvoiceCustomerFilter.Names(invoices);
         var filtered = InvoiceCustomerFilter.Apply(invoices, customer);
@@ -78,4 +80,4 @@ public sealed record IssuedInvoiceReport(
     IReadOnlyList<InvoiceMonth> Months,
     IReadOnlyList<IssuedInvoice> Invoices,
     IReadOnlyList<string> Customers,
-    string? CustomerFilter);
+    IReadOnlyList<string>? CustomerFilter);

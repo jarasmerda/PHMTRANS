@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vydané faktury – PHM Trans</title>
   <link rel="stylesheet" href="/erp.css?v=17">
+  <link rel="stylesheet" href="/filter.css?v=1">
 </head>
 <body>
   <header>
@@ -35,11 +36,13 @@
   <form id="range">
     <label>Od <input id="from" name="from" type="date" required></label>
     <label>Do <input id="to" name="to" type="date" required></label>
-    <label>Odběratel
-      <select id="customer" name="customer">
-        <option value="">Všichni odběratelé</option>
-      </select>
-    </label>
+    <div class="status-filter" id="customer">
+      <span>Odběratel</span>
+      <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="customer-panel">Vše</button>
+      <div id="customer-panel" class="status-filter-panel" hidden>
+        <label><input type="checkbox" data-status-all checked> Vše</label>
+      </div>
+    </div>
     <button type="submit">Zobrazit</button>
     <button type="button" data-range="year">Tento rok</button>
     <button type="button" data-range="month">Tento měsíc</button>
@@ -89,6 +92,7 @@
     <h2 class="section-title">Účtování faktur</h2>
     <p class="section-placeholder">Připravujeme</p>
   </section>
-  <script src="/erp.js?v=5"></script>
+  <script src="/multi-filter.js?v=1"></script>
+  <script src="/erp.js?v=6"></script>
 </body>
 </html>

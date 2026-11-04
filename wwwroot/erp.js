@@ -5,8 +5,13 @@ const text = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
 const dateFormat = new Intl.DateTimeFormat("cs-CZ");
 const fromInput = document.querySelector("#from");
 const toInput = document.querySelector("#to");
-const customerInput = document.querySelector("#customer");
 const message = document.querySelector("#message");
+const customerFilter = window.bindStatusFilter(document.querySelector("#customer"), {
+  param: "odberatel",
+  dynamic: true,
+  noun: { few: "odběratelé", many: "odběratelů" },
+  onChange() { load(null, false); }
+});
 let requestSeq = 0;
 
 const today = new Date();
@@ -53,18 +58,7 @@ function customerNames(data) {
 }
 
 function fillCustomers(names) {
-  const selected = customerInput.value;
-  customerInput.replaceChildren(new Option("Všichni odběratelé", ""));
-  for (const name of names)
-    customerInput.add(new Option(name, name));
-
-  if (selected && names.includes(selected)) {
-    customerInput.value = selected;
-    return false;
-  }
-
-  customerInput.value = "";
-  return selected.length > 0;
+  return customerFilter.setChoices(names.map((name) => ({ value: name, label: name })));
 }
 
 async function load(event, refresh = false) {
@@ -80,8 +74,7 @@ async function load(event, refresh = false) {
   }
 
   const params = new URLSearchParams({ from: fromInput.value, to: toInput.value, refresh: refresh ? "true" : "false" });
-  if (customerInput.value)
-    params.set("customer", customerInput.value);
+  for (const name of customerFilter.values()) params.append("customer", name);
 
   let response;
   try {
@@ -138,9 +131,9 @@ async function load(event, refresh = false) {
       <td class="num">${money.format(remaining)}</td>
       <td>${pill(invoice.status)}</td>
     </tr>`;
-  }).join("") || `<tr><td colspan="8">${customerInput.value
-    ? "Pro vybraného odběratele v tomto období není žádná vydaná faktura."
-    : "V tomto období není žádná vydaná faktura."}</td></tr>`;
+  }).join("") || `<tr><td colspan="8">${customerFilter.isAll()
+    ? "V tomto období není žádná vydaná faktura."
+    : "Pro vybrané odběratele v tomto období není žádná vydaná faktura."}</td></tr>`;
   document.querySelector("#table-wrap").hidden = false;
 }
 
@@ -185,5 +178,4 @@ document.querySelectorAll("[data-range]").forEach((button) => {
     load(null, true);
   });
 });
-customerInput.addEventListener("change", () => load(null, false));
 load(null, true);

@@ -31,12 +31,12 @@ public static class DispatchEndpoints
     private static Task<IResult> GetBoard(string[]? status, IDispatchStore store, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
-            var selected = StatusSelection.Parse(status, DispatchStatuses.All, DispatchStatuses.UnknownMessage);
+            var selected = StatusSelection.ParseList(status, DispatchStatuses.All, DispatchStatuses.UnknownMessage, DispatchStatuses.Stornovano);
             if (selected.Error is not null)
                 return Results.BadRequest(new { message = selected.Error });
 
             var board = ToBoard(await store.ReadAsync(cancellationToken));
-            if (selected.Values.Count == 0)
+            if (!selected.Restrict)
                 return Results.Ok(board);
 
             var trips = board.Trips.Where(trip => selected.Values.Contains(trip.Status)).ToArray();
