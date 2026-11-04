@@ -29,9 +29,10 @@ public interface IPohodaAddressBook
 }
 
 // Jen čtení. Do dbo.AD se nezapisuje.
+// Adresář je ve firemní databázi Pohody, ne v dispečinku. Dotaz jde přes [StwPh_…].dbo.AD.
 public static partial class PohodaAddressSql
 {
-    public const string DefaultDatabase = "Smerco_26950430_2026";
+    public const string DefaultDatabase = "StwPh_26950430_2026";
 
     public const string Login = "phmtrans_dispatch";
 

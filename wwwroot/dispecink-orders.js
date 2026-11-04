@@ -38,11 +38,15 @@ function orderToday() {
 
 function orderOptions(items, selected, emptyLabel, labelOf) {
   const head = `<option value="">${orderText(emptyLabel)}</option>`;
+  const known = items.some((item) => item.id === selected);
+  const extra = selected && !known
+    ? `<option value="${orderText(selected)}" selected>${orderText(selected)}</option>`
+    : "";
   const body = items.map((item) => {
     const selectedAttr = item.id === selected ? " selected" : "";
     return `<option value="${orderText(item.id)}"${selectedAttr}>${orderText(labelOf(item))}</option>`;
   }).join("");
-  return head + body;
+  return head + extra + body;
 }
 
 function orderStatusOptions(selected) {
@@ -454,17 +458,19 @@ async function orderFetch(url, options) {
   return { ok: response.ok, status: response.status, data };
 }
 
-async function loadCatalog() {
+async function fetchCatalog() {
   const [vehicles, drivers, trips] = await Promise.all([
     orderFetch("/api/dispatch/vehicles"),
     orderFetch("/api/dispatch/drivers"),
     orderFetch("/api/dispatch/trips")
   ]);
-  orderCatalog = {
-    vehicles: Array.isArray(vehicles.data) ? vehicles.data : [],
-    drivers: Array.isArray(drivers.data) ? drivers.data : [],
-    trips: Array.isArray(trips.data) ? trips.data : []
-  };
+  if (Array.isArray(vehicles.data)) orderCatalog.vehicles = vehicles.data;
+  if (Array.isArray(drivers.data)) orderCatalog.drivers = drivers.data;
+  if (Array.isArray(trips.data)) orderCatalog.trips = trips.data;
+}
+
+async function loadCatalog() {
+  await fetchCatalog();
   document.querySelector("#order-create").innerHTML = formFields("create");
   applyTripCrew("create");
   refreshRoute("create");
@@ -491,6 +497,9 @@ async function openOrder(id, scroll) {
     orderShow(orderMessage, result.data.message || "Zakázku se nepodařilo načíst.");
     return;
   }
+  const tripId = result.data?.order?.tripId || "";
+  if (tripId && !orderCatalog.trips.some((item) => item.id === tripId))
+    await fetchCatalog();
   renderDetail(result.data);
   if (scroll)
     document.querySelector("#order-detail").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -589,11 +598,18 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     orderShow(orderMessage, "");
     return;
   }
-  const openTrip = event.target.closest("[data-open-trip]");
-  if (openTrip) {
-    const tripId = document.querySelector(`#${openTrip.dataset.openTrip}-trip`)?.value;
-    if (tripId && window.openTrip) window.openTrip(tripId);
-    else orderShow(orderMessage, "Nejdřív vyberte jízdu.");
+  const openTripButton = event.target.closest("[data-open-trip]");
+  if (openTripButton) {
+    const prefix = openTripButton.dataset.openTrip;
+    const selected = document.querySelector(`#${prefix}-trip`)?.value || "";
+    const assigned = prefix === "edit" ? (orderDetail?.order?.tripId || "") : "";
+    const tripId = selected || assigned;
+    if (tripId && typeof window.openTrip === "function") {
+      orderShow(orderMessage, "");
+      window.openTrip(tripId);
+    } else {
+      orderShow(orderMessage, "Nejdřív vyberte jízdu.");
+    }
     return;
   }
   const route = event.target.closest("[data-route]");
