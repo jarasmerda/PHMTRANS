@@ -55,6 +55,12 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
     public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
         ChangeAsync((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
 
+    public Task<DispatchMutation> CancelTripAsync(string id, CancellationToken cancellationToken) =>
+        ChangeAsync((document, now) => DispatchRules.CancelTrip(document, id, now), cancellationToken);
+
+    public Task<DispatchMutation> DeleteTripAsync(string id, int orderCount, CancellationToken cancellationToken) =>
+        ChangeAsync((document, _) => DispatchRules.DeleteTrip(document, id, orderCount), cancellationToken);
+
     public Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken) =>
         InConnection(async (connection, _, token) =>
         {
@@ -107,6 +113,17 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
             var document = await LoadAsync(connection, transaction, token);
             var known = document.Trips.Select(trip => trip.Id).ToHashSet(StringComparer.Ordinal);
             var mutation = change(document, DateTimeOffset.Now);
+            if (mutation is DispatchMutation.Deleted deleted)
+            {
+                await connection.ExecuteAsync(Command(
+                    "DELETE FROM dbo.Disp_Trip WHERE Id = @Id",
+                    transaction,
+                    token,
+                    new { deleted.Id }));
+                await transaction!.CommitAsync(token);
+                return mutation;
+            }
+
             if (mutation is not DispatchMutation.Success success)
                 return mutation;
 

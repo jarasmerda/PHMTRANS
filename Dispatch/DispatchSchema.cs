@@ -89,6 +89,14 @@ public static class DispatchSchema
                 SalePerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_SalePerKm DEFAULT 0,
                 SalePerLiter decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_SalePerLiter DEFAULT 0,
                 CostPerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_CostPerKm DEFAULT 0,
+                CancelReason nvarchar(500) NULL,
+                CustomerIco nvarchar(15) NULL,
+                CustomerDic nvarchar(18) NULL,
+                CustomerStreet nvarchar(64) NULL,
+                CustomerCity nvarchar(45) NULL,
+                CustomerZip nvarchar(15) NULL,
+                CustomerEmail nvarchar(98) NULL,
+                CustomerPhone nvarchar(40) NULL,
                 CONSTRAINT FK_Disp_Order_Vehicle FOREIGN KEY (VehicleId) REFERENCES dbo.Disp_Vehicle (Id),
                 CONSTRAINT FK_Disp_Order_Driver FOREIGN KEY (DriverId) REFERENCES dbo.Disp_Driver (Id),
                 CONSTRAINT FK_Disp_Order_Trip FOREIGN KEY (TripId) REFERENCES dbo.Disp_Trip (Id)
@@ -128,6 +136,14 @@ public static class DispatchSchema
                 SalePerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_SalePerKm DEFAULT 0,
                 SalePerLiter decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_SalePerLiter DEFAULT 0,
                 CostPerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_CostPerKm DEFAULT 0,
+                CancelReason nvarchar(500) NULL,
+                CustomerIco nvarchar(15) NULL,
+                CustomerDic nvarchar(18) NULL,
+                CustomerStreet nvarchar(64) NULL,
+                CustomerCity nvarchar(45) NULL,
+                CustomerZip nvarchar(15) NULL,
+                CustomerEmail nvarchar(98) NULL,
+                CustomerPhone nvarchar(40) NULL,
                 RouteJson nvarchar(max) NULL,
                 CONSTRAINT PK_Disp_OrderVersion PRIMARY KEY (OrderId, Version),
                 CONSTRAINT FK_Disp_OrderVersion_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
@@ -241,6 +257,40 @@ public static class DispatchSchema
 
         IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'RouteJson') IS NULL
             ALTER TABLE dbo.Disp_OrderVersion ADD RouteJson nvarchar(max) NULL;
+
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CancelReason') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CancelReason nvarchar(500) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerIco') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CustomerIco nvarchar(15) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerDic') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CustomerDic nvarchar(18) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerStreet') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CustomerStreet nvarchar(64) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerCity') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CustomerCity nvarchar(45) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerZip') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CustomerZip nvarchar(15) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerEmail') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CustomerEmail nvarchar(98) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerPhone') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CustomerPhone nvarchar(40) NULL;
+
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CancelReason') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CancelReason nvarchar(500) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerIco') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CustomerIco nvarchar(15) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerDic') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CustomerDic nvarchar(18) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerStreet') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CustomerStreet nvarchar(64) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerCity') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CustomerCity nvarchar(45) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerZip') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CustomerZip nvarchar(15) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerEmail') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CustomerEmail nvarchar(98) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerPhone') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CustomerPhone nvarchar(40) NULL;
 
         IF NOT EXISTS (
             SELECT 1 FROM sys.indexes

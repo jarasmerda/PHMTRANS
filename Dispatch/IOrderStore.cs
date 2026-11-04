@@ -16,6 +16,8 @@ public interface IOrderStore
 
     Task<OrderMutation> ResendAsync(string id, CancellationToken cancellationToken);
 
+    Task<OrderMutation> CancelAsync(string id, string? reason, bool delete, CancellationToken cancellationToken);
+
     Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken);
 
     Task<string?> AttachOrdersAsync(string tripId, IReadOnlyList<string> orderIds, bool onlyIfFree, CancellationToken cancellationToken);

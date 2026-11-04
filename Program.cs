@@ -62,6 +62,10 @@ if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("Dispa
     builder.Services.AddSingleton<PreviewAuthStore>();
     builder.Services.AddSingleton<IAuthStore>(sp => sp.GetRequiredService<PreviewAuthStore>());
 }
+builder.Services.AddSingleton<SqlPohodaAddressBook>();
+builder.Services.AddSingleton<IPohodaAddressBook>(sp => sp.GetRequiredService<SqlPohodaAddressBook>());
+if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("Dispatch:Preview", false))
+    builder.Services.AddSingleton<IPohodaAddressBook, PreviewPohodaAddressBook>();
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>

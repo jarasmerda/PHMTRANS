@@ -5,7 +5,9 @@ public enum OrderSyncAction
     None,
     Create,
     Update,
-    Correction
+    Correction,
+    Delete,
+    Cancel
 }
 
 public sealed record OrderSyncPlan(
@@ -22,6 +24,8 @@ public sealed record OrderSyncPlan(
         OrderSyncAction.Create => OrderSyncActions.Create,
         OrderSyncAction.Update => OrderSyncActions.Update,
         OrderSyncAction.Correction => OrderSyncActions.Correction,
+        OrderSyncAction.Delete => OrderSyncActions.Delete,
+        OrderSyncAction.Cancel => OrderSyncActions.Cancel,
         _ => null
     };
 }
@@ -77,6 +81,9 @@ public static class OrderSyncPlanner
 
         return OrderSyncPlan.None(current.CurrentVersion);
     }
+
+    public static bool WasSent(DispatchOrder order) =>
+        order.PohodaOrderId is > 0 || order.LastSentVersion is not null;
 }
 
 public static class OrderSyncMode

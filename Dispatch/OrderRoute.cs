@@ -40,7 +40,7 @@ public sealed record OrderRouteSnapshot(
     IReadOnlyList<OrderStop> Stops,
     IReadOnlyList<OrderLeg> Legs);
 
-public sealed record TripLink(string Id, string? VehicleId, string? DriverId);
+public sealed record TripLink(string Id, string? VehicleId, string? DriverId, string? Status = null);
 
 public static class OrderCatalogs
 {
@@ -51,7 +51,7 @@ public static class OrderCatalogs
     {
         var trips = snapshot.Trips.ToDictionary(
             trip => trip.Id,
-            trip => new TripLink(trip.Id, trip.VehicleId, trip.DriverId),
+            trip => new TripLink(trip.Id, trip.VehicleId, trip.DriverId, trip.Status),
             StringComparer.Ordinal);
         var rates = snapshot.Vehicles
             .Where(vehicle => vehicle.CostPerKm is not null)
@@ -341,8 +341,15 @@ public static class OrderAssignment
     {
         if (order is null)
             return "Zakázka neexistuje.";
+        if (order.Status == OrderStatuses.Stornovano)
+            return "Stornovaná zakázka je jen ke čtení.";
         if (tripId is not null && !catalog.TripIds.Contains(tripId))
             return "Neznámá jízda.";
+        if (tripId is not null
+            && catalog.Trips is not null
+            && catalog.Trips.TryGetValue(tripId, out var link)
+            && link.Status == DispatchStatuses.Stornovano)
+            return "Stornovaná jízda už zakázky nepřijímá.";
         if (onlyIfFree && tripId is not null && order.TripId is not null && !string.Equals(order.TripId, tripId, StringComparison.Ordinal))
             return TakenMessage;
         return null;

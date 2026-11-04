@@ -350,8 +350,11 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=6", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=7", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=3", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"create-order-list\"", html, StringComparison.Ordinal);
+        Assert.Contains("Vyberte zakázky, jízda se předvyplní z první.", html, StringComparison.Ordinal);
+        Assert.Contains("Stornovat", html, StringComparison.Ordinal);
         Assert.Contains("id=\"trip-detail\"", html, StringComparison.Ordinal);
         Assert.Contains("Součet litrů", html, StringComparison.Ordinal);
         Assert.Contains("id=\"order-sync-warning\"", html, StringComparison.Ordinal);
@@ -405,7 +408,11 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(13, Count(script, "ALTER TABLE"));
+        Assert.Equal(29, Count(script, "ALTER TABLE"));
+        Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Order', N'CancelReason') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerIco') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerStreet') IS NULL", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("dbo.AD", script, StringComparison.Ordinal);
         Assert.Equal(3, DispatchSchema.Batches.Length);
         Assert.Contains("dbo.Disp_OrderStop", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_OrderLeg", script, StringComparison.Ordinal);

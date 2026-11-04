@@ -60,6 +60,12 @@ public sealed class PreviewDispatchStore : IDispatchStore
     public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
         Change((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
 
+    public Task<DispatchMutation> CancelTripAsync(string id, CancellationToken cancellationToken) =>
+        Change((document, now) => DispatchRules.CancelTrip(document, id, now), cancellationToken);
+
+    public Task<DispatchMutation> DeleteTripAsync(string id, int orderCount, CancellationToken cancellationToken) =>
+        Change((document, now) => DispatchRules.DeleteTrip(document, id, orderCount), cancellationToken);
+
     public async Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken);

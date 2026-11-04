@@ -7,11 +7,14 @@ public static class DispatchStatuses
     public const string NaCeste = "Na cestě";
     public const string Vylozena = "Vyložená";
     public const string Zrusena = "Zrušená";
+    public const string Stornovano = "Stornováno";
 
     public const string UnknownMessage =
-        "Neznámý stav. Povolené jsou Nová, Přiřazená, Na cestě, Vyložená a Zrušená.";
+        "Neznámý stav. Povolené jsou Nová, Přiřazená, Na cestě, Vyložená, Zrušená a Stornováno.";
 
-    public static readonly IReadOnlyList<string> All = [Nova, Prirazena, NaCeste, Vylozena, Zrusena];
+    public static readonly IReadOnlyList<string> All = [Nova, Prirazena, NaCeste, Vylozena, Zrusena, Stornovano];
+
+    public static readonly IReadOnlyList<string> Editable = [Nova, Prirazena, NaCeste, Vylozena, Zrusena];
 
     public static bool IsKnown(string status) => All.Contains(status);
 
@@ -22,7 +25,8 @@ public static class DispatchStatuses
         Nova => 2,
         Vylozena => 3,
         Zrusena => 4,
-        _ => 5
+        Stornovano => 5,
+        _ => 6
     };
 }
 
@@ -116,6 +120,8 @@ public abstract record DispatchMutation
     }
 
     public sealed record Success(DispatchTrip Trip) : DispatchMutation;
+
+    public sealed record Deleted(string Id) : DispatchMutation;
 
     public sealed record NotFound : DispatchMutation;
 

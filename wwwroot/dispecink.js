@@ -108,8 +108,12 @@ function tripOrders(tripId) {
   return orders.filter((order) => order.tripId === tripId);
 }
 
+function countsInTotals(order) {
+  return order.status !== "Stornováno";
+}
+
 function sumLiters(list) {
-  return list.reduce((sum, order) => sum + Number(order.liters || 0), 0);
+  return list.filter(countsInTotals).reduce((sum, order) => sum + Number(order.liters || 0), 0);
 }
 
 function litersLabel(value) {
@@ -134,7 +138,8 @@ function displayRow(trip) {
       <td>${text(trip.status)}</td>
       <td>
         <button type="button" data-orders="${text(trip.id)}">Zakázky</button>
-        <button type="button" data-edit="${text(trip.id)}">Upravit</button>
+        ${trip.status === "Stornováno" ? "" : `<button type="button" data-edit="${text(trip.id)}">Upravit</button>`}
+        ${trip.status === "Stornováno" ? "" : `<button type="button" class="ghost" data-storno="${text(trip.id)}">Stornovat</button>`}
       </td>
     </tr>`;
 }
@@ -172,6 +177,7 @@ function render(data) {
   document.querySelector("#count-naceste").textContent = count(data, "Na cestě");
   document.querySelector("#count-vylozena").textContent = count(data, "Vyložená");
   document.querySelector("#count-zrusena").textContent = count(data, "Zrušená");
+  document.querySelector("#count-stornovano").textContent = count(data, "Stornováno");
   document.querySelector("#cards").hidden = false;
 
   rows.innerHTML = (data.trips ?? []).map(displayRow).join("");
@@ -200,18 +206,29 @@ function freeOrders(exceptTripId) {
 }
 
 function renderCreateOrders() {
-  const box = document.querySelector("#create-order-list");
-  const selected = new Set([...box.querySelectorAll("input:checked")].map((input) => input.value));
-  const available = orders.filter((order) => !order.tripId);
-  box.innerHTML = available.length
-    ? available.map((order) => `<label><input type="checkbox" value="${text(order.id)}"${selected.has(order.id) ? " checked" : ""}> ${text(order.code)} · ${text(order.customerName)} · ${litersLabel(order.liters)} l</label>`).join("")
-    : `<span class="route-to">Žádná volná zakázka.</span>`;
+  const list = document.querySelector("#create-order-list");
+  const box = document.querySelector("#create-orders");
+  const empty = document.querySelector("#create-order-empty");
+  const selected = new Set([...list.selectedOptions].map((option) => option.value));
+  const available = orders.filter((order) => !order.tripId && countsInTotals(order));
+  if (!available.length) {
+    box.hidden = true;
+    list.innerHTML = "";
+    empty.hidden = false;
+    return;
+  }
+  box.hidden = false;
+  empty.hidden = true;
+  list.innerHTML = available.map((order) => {
+    const line = `${order.code} · ${order.customerName} · ${order.loadingPlace} → ${order.unloadingPlace} · ${litersLabel(order.liters)} l`;
+    return `<option value="${text(order.id)}"${selected.has(order.id) ? " selected" : ""}>${text(line)}</option>`;
+  }).join("");
 }
 
 function prefillFromFirstOrder() {
-  const checked = [...document.querySelectorAll("#create-order-list input:checked")];
-  if (!checked.length) return;
-  const order = orders.find((item) => item.id === checked[0].value);
+  const selected = [...document.querySelector("#create-order-list").selectedOptions];
+  if (!selected.length) return;
+  const order = orders.find((item) => item.id === selected[0].value);
   if (!order) return;
   document.querySelector("#customer").value = order.customerName || "";
   document.querySelector("#loading").value = order.loadingPlace || "";
@@ -238,8 +255,12 @@ function showTrip(id) {
       <td class="num">${litersLabel(order.liters)} l</td>
       <td><button type="button" class="ghost" data-remove-order="${text(order.id)}">Odebrat</button></td>
     </tr>`).join("") || `<tr><td colspan="5">Na jízdě zatím není zakázka.</td></tr>`;
-  document.querySelector("#trip-liters").textContent = `${litersLabel(sumLiters(assigned))} l`;
-  const free = orders.filter((order) => !order.tripId);
+  document.querySelector("#trip-liters").textContent = `${litersLabel(sumLiters(assigned.filter(countsInTotals)))} l`;
+  const cancelledTrip = trip.status === "Stornováno";
+  document.querySelector("#trip-add-order label").hidden = cancelledTrip;
+  document.querySelector("#trip-add-order button[type=submit]").hidden = cancelledTrip;
+  document.querySelector("#trip-storno").hidden = cancelledTrip;
+  const free = orders.filter((order) => !order.tripId && countsInTotals(order));
   document.querySelector("#trip-free-orders").innerHTML =
     `<option value="">— zakázka bez jízdy —</option>` +
     free.map((order) => `<option value="${text(order.id)}">${text(order.code)} · ${text(order.customerName)} · ${litersLabel(order.liters)} l</option>`).join("");
@@ -417,6 +438,11 @@ rows.addEventListener("click", (event) => {
     beginEdit(edit.dataset.edit);
     return;
   }
+  const storno = event.target.closest("[data-storno]");
+  if (storno) {
+    cancelTrip(storno.dataset.storno);
+    return;
+  }
   const cancel = event.target.closest("[data-cancel]");
   if (cancel && board) render(board);
 });
@@ -431,7 +457,7 @@ document.querySelector("#create").addEventListener("submit", async (event) => {
     return;
   }
   saving = true;
-  const orderIds = [...document.querySelectorAll("#create-order-list input:checked")].map((input) => input.value);
+  const orderIds = [...document.querySelector("#create-order-list").selectedOptions].map((option) => option.value);
   const created = await send("/api/dispatch/trips", {
     customer: document.querySelector("#customer").value,
     loadingPlace: document.querySelector("#loading").value,
@@ -454,6 +480,49 @@ document.querySelector("#create").addEventListener("submit", async (event) => {
 });
 
 document.querySelector("#create-order-list").addEventListener("change", prefillFromFirstOrder);
+function canHardDeleteTrip(trip) {
+  return trip
+    && trip.status === "Nová"
+    && !trip.vehicleId
+    && !trip.driverId
+    && tripOrders(trip.id).length === 0;
+}
+
+async function cancelTrip(id) {
+  if (saving || !board) return;
+  const trip = (board.trips ?? []).find((item) => item.id === id);
+  if (!trip || trip.status === "Stornováno") return;
+  const affected = tripOrders(id);
+  if (canHardDeleteTrip(trip)) {
+    if (!window.confirm(`Jízda ${trip.code} nemá zakázky a nebyla použitá. Smazat ji natrvalo?`)) return;
+    saving = true;
+    const removed = await send(`/api/dispatch/trips/${encodeURIComponent(id)}`, {}, "DELETE");
+    saving = false;
+    if (!removed) return;
+    if (openTripId === id) {
+      openTripId = null;
+      document.querySelector("#trip-detail").hidden = true;
+    }
+    showMessage("Jízda je smazaná.");
+    await load();
+    return;
+  }
+  const lines = affected.length
+    ? affected.map((order) => `${order.code} · ${order.customerName}`).join("\n")
+    : "žádné zakázky";
+  if (!window.confirm(`Stornovat jízdu ${trip.code}? Zakázky zůstanou a odeberou se z jízdy:\n${lines}`)) return;
+  saving = true;
+  const cancelled = await send(`/api/dispatch/trips/${encodeURIComponent(id)}/cancel`, {}, "POST");
+  saving = false;
+  if (!cancelled) return;
+  showMessage("Jízda je stornovaná. Zakázky zůstaly bez jízdy.");
+  await load();
+}
+
+document.querySelector("#trip-storno").addEventListener("click", () => {
+  if (openTripId) cancelTrip(openTripId);
+});
+
 document.querySelector("#trip-detail-close").addEventListener("click", () => {
   openTripId = null;
   document.querySelector("#trip-detail").hidden = true;

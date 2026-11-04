@@ -26,6 +26,10 @@ public interface IDispatchStore
 
     Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken);
 
+    Task<DispatchMutation> CancelTripAsync(string id, CancellationToken cancellationToken);
+
+    Task<DispatchMutation> DeleteTripAsync(string id, int orderCount, CancellationToken cancellationToken);
+
     Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken);
 
     Task<string?> SaveRatesAsync(decimal defaultCostPerKm, IReadOnlyList<VehicleCostUpdate> vehicles, CancellationToken cancellationToken);

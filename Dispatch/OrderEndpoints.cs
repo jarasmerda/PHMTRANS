@@ -15,6 +15,7 @@ public static class OrderEndpoints
         api.MapPost("/orders/{id}/confirm", ConfirmOrder);
         api.MapPost("/orders/{id}/invoiced", MarkInvoiced);
         api.MapPost("/orders/{id}/resend", ResendOrder);
+        api.MapPost("/orders/{id}/cancel", CancelOrder);
         api.MapGet("/sync", ListSync);
         api.MapGet("/customers", FindCustomers);
     }
@@ -33,11 +34,7 @@ public static class OrderEndpoints
             var counts = OrderStatuses.All
                 .Select(item => new OrderStatusCount(item, orders.Count(order => order.Status == item)))
                 .ToArray();
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                var selected = status.Trim();
-                orders = orders.Where(order => order.Status == selected).ToArray();
-            }
+            orders = OrderListFilter.Apply(orders, status);
 
             var sorted = orders
                 .OrderBy(order => OrderStatuses.Rank(order.Status))
@@ -86,6 +83,13 @@ public static class OrderEndpoints
     private static Task<IResult> ResendOrder(string id, IOrderStore store, CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.ResendAsync(id, cancellationToken)));
 
+    private static Task<IResult> CancelOrder(
+        string id,
+        CancelOrderRequest? request,
+        IOrderStore store,
+        CancellationToken cancellationToken) =>
+        Execute(async () => ToResult(await store.CancelAsync(id, request?.Reason, request?.Delete == true, cancellationToken)));
+
     private static Task<IResult> ListSync(IOrderStore store, IOptions<PohodaOptions> options, CancellationToken cancellationToken) =>
         Execute(async () =>
         {
@@ -96,20 +100,23 @@ public static class OrderEndpoints
 
     private static async Task<IResult> FindCustomers(
         string? q,
-        PohodaMServerClient pohoda,
+        IPohodaAddressBook addressBook,
         CancellationToken cancellationToken)
     {
         var query = q?.Trim() ?? "";
         if (query.Length < 2)
-            return Results.Ok(Array.Empty<PohodaCustomer>());
+            return Results.Ok(Array.Empty<PohodaAddress>());
 
         try
         {
-            return Results.Ok(await pohoda.FindCustomersAsync(query, cancellationToken));
+            return Results.Ok(await addressBook.SearchAsync(query, cancellationToken));
         }
-        catch (PohodaException exception)
+        catch (PohodaAddressBookException exception)
         {
-            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
+            var status = exception.PermissionDenied
+                ? StatusCodes.Status403Forbidden
+                : StatusCodes.Status503ServiceUnavailable;
+            return Results.Json(new { message = exception.Message }, statusCode: status);
         }
     }
 
@@ -128,6 +135,7 @@ public static class OrderEndpoints
     private static IResult ToResult(OrderMutation mutation) => mutation switch
     {
         OrderMutation.Success success => Results.Ok(success.Order),
+        OrderMutation.Deleted => Results.Ok(new { deleted = true }),
         OrderMutation.NotFound => Results.NotFound(new { message = "Zakázka neexistuje." }),
         OrderMutation.Rejected rejected => Results.BadRequest(new { message = rejected.Message }),
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
@@ -140,3 +148,15 @@ public sealed record OrderSyncResponse(
     string SyncMode,
     string SyncNote,
     IReadOnlyList<OrderSyncEntry> Items);
+
+public static class OrderListFilter
+{
+    public static IReadOnlyList<DispatchOrder> Apply(IReadOnlyList<DispatchOrder> orders, string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return orders.Where(order => order.Status != OrderStatuses.Stornovano).ToArray();
+
+        var selected = status.Trim();
+        return orders.Where(order => order.Status == selected).ToArray();
+    }
+}

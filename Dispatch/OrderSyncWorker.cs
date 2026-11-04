@@ -77,7 +77,7 @@ public sealed class OrderSyncWorker(
                     ? bundle.Versions.FirstOrDefault(version => version.CurrentVersion == sentVersion)
                     : null;
                 var sentCorrections = bundle.Sync.Count(item =>
-                    item.Action == OrderSyncActions.Correction && item.Status == OrderQueueStatuses.Sent);
+                    OrderSyncActions.CountsTowardCorrectionIndex(item.Action) && item.Status == OrderQueueStatuses.Sent);
                 var current = entry;
                 var payload = OrderPohodaXml.EnsureCurrent(options.Value, current, source, lastSent, sentCorrections);
                 if (!string.Equals(payload, current.PayloadXml, StringComparison.Ordinal))

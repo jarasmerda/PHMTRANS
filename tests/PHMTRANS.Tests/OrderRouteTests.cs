@@ -316,7 +316,7 @@ public sealed class OrderRouteTests
         decimal surcharges = 0m,
         decimal liters = 30000m) =>
         new(
-            null,
+            42,
             "Zákazník",
             "Sklad Kralupy",
             null,
@@ -397,7 +397,7 @@ public sealed class OrderAssignmentTests
     }
 
     private static OrderSaveRequest Plain() => new(
-        null,
+        42,
         "Zákazník",
         "Sklad",
         "ČS",

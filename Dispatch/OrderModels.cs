@@ -8,11 +8,15 @@ public static class OrderStatuses
     public const string Doruceno = "Doručeno";
     public const string KFakturaci = "K fakturaci";
     public const string Vyfakturovano = "Vyfakturováno";
+    public const string Stornovano = "Stornováno";
 
     public const string UnknownMessage =
-        "Neznámý stav. Povolené jsou Nová, Naplánovaná, Na cestě, Doručeno, K fakturaci a Vyfakturováno.";
+        "Neznámý stav. Povolené jsou Nová, Naplánovaná, Na cestě, Doručeno, K fakturaci, Vyfakturováno a Stornováno.";
 
     public static readonly IReadOnlyList<string> All =
+        [Nova, Naplanovana, NaCeste, Doruceno, KFakturaci, Vyfakturovano, Stornovano];
+
+    public static readonly IReadOnlyList<string> Editable =
         [Nova, Naplanovana, NaCeste, Doruceno, KFakturaci, Vyfakturovano];
 
     public static bool IsKnown(string status) => All.Contains(status);
@@ -27,8 +31,11 @@ public static class OrderStatuses
         Doruceno => 3,
         KFakturaci => 4,
         Vyfakturovano => 5,
-        _ => 6
+        Stornovano => 6,
+        _ => 7
     };
+
+    public static bool CountsInTotals(string status) => status != Stornovano;
 }
 
 public static class OrderSyncActions
@@ -36,6 +43,11 @@ public static class OrderSyncActions
     public const string Create = "Create";
     public const string Update = "Update";
     public const string Correction = "Correction";
+    public const string Delete = "Delete";
+    public const string Cancel = "Cancel";
+
+    public static bool CountsTowardCorrectionIndex(string action) =>
+        action is Correction or Cancel;
 }
 
 public static class OrderQueueStatuses
@@ -122,7 +134,15 @@ public sealed record DispatchOrder(
     decimal CostPerKm = 0m,
     IReadOnlyList<OrderStop>? Stops = null,
     IReadOnlyList<OrderLeg>? Legs = null,
-    OrderQuote? Quote = null);
+    OrderQuote? Quote = null,
+    string? CancelReason = null,
+    string? CustomerIco = null,
+    string? CustomerDic = null,
+    string? CustomerStreet = null,
+    string? CustomerCity = null,
+    string? CustomerZip = null,
+    string? CustomerEmail = null,
+    string? CustomerPhone = null);
 
 public sealed record OrderSaveRequest(
     int? CustomerPohodaId,
@@ -147,7 +167,14 @@ public sealed record OrderSaveRequest(
     decimal? SalePerLiter = null,
     decimal? CostPerKm = null,
     IReadOnlyList<OrderStopInput>? Stops = null,
-    IReadOnlyList<OrderLegInput>? Legs = null);
+    IReadOnlyList<OrderLegInput>? Legs = null,
+    string? CustomerIco = null,
+    string? CustomerDic = null,
+    string? CustomerStreet = null,
+    string? CustomerCity = null,
+    string? CustomerZip = null,
+    string? CustomerEmail = null,
+    string? CustomerPhone = null);
 
 public sealed record OrderSyncEntry(
     long Id,
@@ -201,9 +228,13 @@ public abstract record OrderMutation
 
     public sealed record Success(DispatchOrder Order) : OrderMutation;
 
+    public sealed record Deleted(string Id) : OrderMutation;
+
     public sealed record NotFound : OrderMutation;
 
     public sealed record Rejected(string Message) : OrderMutation;
 }
+
+public sealed record CancelOrderRequest(string? Reason, bool Delete = false);
 
 public sealed class OrderStoreException(string message, Exception? inner = null) : Exception(message, inner);
