@@ -1,6 +1,6 @@
 # Přehled nastavení PHMTRANS
 
-Podklad pro další úpravy. Stav větve `main` je revize `3397c16` (4. 11. 2026, 21:09 SEČ).
+Podklad pro další úpravy.
 Jeden proces ASP.NET Core na .NET 10. Stránky jsou statické soubory ve `wwwroot`.
 Účetnictví a adresář čte Pohoda mServer. Dispečink, CRM a účty intranetu jsou v SQL Serveru.
 
@@ -12,7 +12,6 @@ GitHub: https://github.com/jarasmerda/PHMTRANS
 | --- | --- | --- | --- |
 | Veřejný web | `landing.html` na `phmtrans.cz` | — | jen soubory |
 | ERP | `/ERP` → `erp.html` | `/api/bi/issued-invoices` | Pohoda, vydané faktury |
-| CPQ | konfigurátor zásob | `/Cpq…`, `/api/pohoda/xml` | Pohoda, skladové karty |
 | Dispečink | `/Dispecink` → `dispecink.html` | `/api/dispatch/…` | SQL, tabulky `Disp_*` |
 | CRM | `/CRM` → `crm.html` | `/api/crm/…` | SQL, tabulky `Crm_*` |
 | Účty | `/login.html`, `/heslo`, `/Admin` | `/api/login`, `/api/auth/…`, `/api/admin/users` | SQL, `Auth_User` |
@@ -142,20 +141,18 @@ Uzamčená objednávka (vyfakturovaná) se v Pohodě nemění. Vznikne opravný 
 
 Zákazník je `Firma` nebo `Osoba`. Kontakt visí na zákazníkovi. Příležitost má fázi Nový, V jednání, Nabídka, Vyhráno, Prohráno. Aktivita je hovor, schůzka nebo poznámka a visí na zákazníkovi, na příležitosti, nebo na obou. Kódy: zákazník `C{rok}-0001`, příležitost `O{rok}-0001`, aktivita `A{rok}-0001`. Do Pohody CRM nezapisuje.
 
-## ERP a CPQ
+## ERP
 
-Faktury jsou `issuedInvoice`, částky v domácí měně. Stavy: Uhrazeno, Částečně, Po splatnosti, Neuhrazeno. Volá je účet služby, ne heslo z formuláře.
-
-CPQ čte hodnoty z `Data/cpq` vedle kořene obsahu. Ta složka v gitu není. Založení zásoby a `POST /api/pohoda/xml` přeposílají XML do mServeru. XML je Windows-1250. Odpověď se čte podle deklarace. Když deklarace říká UTF-8 a bajty UTF-8 nejsou, použije se Windows-1250.
+Faktury jsou `issuedInvoice`, částky v domácí měně. Stavy: Uhrazeno, Částečně, Po splatnosti, Neuhrazeno. Volá je účet služby, ne heslo z formuláře. Stejný účet čte faktury i zapisuje objednávky dispečinku. XML do mServeru je Windows-1250. Odpověď se čte podle deklarace. Když deklarace říká UTF-8 a bajty UTF-8 nejsou, použije se Windows-1250.
 
 Účet služby, ne v gitu:
 
 - `Pohoda__Username`, `Pohoda__Password`, `Pohoda__Ico`
-- volitelně `Pohoda__WriteUsername` a `Pohoda__WritePassword` jen pro zápis
+- volitelně `Pohoda__WriteUsername` a `Pohoda__WritePassword` jen pro zápis objednávek
 
-V `appsettings.json` je `BaseUrl` `http://185.219.164.45:444`, aplikace `PHMTRANS`, prefix zásoby `PE` a pět číslic, timeout 180 sekund. HTTP klient nejde přes proxy. `appsettings.Production.json` je v `.gitignore`.
+V `appsettings.json` je `BaseUrl` `http://185.219.164.45:444`, aplikace `PHMTRANS` a timeout 180 sekund. HTTP klient nejde přes proxy. `appsettings.Production.json` je v `.gitignore`.
 
-`/api/pohoda/status` heslo nepotřebuje. Když chybí účet služby, faktury vrátí `mServer vrátil 401:`, zatímco status zůstane v pořádku.
+Když chybí účet služby, faktury vrátí `mServer vrátil 401:`. Stav mServeru je na jeho vlastní adrese `/status`, aplikace ho neprozrazuje.
 
 ## Na co myslet při další úpravě
 

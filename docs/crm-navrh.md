@@ -19,7 +19,7 @@ Modul kopíruje řez dispečinku, nepřidává novou hostitelskou aplikaci.
 
 Cookie nemá `Domain=.phmtrans.cz`. Přihlášení na ERP, dispečinku a CRM jsou samostatné session se stejnými údaji Pohody. Rozšíření cookie na celou doménu by změnilo chování ERP, proto tu není.
 
-ERP filtr odběratelů, přehled faktur, CPQ a jízdy se tímto modulem nemění.
+ERP filtr odběratelů, přehled faktur a jízdy se tímto modulem nemění.
 
 ## Pojmy
 
@@ -256,7 +256,7 @@ Zápis bere aplikační zámek `PHMTRANS_Crm` v transakci, ať dva požadavky ne
 
 ## Napojení na ERP a Pohodu
 
-Obchodník se hlásí jménem a heslem uživatele mServeru (`CredentialsAreValidAsync`). CRM po přihlášení Pohodu už nevolá. V kódu `Crm/` není klient mServeru.
+CRM po přihlášení Pohodu nevolá. V kódu `Crm/` není klient mServeru.
 
 Další fáze, pořád jen čtení, ve stejném klientovi `PohodaMServerClient`:
 

@@ -12,7 +12,7 @@
 - Docker Desktop je nainstalovaný
 - Dockerfile používá Linux image (mcr.microsoft.com/dotnet/sdk:10.0 a aspnet:10.0)
 - Lokální test: docker build -t phmtrans . && docker run -p 5000:8080 phmtrans
-- Výchozí endpoint: /weatherforecast
+- Kontrola běhu: /health
 
 ## Server (Windows Server)
 - Docker na serveru není potřeba. Aplikace běží jako služba Windows přes nainstalovaný .NET SDK 10.

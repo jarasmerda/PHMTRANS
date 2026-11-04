@@ -23,7 +23,6 @@ public sealed class PublicSitePageTests
         var html = File.ReadAllText(Path.Combine(root, "landing.html"));
         var css = File.ReadAllText(Path.Combine(root, "landing.css"));
         var webConfig = File.ReadAllText(Path.Combine(root, "web.config"));
-        var index = File.ReadAllText(Path.Combine(root, "index.html"));
 
         Assert.Contains("lang=\"cs\"", html, StringComparison.Ordinal);
         Assert.Contains("erp.css?v=17", html, StringComparison.Ordinal);
@@ -159,11 +158,7 @@ public sealed class PublicSitePageTests
         Assert.Contains("name=\"ErpHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"DispHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"CrmHome\"", webConfig, StringComparison.Ordinal);
-
-        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", index, StringComparison.Ordinal);
-        Assert.Contains("https://intranet.phmtrans.cz/CRM", index, StringComparison.Ordinal);
-        Assert.DoesNotContain("Intranet", index, StringComparison.Ordinal);
-        Assert.DoesNotContain("landing.html", index, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(root, "index.html")));
     }
 
     private static string FindWwwRoot()
@@ -259,7 +254,6 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             "/landing/tanker-scania-768.webp",
             "/landing/truck-sunset.webp",
             "/landing/truck-sunset-768.webp",
-            "/landing/truck-blue-scania.webp",
             "/landing/fonts/barlow-condensed-800.woff2",
             "/img/eu-projekt.png"
         })
@@ -291,11 +285,8 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
         using var json = JsonDocument.Parse(await health.Content.ReadAsStringAsync());
         Assert.Equal("ok", json.RootElement.GetProperty("status").GetString());
 
-        var portal = await client.SendAsync(Request("/", user: false, host: null));
-        Assert.Equal(HttpStatusCode.OK, portal.StatusCode);
-        var portalHtml = await portal.Content.ReadAsStringAsync();
-        Assert.Contains("src=\"/image.jpg\"", portalHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("aria-label=\"Intranet\"", portalHtml, StringComparison.Ordinal);
+        var bare = await client.SendAsync(Request("/", user: false, host: null));
+        Assert.Equal(HttpStatusCode.NotFound, bare.StatusCode);
 
         foreach (var (host, target) in new[]
         {

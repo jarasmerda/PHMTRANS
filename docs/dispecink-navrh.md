@@ -17,7 +17,7 @@ Nový modul kopíruje existující řezy, nepřidává novou hostitelskou aplika
 | `IssuedInvoiceCache` jako jeden singleton | `SqlDispatchStore` jako singleton nad SQL Serverem |
 | Hesla Pohody jen v proměnných počítače | Connection string dispečinku jen v `ConnectionStrings__Dispatch`, v gitu je prázdný |
 
-ERP filtr odběratelů (`InvoiceCustomerFilter`), přehled faktur a CPQ se tímto modulem nemění. Cookie nemá `Domain=.phmtrans.cz`, takže přihlášení na ERP a na dispečinku jsou dvě samostatné session se stejnými údaji Pohody. Rozšíření cookie na celou doménu by změnilo chování ERP, proto tu není.
+ERP filtr odběratelů (`InvoiceCustomerFilter`) a přehled faktur se tímto modulem nemění. Cookie nemá `Domain=.phmtrans.cz`, takže přihlášení na ERP a na dispečinku jsou dvě samostatné session se stejnými údaji Pohody. Rozšíření cookie na celou doménu by změnilo chování ERP, proto tu není.
 
 ## Pojmy
 
@@ -194,7 +194,7 @@ INSERT INTO dbo.Disp_Driver (Id, Name, Phone) VALUES (N'drv-1', N'Jan Novák', N
 
 ## Napojení na ERP a Pohodu
 
-Dispečer se hlásí jménem a heslem uživatele mServeru (`CredentialsAreValidAsync`). Další volání Pohody, stejně jako faktury a CPQ, půjdou účtem služby (`Pohoda__Username`, `Pohoda__Password`, `Pohoda__Ico`), ne heslem z formuláře.
+Další volání Pohody, stejně jako faktury, jdou účtem služby (`Pohoda__Username`, `Pohoda__Password`, `Pohoda__Ico`), ne heslem z formuláře.
 
 První verze Pohodu po přihlášení už nevolá a nic do ní nezapisuje.
 

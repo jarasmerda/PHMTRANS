@@ -37,9 +37,8 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal(HttpStatusCode.MovedPermanently, erpHome.StatusCode);
         Assert.Equal("https://intranet.phmtrans.cz/ERP", erpHome.Headers.Location?.OriginalString);
 
-        var portal = await client.SendAsync(Request("/", null, user: false));
-        Assert.Equal(HttpStatusCode.OK, portal.StatusCode);
-        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", await portal.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        var bare = await client.SendAsync(Request("/", null, user: false));
+        Assert.Equal(HttpStatusCode.NotFound, bare.StatusCode);
 
         var signedDispatch = await client.SendAsync(Request("/Dispecink", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, signedDispatch.StatusCode);
