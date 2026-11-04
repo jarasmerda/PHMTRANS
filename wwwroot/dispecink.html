@@ -20,6 +20,31 @@
       border: 1px solid var(--accent);
     }
     #rows button.ghost:hover { background: var(--button); color: var(--on-button); }
+    dialog {
+      width: min(64rem, calc(100% - 2rem));
+      max-height: calc(100% - 2rem);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+      color: var(--ink);
+      padding: 1rem 1.1rem 1.2rem;
+    }
+    dialog::backdrop { background: rgba(0, 22, 58, 0.45); }
+    .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .dialog-head h2 { margin: 0; }
+    .section-actions { display: flex; justify-content: flex-end; margin: 0.4rem 0; }
+    .trip-orders td { background: #fff; }
+    .trip-order-lines { list-style: none; margin: 0.35rem 0 0; padding: 0; }
+    .trip-order-lines li { margin: 0.2rem 0; }
+    .trip-order-lines button.linkish, button.linkish {
+      background: transparent;
+      color: var(--ink);
+      border: 0;
+      padding: 0;
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 0.12em;
+    }
     #create-wrap, #order-create-wrap, #order-detail {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -188,7 +213,10 @@
       <article><span>Stornované</span><strong id="count-stornovano">0</strong></article>
     </section>
     <section id="table-wrap" hidden>
-      <h2>Jízdy</h2>
+      <div class="dialog-head">
+        <h2>Jízdy</h2>
+        <button type="button" id="open-trip-create">Nová jízda</button>
+      </div>
       <div class="table-scroll">
         <table id="trips">
           <thead>
@@ -221,13 +249,14 @@
               <th>Zákazník</th>
               <th>Trasa</th>
               <th>Litry</th>
+              <th>Prodej</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="trip-order-rows"></tbody>
         </table>
       </div>
-      <p>Součet litrů: <strong id="trip-liters">0</strong> <span class="route-to">Stornované zakázky se do součtu nepočítají.</span></p>
+      <p>Součet litrů, km a prodej: <strong id="trip-totals">0 km · 0 l · 0,00 Kč</strong> <span class="route-to">Stornované zakázky se do součtu nepočítají.</span></p>
       <form id="trip-add-order">
         <label>Přidat zakázku
           <select id="trip-free-orders">
@@ -239,8 +268,12 @@
         <button type="button" id="trip-detail-close" class="ghost">Zavřít</button>
       </form>
     </section>
-    <section id="create-wrap">
-      <h2>Nová jízda</h2>
+    <dialog id="trip-create-dialog">
+      <div class="dialog-head">
+        <h2>Nová jízda</h2>
+        <button type="button" class="ghost" data-close-dialog>Zavřít</button>
+      </div>
+      <p id="trip-create-message" class="note warn" hidden></p>
       <form id="create">
         <fieldset id="create-orders">
           <legend>Zakázky na jízdu</legend>
@@ -266,7 +299,7 @@
         <label>Poznámka <input id="note" maxlength="500"></label>
         <button type="submit">Přidat jízdu</button>
       </form>
-    </section>
+    </dialog>
     <section id="rates-wrap">
       <h2>Nákladová sazba</h2>
       <p class="note">Výchozí sazba platí, když vozidlo nemá vlastní. Na zakázce ji lze přepsat a uloží se do verze.</p>
@@ -305,7 +338,10 @@
       <article><span>Stornované</span><strong id="ocount-stornovano">0</strong></article>
     </section>
     <section id="order-table-wrap" hidden>
-      <h2>Zakázky</h2>
+      <div class="dialog-head">
+        <h2>Zakázky</h2>
+        <button type="button" id="open-order-create">Nová zakázka</button>
+      </div>
       <div class="table-scroll">
         <table id="orders">
           <thead>
@@ -348,10 +384,16 @@
       <div id="order-sync"></div>
     </section>
     <section id="version-page" hidden></section>
-    <section id="order-create-wrap">
-      <h2>Nová zakázka</h2>
-      <form id="order-create"></form>
-    </section>
+    <dialog id="order-create-dialog">
+      <section id="order-create-wrap">
+        <div class="dialog-head">
+          <h2>Nová zakázka</h2>
+          <button type="button" class="ghost" data-close-dialog>Zavřít</button>
+        </div>
+        <p id="order-create-message" class="note warn" hidden></p>
+        <form id="order-create"></form>
+      </section>
+    </dialog>
   </div>
   <div id="queue-view" hidden>
     <p id="queue-sync-note" class="note"></p>
@@ -383,7 +425,7 @@
       <pre id="queue-xml" class="xml" hidden></pre>
     </section>
   </div>
-  <script src="/dispecink.js?v=8"></script>
-  <script src="/dispecink-orders.js?v=6"></script>
+  <script src="/dispecink.js?v=9"></script>
+  <script src="/dispecink-orders.js?v=7"></script>
 </body>
 </html>

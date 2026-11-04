@@ -16,6 +16,12 @@ let queueItems = [];
 function orderShow(target, value) {
   target.hidden = !value;
   target.textContent = value ?? "";
+  const local = document.querySelector("#order-create-message");
+  const dialog = document.querySelector("#order-create-dialog");
+  if (local && dialog?.open && target === orderMessage) {
+    local.hidden = !value;
+    local.textContent = value ?? "";
+  }
 }
 
 function orderDay(value) {
@@ -502,14 +508,14 @@ function versionPage(data, version) {
 }
 
 function showOrderChrome() {
-  for (const id of ["order-filter", "order-cards", "order-table-wrap", "order-create-wrap", "order-sync-note"]) {
+  for (const id of ["order-filter", "order-cards", "order-table-wrap", "order-sync-note"]) {
     const element = document.querySelector(`#${id}`);
     if (element) element.hidden = false;
   }
 }
 
 function hideOrderChrome() {
-  for (const id of ["order-filter", "order-cards", "order-table-wrap", "order-create-wrap", "order-detail", "order-sync-note"]) {
+  for (const id of ["order-filter", "order-cards", "order-table-wrap", "order-detail", "order-sync-note"]) {
     const element = document.querySelector(`#${id}`);
     if (element) element.hidden = true;
   }
@@ -827,6 +833,7 @@ document.querySelector("#order-create").addEventListener("submit", async (event)
   const created = await saveOrder("/api/dispatch/orders", body, "POST");
   if (!created) return;
   document.querySelector("#order-create").innerHTML = formFields("create");
+  document.querySelector("#order-create-dialog")?.close();
   orderShow(orderMessage, `Zakázka ${created.code} je založená.`);
   await loadOrders();
   await openOrder(created.id, true);
@@ -899,6 +906,17 @@ document.querySelector("#order-close").addEventListener("click", () => {
   orderDetail = null;
   document.querySelector("#order-detail").hidden = true;
   closeVersion();
+});
+
+window.showOrder = async (id) => {
+  document.querySelector("#tab-orders")?.click();
+  await openOrder(id, true);
+};
+
+document.querySelector("#open-order-create")?.addEventListener("click", () => {
+  const local = document.querySelector("#order-create-message");
+  if (local) local.hidden = true;
+  document.querySelector("#order-create-dialog")?.showModal();
 });
 
 loadCatalog().then(() => {

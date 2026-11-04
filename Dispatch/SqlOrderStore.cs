@@ -56,11 +56,8 @@ public sealed class SqlOrderStore(
                 """,
                 transaction: null,
                 token));
-            return (IReadOnlyList<DispatchOrder>)rows.Select(row =>
-            {
-                var order = row.ToOrder();
-                return order with { Quote = OrderPricing.Summarize(order) };
-            }).ToArray();
+            var list = rows.Select(row => row.ToOrder()).ToArray();
+            return await AttachRoutesAsync(connection, list, token);
         }, cancellationToken);
 
     public Task<OrderBundle?> GetAsync(string id, CancellationToken cancellationToken) =>
@@ -834,6 +831,46 @@ public sealed class SqlOrderStore(
         }
     }
 
+    private static async Task<IReadOnlyList<DispatchOrder>> AttachRoutesAsync(
+        SqlConnection connection,
+        IReadOnlyList<DispatchOrder> orders,
+        CancellationToken cancellationToken)
+    {
+        if (orders.Count == 0)
+            return orders;
+
+        var ids = orders.Select(order => order.Id).ToArray();
+        var stops = (await connection.QueryAsync<RouteStopRow>(Command(
+            """
+            SELECT Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt
+            FROM dbo.Disp_OrderStop
+            WHERE OrderId IN @Ids
+            ORDER BY Sequence
+            """,
+            null,
+            cancellationToken,
+            new { Ids = ids }))).AsList();
+        var legs = (await connection.QueryAsync<RouteLegRow>(Command(
+            """
+            SELECT Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice
+            FROM dbo.Disp_OrderLeg
+            WHERE OrderId IN @Ids
+            ORDER BY Sequence
+            """,
+            null,
+            cancellationToken,
+            new { Ids = ids }))).AsList();
+        return orders.Select(order =>
+        {
+            var routed = order with
+            {
+                Stops = stops.Where(stop => stop.OrderId == order.Id).Select(stop => stop.ToStop()).ToArray(),
+                Legs = legs.Where(leg => leg.OrderId == order.Id).Select(leg => leg.ToLeg()).ToArray()
+            };
+            return routed with { Quote = OrderPricing.Summarize(routed) };
+        }).ToArray();
+    }
+
     private static async Task<DispatchOrder> WithRouteAsync(
         SqlConnection connection,
         SqlTransaction? transaction,
@@ -957,6 +994,35 @@ public sealed class SqlOrderStore(
         new(sql, parameters, transaction, cancellationToken: cancellationToken);
 
     private static string? Trim(string? value, int max) => OrderSyncLimits.TrimToColumn(value, max);
+
+    private sealed class RouteStopRow
+    {
+        public string Id { get; set; } = "";
+        public string OrderId { get; set; } = "";
+        public int Sequence { get; set; }
+        public string Place { get; set; } = "";
+        public decimal Liters { get; set; }
+        public string? Note { get; set; }
+        public DateTimeOffset? ArrivalAt { get; set; }
+
+        public OrderStop ToStop() => new(Id, Sequence, Place, Liters, Note, ArrivalAt);
+    }
+
+    private sealed class RouteLegRow
+    {
+        public string Id { get; set; } = "";
+        public string OrderId { get; set; } = "";
+        public int Sequence { get; set; }
+        public string FromPlace { get; set; } = "";
+        public string ToPlace { get; set; } = "";
+        public decimal Liters { get; set; }
+        public decimal? Kilometers { get; set; }
+        public decimal SalePrice { get; set; }
+        public bool SaleOverridden { get; set; }
+        public decimal CostPrice { get; set; }
+
+        public OrderLeg ToLeg() => new(Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice);
+    }
 
     private sealed class OrderRow
     {
