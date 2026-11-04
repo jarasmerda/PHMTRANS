@@ -190,9 +190,9 @@ public sealed class OrderRouteTests
         var lines = OrderLegItems.SaleLines(order);
 
         Assert.Equal(2, lines.Count);
-        Assert.Equal("Leg 1: Sklad → ČS Brno, 8000 l", lines[0].Text);
+        Assert.Equal("Leg 1: Sklad → ČS Brno, motorová nafta, 8000 l", lines[0].Text);
         Assert.Equal(1500m, lines[0].UnitPrice);
-        Assert.Equal("Leg 2: ČS Brno → ČS Olomouc, 4000 l", lines[1].Text);
+        Assert.Equal("Leg 2: ČS Brno → ČS Olomouc, motorová nafta, 4000 l", lines[1].Text);
         Assert.Equal(900m, lines[1].UnitPrice);
         Assert.DoesNotContain(lines, line => line.UnitPrice == 400m || line.UnitPrice == 800m);
     }

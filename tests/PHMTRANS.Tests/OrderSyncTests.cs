@@ -213,10 +213,10 @@ public sealed class OrderSyncTests
         Assert.Equal(4, lines.Count);
         Assert.Equal(-1m, lines[0].Quantity);
         Assert.Equal(1500m, lines[0].UnitPrice);
-        Assert.Equal("Storno: Leg 1: Sklad → ČS Brno, 8000 l", lines[0].Text);
+        Assert.Equal("Storno: Leg 1: Sklad → ČS Brno, nafta, 8000 l", lines[0].Text);
         Assert.Equal(-1m, lines[1].Quantity);
         Assert.Equal(800m, lines[1].UnitPrice);
-        Assert.Equal("Storno: Leg 2: ČS Brno → ČS Olomouc, 4000 l", lines[1].Text);
+        Assert.Equal("Storno: Leg 2: ČS Brno → ČS Olomouc, nafta, 4000 l", lines[1].Text);
         Assert.Equal(1m, lines[2].Quantity);
         Assert.Equal(1600m, lines[2].UnitPrice);
         Assert.Equal(1000m, lines[3].UnitPrice);
@@ -531,7 +531,7 @@ public sealed class OrderSyncTests
 
         var corrected = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(
             created.Order.Id,
-            Request(price: 15000m, surcharges: 500m, fuel: "benzin", note: "po faktuře", driverId: "drv-2", cmr: "CMR-2"),
+            Request(price: 15000m, surcharges: 500m, fuel: "Benzín", note: "po faktuře", driverId: "drv-2", cmr: "CMR-2"),
             CancellationToken.None));
         queue = await store.ListQueueAsync(CancellationToken.None);
         var correction = queue[0];
@@ -694,7 +694,7 @@ public sealed class OrderSyncTests
 
         var first = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(
             created.Order.Id,
-            Request(price: 10000m, surcharges: 500m, fuel: "benzin"),
+            Request(price: 10000m, surcharges: 500m, fuel: "Benzín"),
             CancellationToken.None));
         var correction = (await store.ListQueueAsync(CancellationToken.None))[0];
         Assert.Equal(OrderSyncActions.Correction, correction.Action);
@@ -721,7 +721,7 @@ public sealed class OrderSyncTests
 
         var second = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(
             created.Order.Id,
-            Request(price: 16000m, fuel: "benzin"),
+            Request(price: 16000m, fuel: "Benzín"),
             CancellationToken.None));
         var next = (await store.ListQueueAsync(CancellationToken.None))[0];
         Assert.Equal($"{created.Order.Code}/2", NumberOrder(next.PayloadXml));

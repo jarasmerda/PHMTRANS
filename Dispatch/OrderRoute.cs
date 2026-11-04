@@ -8,7 +8,9 @@ public sealed record OrderStop(
     string Place,
     decimal Liters,
     string? Note,
-    DateTimeOffset? ArrivalAt);
+    DateTimeOffset? ArrivalAt,
+    int? FuelTypeId = null,
+    string? FuelType = null);
 
 public sealed record OrderLeg(
     string Id,
@@ -19,18 +21,21 @@ public sealed record OrderLeg(
     decimal? Kilometers,
     decimal SalePrice,
     bool SaleOverridden,
-    decimal CostPrice);
+    decimal CostPrice,
+    string? KmSource = null);
 
 public sealed record OrderStopInput(
     string? Place,
     decimal? Liters,
     string? Note,
-    DateTimeOffset? ArrivalAt);
+    DateTimeOffset? ArrivalAt,
+    int? FuelTypeId = null);
 
 public sealed record OrderLegInput(
     decimal? Kilometers,
     decimal? SalePrice,
-    bool? SaleOverridden);
+    bool? SaleOverridden,
+    string? KmSource = null);
 
 public sealed record OrderRouteSnapshot(
     string PricingMode,
@@ -66,9 +71,9 @@ public static class OrderCatalogs
     }
 }
 
-public readonly record struct RouteBuild(DispatchOrder? Order, string? Error)
+public readonly record struct RouteBuild(DispatchOrder? Order, string? Error, IReadOnlyList<DistanceWrite>? Distances = null)
 {
-    public static RouteBuild Ok(DispatchOrder order) => new(order, null);
+    public static RouteBuild Ok(DispatchOrder order, IReadOnlyList<DistanceWrite>? distances = null) => new(order, null, distances);
 
     public static RouteBuild Fail(string error) => new(null, error);
 }
@@ -126,7 +131,12 @@ public static class OrderRoute
         return new OrderRouteSnapshot(OrderPricing.ByKm, 0m, 0m, 0m, [stop], [leg]);
     }
 
-    public static RouteBuild Materialize(DispatchOrder built, OrderSaveRequest request, OrderCatalog catalog, DispatchOrder? previous = null)
+    public static RouteBuild Materialize(
+        DispatchOrder built,
+        OrderSaveRequest request,
+        OrderCatalog catalog,
+        DispatchOrder? previous = null,
+        IReadOnlyDictionary<string, decimal>? distances = null)
     {
         var mode = NormalizeMode(string.IsNullOrWhiteSpace(request.PricingMode)
             ? previous?.PricingMode ?? OrderPricing.ByKm
@@ -146,16 +156,29 @@ public static class OrderRoute
 
         var crew = Crew(built.TripId, built.VehicleId, built.DriverId, catalog);
         OrderRouteSnapshot snapshot;
+        IReadOnlyList<DistanceWrite>? distanceWrites = null;
         if (request.Stops is null)
         {
             snapshot = Legacy(built.LoadingPlace, built.UnloadingPlace, built.Liters, built.AgreedPrice);
         }
         else
         {
-            var derived = BuildStops(built.LoadingPlace, request.Stops, request.Legs, mode, salePerKm.Value, salePerLiter.Value, costPerKm.Value);
+            var derived = BuildStops(
+                built.LoadingPlace,
+                request.Stops,
+                request.Legs,
+                mode,
+                salePerKm.Value,
+                salePerLiter.Value,
+                costPerKm.Value,
+                built.FuelTypeId,
+                built.FuelType,
+                catalog.FuelTypes,
+                distances);
             if (derived.Error is not null)
                 return RouteBuild.Fail(derived.Error);
             snapshot = derived.Snapshot!;
+            distanceWrites = derived.Writes;
         }
         var unloading = snapshot.Stops[^1].Place;
         var agreed = OrderPohodaFields.Money(snapshot.Legs.Sum(leg => leg.SalePrice));
@@ -172,7 +195,7 @@ public static class OrderRoute
             Stops = snapshot.Stops,
             Legs = snapshot.Legs
         };
-        return RouteBuild.Ok(order with { Quote = OrderPricing.Summarize(order) });
+        return RouteBuild.Ok(order with { Quote = OrderPricing.Summarize(order) }, distanceWrites);
     }
 
     public static (string? VehicleId, string? DriverId) Crew(string? tripId, string? vehicleId, string? driverId, OrderCatalog catalog)
@@ -221,36 +244,45 @@ public static class OrderRoute
         return (value, null);
     }
 
-    private static (OrderRouteSnapshot? Snapshot, string? Error) BuildStops(
+    private static (OrderRouteSnapshot? Snapshot, string? Error, IReadOnlyList<DistanceWrite>? Writes) BuildStops(
         string loadingPlace,
         IReadOnlyList<OrderStopInput> stops,
         IReadOnlyList<OrderLegInput>? legs,
         string mode,
         decimal salePerKm,
         decimal salePerLiter,
-        decimal costPerKm)
+        decimal costPerKm,
+        int? headerFuelId,
+        string headerFuel,
+        IReadOnlyList<FuelTypeItem>? fuelTypes,
+        IReadOnlyDictionary<string, decimal>? distances)
     {
         if (stops.Count == 0)
-            return (null, "Přidejte aspoň jednu vykládku.");
+            return (null, "Přidejte aspoň jednu vykládku.", null);
         if (stops.Count > 30)
-            return (null, "Vykládek může být nejvýše 30.");
+            return (null, "Vykládek může být nejvýše 30.", null);
 
         var builtStops = new List<OrderStop>(stops.Count);
         var builtLegs = new List<OrderLeg>(stops.Count);
+        var writes = new List<DistanceWrite>();
         for (var index = 0; index < stops.Count; index++)
         {
             var input = stops[index];
             if (string.IsNullOrWhiteSpace(input.Place))
-                return (null, "Vyplňte místo vykládky.");
+                return (null, "Vyplňte místo vykládky.", null);
             var place = input.Place.Trim();
             if (place.Length > 160)
-                return (null, "Místo vykládky může mít nejvýše 160 znaků.");
+                return (null, "Místo vykládky může mít nejvýše 160 znaků.", null);
             if (input.Liters is null)
-                return (null, "Vyplňte litry na vykládce.");
+                return (null, "Vyplňte litry na vykládce.", null);
             if (input.Liters is < 0m or > 1_000_000m)
-                return (null, "Litry na vykládce musí být od 0 do 1 000 000.");
+                return (null, "Litry na vykládce musí být od 0 do 1 000 000.", null);
             if (!string.IsNullOrWhiteSpace(input.Note) && input.Note.Trim().Length > 500)
-                return (null, "Poznámka vykládky může mít nejvýše 500 znaků.");
+                return (null, "Poznámka vykládky může mít nejvýše 500 znaků.", null);
+
+            var fuel = StopFuel(input.FuelTypeId, headerFuelId, headerFuel, fuelTypes);
+            if (fuel.Error is not null)
+                return (null, fuel.Error, null);
 
             var liters = OrderPricing.Liters(input.Liters.Value);
             var from = index == 0 ? loadingPlace : builtStops[index - 1].Place;
@@ -259,14 +291,25 @@ public static class OrderRoute
             if (legInput?.Kilometers is not null)
             {
                 if (legInput.Kilometers is < 0m or > 100_000m)
-                    return (null, "Kilometry úseku musí být od 0 do 100 000.");
+                    return (null, "Kilometry úseku musí být od 0 do 100 000.", null);
                 kilometers = OrderPricing.Kilometers(legInput.Kilometers.Value);
             }
+
+            var pair = PlacePair.Canonical(from, place);
+            decimal? known = null;
+            if (pair is not null && distances is not null && distances.TryGetValue(PlacePair.Key(pair.Value.From, pair.Value.To), out var found))
+                known = found;
+            var decision = distances is null
+                ? new DistanceDecision(kilometers, null, false)
+                : DistanceChoice.Resolve(kilometers, legInput?.KmSource, known);
+            if (decision.Upsert && pair is not null && decision.Kilometers is not null)
+                writes.Add(new DistanceWrite(pair.Value.From, pair.Value.To, decision.Kilometers.Value));
+            kilometers = decision.Kilometers;
 
             var overridden = legInput?.SaleOverridden == true;
             var overridePrice = legInput?.SalePrice ?? 0m;
             if (overridden && overridePrice is < 0m or > 1_000_000_000m)
-                return (null, "Cena úseku je mimo povolený rozsah.");
+                return (null, "Cena úseku je mimo povolený rozsah.", null);
 
             var sequence = index + 1;
             builtStops.Add(new OrderStop(
@@ -275,7 +318,9 @@ public static class OrderRoute
                 place,
                 liters,
                 string.IsNullOrWhiteSpace(input.Note) ? null : input.Note.Trim(),
-                input.ArrivalAt));
+                input.ArrivalAt,
+                fuel.Id,
+                fuel.Name));
             builtLegs.Add(new OrderLeg(
                 NewId(),
                 sequence,
@@ -285,10 +330,27 @@ public static class OrderRoute
                 kilometers,
                 OrderPricing.Sale(kilometers, liters, overridden, overridePrice, mode, salePerKm, salePerLiter),
                 overridden,
-                OrderPricing.Cost(kilometers, costPerKm)));
+                OrderPricing.Cost(kilometers, costPerKm),
+                decision.Source));
         }
 
-        return (new OrderRouteSnapshot(mode, salePerKm, salePerLiter, costPerKm, builtStops, builtLegs), null);
+        return (new OrderRouteSnapshot(mode, salePerKm, salePerLiter, costPerKm, builtStops, builtLegs), null, writes);
+    }
+
+    private static (int? Id, string? Name, string? Error) StopFuel(
+        int? requestedId,
+        int? headerId,
+        string headerName,
+        IReadOnlyList<FuelTypeItem>? fuelTypes)
+    {
+        var id = requestedId ?? headerId;
+        if (fuelTypes is not { Count: > 0 })
+            return (id, null, null);
+
+        var match = FuelTypeCatalog.Find(fuelTypes, id, id is null ? headerName : null);
+        return match is null
+            ? (null, null, "Vyberte druh paliva na vykládce.")
+            : (match.Id, match.Name, null);
     }
 
     private static string NewId() => Guid.NewGuid().ToString("n");

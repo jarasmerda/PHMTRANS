@@ -35,7 +35,7 @@ public sealed class SqlOrderStore(
                 """
                 SELECT
                     o.Id, o.Code, o.CustomerPohodaId, o.CustomerName, o.LoadingPlace, o.UnloadingPlace,
-                    o.LoadingDate, o.UnloadingDate, o.FuelType, o.Liters, o.AgreedPrice, o.Surcharges,
+                    o.LoadingDate, o.UnloadingDate, o.FuelType, o.FuelTypeId, o.Liters, o.AgreedPrice, o.Surcharges,
                     o.Note, o.CmrNumber,
                     CASE WHEN o.TripId IS NULL THEN o.VehicleId ELSE t.VehicleId END AS VehicleId,
                     CASE WHEN o.TripId IS NULL THEN o.DriverId ELSE t.DriverId END AS DriverId,
@@ -73,11 +73,28 @@ public sealed class SqlOrderStore(
             return new OrderBundle(WithLatestSync(order, sync), versions, sync);
         }, cancellationToken);
 
-    public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken) =>
-        ChangeAsync(null, (context, _) => OrderWorkflow.Create(request, context), cancellationToken);
+    public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken, string? updatedBy = null) =>
+        ChangeAsync(null, (context, _) => OrderWorkflow.Create(request, context), cancellationToken, updatedBy);
 
-    public Task<OrderMutation> UpdateAsync(string id, OrderSaveRequest request, CancellationToken cancellationToken) =>
-        ChangeAsync(id, (context, _) => OrderWorkflow.Save(request, context), cancellationToken);
+    public Task<OrderMutation> UpdateAsync(string id, OrderSaveRequest request, CancellationToken cancellationToken, string? updatedBy = null) =>
+        ChangeAsync(id, (context, _) => OrderWorkflow.Save(request, context), cancellationToken, updatedBy);
+
+    public Task<IReadOnlyList<FuelTypeItem>> ListFuelTypesAsync(CancellationToken cancellationToken) =>
+        InConnection(async (connection, _, token) =>
+        {
+            var rows = await connection.QueryAsync<FuelTypeItem>(Command(
+                "SELECT Id, Name FROM dbo.Disp_FuelType ORDER BY Id",
+                null,
+                token));
+            return (IReadOnlyList<FuelTypeItem>)rows.AsList();
+        }, cancellationToken);
+
+    public Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken) =>
+        InConnection(async (connection, _, token) =>
+        {
+            var map = await LoadDistancesAsync(connection, null, token);
+            return Lookup(map, pairs);
+        }, cancellationToken);
 
     public Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken) =>
         ChangeAsync(id, (context, _) => OrderWorkflow.Confirm(context), cancellationToken);
@@ -304,7 +321,8 @@ public sealed class SqlOrderStore(
     private async Task<OrderMutation> ChangeAsync(
         string? id,
         Func<OrderEditContext, OrderSyncEntry?, OrderChange> change,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        string? updatedBy = null) =>
         await InConnection(async (connection, transaction, token) =>
         {
             await TakeLockAsync(connection, transaction!, token);
@@ -353,7 +371,8 @@ public sealed class SqlOrderStore(
                 ExistingCodes = codes,
                 Current = current,
                 LastSent = lastSent,
-                SentCorrections = sentCorrections
+                SentCorrections = sentCorrections,
+                Distances = await LoadDistancesAsync(connection, transaction, token)
             };
             var result = change(context, latest);
             if (result is OrderChange.Deleted deleted)
@@ -383,6 +402,8 @@ public sealed class SqlOrderStore(
                 await DropOpenQueueAsync(connection, transaction!, order.Id, token);
             if (saved.Queue is not null)
                 await UpsertQueueAsync(connection, transaction!, order, saved.Queue, token);
+            if (saved.Distances is { Count: > 0 })
+                await UpsertDistancesAsync(connection, transaction!, saved.Distances, updatedBy, context.Now, token);
 
             await transaction!.CommitAsync(token);
             return (OrderMutation)new OrderMutation.Success(order);
@@ -504,6 +525,10 @@ public sealed class SqlOrderStore(
         var defaultCost = decimal.TryParse(costText, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : 0m;
+        var fuels = (await connection.QueryAsync<FuelTypeItem>(Command(
+            "SELECT Id, Name FROM dbo.Disp_FuelType ORDER BY Id",
+            transaction,
+            cancellationToken))).AsList();
         return new OrderCatalog(
             vehicles.Select(vehicle => vehicle.Id).ToHashSet(StringComparer.Ordinal),
             drivers.ToHashSet(StringComparer.Ordinal),
@@ -511,7 +536,87 @@ public sealed class SqlOrderStore(
             trips.ToDictionary(trip => trip.Id, StringComparer.Ordinal),
             defaultCost,
             vehicles.Where(vehicle => vehicle.CostPerKm is not null)
-                .ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.CostPerKm!.Value, StringComparer.Ordinal));
+                .ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.CostPerKm!.Value, StringComparer.Ordinal),
+            fuels);
+    }
+
+    private static async Task<Dictionary<string, decimal>> LoadDistancesAsync(
+        SqlConnection connection,
+        SqlTransaction? transaction,
+        CancellationToken cancellationToken)
+    {
+        var rows = await connection.QueryAsync<DistanceSqlRow>(Command(
+            "SELECT FromPlace, ToPlace, Km FROM dbo.Disp_Distance",
+            transaction,
+            cancellationToken));
+        var map = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            var pair = PlacePair.Canonical(row.FromPlace, row.ToPlace);
+            if (pair is null)
+                continue;
+            map[PlacePair.Key(pair.Value.From, pair.Value.To)] = row.Km;
+        }
+
+        return map;
+    }
+
+    private static IReadOnlyList<DistanceHit> Lookup(IReadOnlyDictionary<string, decimal> map, IReadOnlyList<DistanceQuery>? pairs)
+    {
+        if (pairs is null || pairs.Count == 0)
+            return [];
+
+        var hits = new List<DistanceHit>(pairs.Count);
+        foreach (var pair in pairs)
+        {
+            var from = pair.From?.Trim() ?? "";
+            var to = pair.To?.Trim() ?? "";
+            var canonical = PlacePair.Canonical(from, to);
+            decimal? km = null;
+            if (canonical is not null && map.TryGetValue(PlacePair.Key(canonical.Value.From, canonical.Value.To), out var found))
+                km = found;
+            hits.Add(new DistanceHit(from, to, km));
+        }
+
+        return hits;
+    }
+
+    private static async Task UpsertDistancesAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        IReadOnlyList<DistanceWrite> writes,
+        string? updatedBy,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken)
+    {
+        var actor = OrderSyncLimits.TrimToColumn(updatedBy, 160);
+        foreach (var write in writes)
+        {
+            var pair = PlacePair.Canonical(write.FromPlace, write.ToPlace);
+            if (pair is null)
+                continue;
+
+            var updated = await connection.ExecuteAsync(Command(
+                """
+                UPDATE dbo.Disp_Distance
+                SET Km = @Km, UpdatedAt = @UpdatedAt, UpdatedBy = @UpdatedBy
+                WHERE FromPlace = @FromPlace AND ToPlace = @ToPlace
+                """,
+                transaction,
+                cancellationToken,
+                new { FromPlace = pair.Value.From, ToPlace = pair.Value.To, Km = write.Km, UpdatedAt = updatedAt, UpdatedBy = actor }));
+            if (updated > 0)
+                continue;
+
+            await connection.ExecuteAsync(Command(
+                """
+                INSERT INTO dbo.Disp_Distance (FromPlace, ToPlace, Km, UpdatedAt, UpdatedBy)
+                VALUES (@FromPlace, @ToPlace, @Km, @UpdatedAt, @UpdatedBy)
+                """,
+                transaction,
+                cancellationToken,
+                new { FromPlace = pair.Value.From, ToPlace = pair.Value.To, Km = write.Km, UpdatedAt = updatedAt, UpdatedBy = actor }));
+        }
     }
 
     private static async Task<DispatchOrder?> LoadOrderAsync(
@@ -524,7 +629,7 @@ public sealed class SqlOrderStore(
             """
             SELECT
                 o.Id, o.Code, o.CustomerPohodaId, o.CustomerName, o.LoadingPlace, o.UnloadingPlace,
-                o.LoadingDate, o.UnloadingDate, o.FuelType, o.Liters, o.AgreedPrice, o.Surcharges,
+                o.LoadingDate, o.UnloadingDate, o.FuelType, o.FuelTypeId, o.Liters, o.AgreedPrice, o.Surcharges,
                 o.Note, o.CmrNumber,
                 CASE WHEN o.TripId IS NULL THEN o.VehicleId ELSE t.VehicleId END AS VehicleId,
                 CASE WHEN o.TripId IS NULL THEN o.DriverId ELSE t.DriverId END AS DriverId,
@@ -553,7 +658,7 @@ public sealed class SqlOrderStore(
             """
             SELECT
                 Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace,
-                LoadingDate, UnloadingDate, FuelType, Liters, AgreedPrice, Surcharges,
+                LoadingDate, UnloadingDate, FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges,
                 Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
@@ -579,7 +684,7 @@ public sealed class SqlOrderStore(
             """
             SELECT
                 Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace,
-                LoadingDate, UnloadingDate, FuelType, Liters, AgreedPrice, Surcharges,
+                LoadingDate, UnloadingDate, FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges,
                 Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
@@ -616,13 +721,13 @@ public sealed class SqlOrderStore(
             """
             INSERT INTO dbo.Disp_Order
                 (Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
-                 FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
+                 FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
                  IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
                  CreatedAt, UpdatedAt, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
                  CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
             VALUES
                 (@Id, @Code, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
-                 @FuelType, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status,
+                 @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status,
                  @IsLocked, @CurrentVersion, @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @LastSentVersion,
                  @CreatedAt, @UpdatedAt, @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm,
                  @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
@@ -646,6 +751,7 @@ public sealed class SqlOrderStore(
                 LoadingDate = @LoadingDate,
                 UnloadingDate = @UnloadingDate,
                 FuelType = @FuelType,
+                FuelTypeId = @FuelTypeId,
                 Liters = @Liters,
                 AgreedPrice = @AgreedPrice,
                 Surcharges = @Surcharges,
@@ -689,13 +795,13 @@ public sealed class SqlOrderStore(
             """
             INSERT INTO dbo.Disp_OrderVersion
                 (OrderId, Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
-                 FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
+                 FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
                  PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                  PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
                  CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
             VALUES
                 (@Id, @CurrentVersion, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
-                 @FuelType, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status, @IsLocked,
+                 @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status, @IsLocked,
                  @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @UpdatedAt,
                  @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm, @RouteJson,
                  @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
@@ -713,6 +819,7 @@ public sealed class SqlOrderStore(
                 order.LoadingDate,
                 order.UnloadingDate,
                 order.FuelType,
+                order.FuelTypeId,
                 order.Liters,
                 order.AgreedPrice,
                 order.Surcharges,
@@ -796,12 +903,12 @@ public sealed class SqlOrderStore(
         {
             await connection.ExecuteAsync(Command(
                 """
-                INSERT INTO dbo.Disp_OrderStop (Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt)
-                VALUES (@Id, @OrderId, @Sequence, @Place, @Liters, @Note, @ArrivalAt)
+                INSERT INTO dbo.Disp_OrderStop (Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt, FuelTypeId)
+                VALUES (@Id, @OrderId, @Sequence, @Place, @Liters, @Note, @ArrivalAt, @FuelTypeId)
                 """,
                 transaction,
                 cancellationToken,
-                new { stop.Id, OrderId = order.Id, stop.Sequence, stop.Place, stop.Liters, stop.Note, stop.ArrivalAt }));
+                new { stop.Id, OrderId = order.Id, stop.Sequence, stop.Place, stop.Liters, stop.Note, stop.ArrivalAt, stop.FuelTypeId }));
         }
 
         foreach (var leg in order.Legs ?? [])
@@ -809,9 +916,9 @@ public sealed class SqlOrderStore(
             await connection.ExecuteAsync(Command(
                 """
                 INSERT INTO dbo.Disp_OrderLeg
-                    (Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice)
+                    (Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource)
                 VALUES
-                    (@Id, @OrderId, @Sequence, @FromPlace, @ToPlace, @Liters, @Kilometers, @SalePrice, @SaleOverridden, @CostPrice)
+                    (@Id, @OrderId, @Sequence, @FromPlace, @ToPlace, @Liters, @Kilometers, @SalePrice, @SaleOverridden, @CostPrice, @KmSource)
                 """,
                 transaction,
                 cancellationToken,
@@ -826,7 +933,8 @@ public sealed class SqlOrderStore(
                     leg.Kilometers,
                     leg.SalePrice,
                     leg.SaleOverridden,
-                    leg.CostPrice
+                    leg.CostPrice,
+                    leg.KmSource
                 }));
         }
     }
@@ -842,9 +950,10 @@ public sealed class SqlOrderStore(
         var ids = orders.Select(order => order.Id).ToArray();
         var stops = (await connection.QueryAsync<RouteStopRow>(Command(
             """
-            SELECT Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt
-            FROM dbo.Disp_OrderStop
-            WHERE OrderId IN @Ids
+            SELECT s.Id, s.OrderId, s.Sequence, s.Place, s.Liters, s.Note, s.ArrivalAt, s.FuelTypeId, f.Name AS FuelType
+            FROM dbo.Disp_OrderStop s
+            LEFT JOIN dbo.Disp_FuelType f ON f.Id = s.FuelTypeId
+            WHERE s.OrderId IN @Ids
             ORDER BY Sequence
             """,
             null,
@@ -852,7 +961,7 @@ public sealed class SqlOrderStore(
             new { Ids = ids }))).AsList();
         var legs = (await connection.QueryAsync<RouteLegRow>(Command(
             """
-            SELECT Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice
+            SELECT Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource
             FROM dbo.Disp_OrderLeg
             WHERE OrderId IN @Ids
             ORDER BY Sequence
@@ -879,9 +988,10 @@ public sealed class SqlOrderStore(
     {
         var stops = (await connection.QueryAsync<OrderStop>(Command(
             """
-            SELECT Id, Sequence, Place, Liters, Note, ArrivalAt
-            FROM dbo.Disp_OrderStop
-            WHERE OrderId = @Id
+            SELECT s.Id, s.Sequence, s.Place, s.Liters, s.Note, s.ArrivalAt, s.FuelTypeId, f.Name AS FuelType
+            FROM dbo.Disp_OrderStop s
+            LEFT JOIN dbo.Disp_FuelType f ON f.Id = s.FuelTypeId
+            WHERE s.OrderId = @Id
             ORDER BY Sequence
             """,
             transaction,
@@ -889,7 +999,7 @@ public sealed class SqlOrderStore(
             new { order.Id }))).AsList();
         var legs = (await connection.QueryAsync<OrderLeg>(Command(
             """
-            SELECT Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice
+            SELECT Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource
             FROM dbo.Disp_OrderLeg
             WHERE OrderId = @Id
             ORDER BY Sequence
@@ -1004,8 +1114,10 @@ public sealed class SqlOrderStore(
         public decimal Liters { get; set; }
         public string? Note { get; set; }
         public DateTimeOffset? ArrivalAt { get; set; }
+        public int? FuelTypeId { get; set; }
+        public string? FuelType { get; set; }
 
-        public OrderStop ToStop() => new(Id, Sequence, Place, Liters, Note, ArrivalAt);
+        public OrderStop ToStop() => new(Id, Sequence, Place, Liters, Note, ArrivalAt, FuelTypeId, FuelType);
     }
 
     private sealed class RouteLegRow
@@ -1020,8 +1132,9 @@ public sealed class SqlOrderStore(
         public decimal SalePrice { get; set; }
         public bool SaleOverridden { get; set; }
         public decimal CostPrice { get; set; }
+        public string? KmSource { get; set; }
 
-        public OrderLeg ToLeg() => new(Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice);
+        public OrderLeg ToLeg() => new(Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource);
     }
 
     private sealed class OrderRow
@@ -1035,6 +1148,7 @@ public sealed class SqlOrderStore(
         public DateOnly LoadingDate { get; set; }
         public DateOnly UnloadingDate { get; set; }
         public string FuelType { get; set; } = "";
+        public int? FuelTypeId { get; set; }
         public decimal Liters { get; set; }
         public decimal AgreedPrice { get; set; }
         public decimal Surcharges { get; set; }
@@ -1074,7 +1188,15 @@ public sealed class SqlOrderStore(
             IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
             CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, LatestSyncWarning, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
             CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
-            CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone);
+            CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone,
+            FuelTypeId: FuelTypeId);
+    }
+
+    private sealed class DistanceSqlRow
+    {
+        public string FromPlace { get; set; } = "";
+        public string ToPlace { get; set; } = "";
+        public decimal Km { get; set; }
     }
 
     private sealed class VehicleCostRow
@@ -1093,6 +1215,7 @@ public sealed class SqlOrderStore(
         public DateOnly LoadingDate { get; set; }
         public DateOnly UnloadingDate { get; set; }
         public string FuelType { get; set; } = "";
+        public int? FuelTypeId { get; set; }
         public decimal Liters { get; set; }
         public decimal AgreedPrice { get; set; }
         public decimal Surcharges { get; set; }
@@ -1129,7 +1252,8 @@ public sealed class SqlOrderStore(
                 IsLocked, Version, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, order.LastSentVersion,
                 order.CreatedAt, CreatedUtc, null, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
                 CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
-                CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone);
+                CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone,
+                FuelTypeId: FuelTypeId);
             return OrderRoute.Read(version, RouteJson);
         }
     }

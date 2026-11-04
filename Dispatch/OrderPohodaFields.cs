@@ -23,6 +23,7 @@ public static class OrderPohodaFields
         && left.LoadingDate == right.LoadingDate
         && left.UnloadingDate == right.UnloadingDate
         && left.FuelType == right.FuelType
+        && left.FuelTypeId == right.FuelTypeId
         && left.Liters == right.Liters
         && left.AgreedPrice == right.AgreedPrice
         && left.Surcharges == right.Surcharges
@@ -52,7 +53,9 @@ public static class OrderPohodaFields
         {
             if (leftStops[index].Sequence != rightStops[index].Sequence
                 || leftStops[index].Place != rightStops[index].Place
-                || leftStops[index].Liters != rightStops[index].Liters)
+                || leftStops[index].Liters != rightStops[index].Liters
+                || leftStops[index].FuelTypeId != rightStops[index].FuelTypeId
+                || leftStops[index].FuelType != rightStops[index].FuelType)
                 return false;
         }
 
