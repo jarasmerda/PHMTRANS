@@ -60,6 +60,7 @@
       font-size: 0.78rem;
     }
     #order-message, #queue-message { color: var(--alert); font-weight: 700; }
+    .note.warn { color: var(--alert); font-weight: 700; }
     @media (max-width: 900px) {
       #order-cards { grid-template-columns: 1fr 1fr; }
     }
@@ -208,6 +209,7 @@
     <section id="order-detail" hidden>
       <h2 id="order-detail-title">Zakázka</h2>
       <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
+      <p id="order-sync-warning" class="note warn" hidden></p>
       <form id="order-edit"></form>
       <div class="order-actions">
         <button type="button" id="order-save">Uložit změny</button>
@@ -274,6 +276,6 @@
     </section>
   </div>
   <script src="/dispecink.js?v=5"></script>
-  <script src="/dispecink-orders.js?v=1"></script>
+  <script src="/dispecink-orders.js?v=2"></script>
 </body>
 </html>

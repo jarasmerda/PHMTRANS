@@ -8,7 +8,12 @@ public enum OrderSyncAction
     Correction
 }
 
-public sealed record OrderSyncPlan(OrderSyncAction Action, int? VersionFrom, int VersionTo)
+public sealed record OrderSyncPlan(
+    OrderSyncAction Action,
+    int? VersionFrom,
+    int VersionTo,
+    int CorrectionIndex = 1,
+    bool IncludeDelete = true)
 {
     public static OrderSyncPlan None(int version) => new(OrderSyncAction.None, null, version);
 

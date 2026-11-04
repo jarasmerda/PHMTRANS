@@ -20,7 +20,8 @@ public sealed record QueueUpsert(
     string Action,
     string PayloadXml,
     string Status,
-    bool ResetAttempts);
+    bool ResetAttempts,
+    string? Warning = null);
 
 public sealed class OrderEditContext
 {
@@ -37,6 +38,8 @@ public sealed class OrderEditContext
     public DispatchOrder? Current { get; init; }
 
     public DispatchOrder? LastSent { get; init; }
+
+    public int SentCorrections { get; init; }
 }
 
 public abstract record OrderChange
@@ -153,10 +156,11 @@ public static class OrderWorkflow
                     latest.Action,
                     latest.PayloadXml,
                     OrderSyncMode.QueueStatus(context.SyncMode),
-                    ResetAttempts: true));
+                    ResetAttempts: true,
+                    latest.Warning));
         }
 
-        var plan = OrderSyncPlanner.Force(context.Current, context.LastSent);
+        var plan = WithCorrectionIndex(OrderSyncPlanner.Force(context.Current, context.LastSent), context);
         if (plan.ActionName is null)
             return new OrderChange.Rejected("Není co odeslat znovu.");
 
@@ -170,16 +174,24 @@ public static class OrderWorkflow
         bool versionAdded,
         bool confirmRequested)
     {
-        var plan = OrderSyncPlanner.Plan(order, previous, context.LastSent, confirmRequested);
+        var plan = WithCorrectionIndex(OrderSyncPlanner.Plan(order, previous, context.LastSent, confirmRequested), context);
         var queue = plan.ActionName is null ? null : Queue(context, order, plan, targetId: null);
         if (!versionAdded && queue is null)
             return new OrderChange.Saved(previous ?? order, false, null);
         return new OrderChange.Saved(order, versionAdded, queue);
     }
 
+    private static OrderSyncPlan WithCorrectionIndex(OrderSyncPlan plan, OrderEditContext context) =>
+        plan.Action == OrderSyncAction.Correction
+            ? plan with { CorrectionIndex = context.SentCorrections + 1 }
+            : plan;
+
     private static QueueUpsert Queue(OrderEditContext context, DispatchOrder order, OrderSyncPlan plan, long? targetId)
     {
         var xml = OrderPohodaXml.Build(context.Pohoda, plan, order, context.LastSent);
+        var warning = plan.Action == OrderSyncAction.Correction
+            ? OrderPohodaXml.LockedOrderWarning(OrderPohodaXml.CorrectionNumber(order.Code, plan.CorrectionIndex))
+            : null;
         return new QueueUpsert(
             targetId,
             plan.VersionFrom,
@@ -187,7 +199,8 @@ public static class OrderWorkflow
             plan.ActionName!,
             xml,
             OrderSyncMode.QueueStatus(context.SyncMode),
-            ResetAttempts: true);
+            ResetAttempts: true,
+            warning);
     }
 
     private static DispatchOrder Build(Draft draft, OrderEditContext context, string id, string code, int version, DateTimeOffset createdAt)

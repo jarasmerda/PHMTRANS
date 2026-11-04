@@ -141,11 +141,15 @@ public static class DispatchSchema
                 CreatedUtc datetimeoffset(3) NOT NULL,
                 ProcessedUtc datetimeoffset(3) NULL,
                 PohodaDocNumber nvarchar(40) NULL,
+                Warning nvarchar(1000) NULL,
                 CONSTRAINT FK_Disp_SyncQueue_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
             );
             CREATE INDEX IX_Disp_SyncQueue_Status ON dbo.Disp_SyncQueue (Status, Id);
             CREATE INDEX IX_Disp_SyncQueue_Order ON dbo.Disp_SyncQueue (OrderId, Id);
         END;
+
+        IF COL_LENGTH(N'dbo.Disp_SyncQueue', N'Warning') IS NULL
+            ALTER TABLE dbo.Disp_SyncQueue ADD Warning nvarchar(1000) NULL;
         """;
 
     public static async Task EnsureAsync(string connectionString, CancellationToken cancellationToken)

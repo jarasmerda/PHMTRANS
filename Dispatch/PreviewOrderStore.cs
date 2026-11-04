@@ -17,7 +17,8 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
             var list = _orders.Select(order => order with
             {
                 LatestSyncStatus = Latest(order.Id)?.Status,
-                LatestSyncError = Latest(order.Id)?.LastError
+                LatestSyncError = Latest(order.Id)?.LastError,
+                LatestSyncWarning = Latest(order.Id)?.Warning
             }).ToArray();
             return Task.FromResult<IReadOnlyList<DispatchOrder>>(list);
         }, cancellationToken);
@@ -30,7 +31,16 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                 return Task.FromResult<OrderBundle?>(null);
             var versions = _versions.Where(item => item.Id == id).OrderByDescending(item => item.CurrentVersion).ToArray();
             var sync = _queue.Where(item => item.OrderId == id).OrderByDescending(item => item.Id).ToArray();
-            return Task.FromResult<OrderBundle?>(new OrderBundle(order, versions, sync));
+            var latest = sync.FirstOrDefault();
+            var shown = latest is null
+                ? order
+                : order with
+                {
+                    LatestSyncStatus = latest.Status,
+                    LatestSyncError = latest.LastError,
+                    LatestSyncWarning = latest.Warning
+                };
+            return Task.FromResult<OrderBundle?>(new OrderBundle(shown, versions, sync));
         }, cancellationToken);
 
     public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken) =>
@@ -79,10 +89,8 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                 _orders[orderIndex] = order with
                 {
                     LastSentVersion = entry.VersionTo,
-                    PohodaOrderId = entry.Action == OrderSyncActions.Create && result.Id is not null ? result.Id : order.PohodaOrderId,
-                    PohodaOrderNumber = entry.Action is OrderSyncActions.Create or OrderSyncActions.Update && result.Number is not null
-                        ? result.Number
-                        : order.PohodaOrderNumber
+                    PohodaOrderId = result.Id ?? order.PohodaOrderId,
+                    PohodaOrderNumber = result.Number ?? order.PohodaOrderNumber
                 };
             }
 
@@ -104,6 +112,37 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                 ProcessedUtc = DateTimeOffset.UtcNow,
                 Status = attempts >= OrderSyncLimits.MaxAttempts ? OrderQueueStatuses.Failed : OrderQueueStatuses.Pending
             };
+            return Task.FromResult(0);
+        }, cancellationToken);
+
+    public Task SavePayloadAsync(long id, string payloadXml, CancellationToken cancellationToken) =>
+        With(token =>
+        {
+            var index = _queue.FindIndex(item => item.Id == id && item.Status == OrderQueueStatuses.Pending);
+            if (index >= 0)
+                _queue[index] = _queue[index] with { PayloadXml = payloadXml };
+            return Task.FromResult(0);
+        }, cancellationToken);
+
+    public Task MarkDeleteCommittedAsync(OrderSyncEntry entry, string error, string addOnlyXml, CancellationToken cancellationToken) =>
+        With(token =>
+        {
+            var index = _queue.FindIndex(item => item.Id == entry.Id && item.Status == OrderQueueStatuses.Pending);
+            if (index < 0)
+                return Task.FromResult(0);
+            var current = _queue[index];
+            var attempts = current.Attempts + 1;
+            _queue[index] = current with
+            {
+                PayloadXml = addOnlyXml,
+                Attempts = attempts,
+                LastError = OrderSyncLimits.TrimToColumn(error, OrderSyncLimits.LastErrorMaxLength),
+                ProcessedUtc = DateTimeOffset.UtcNow,
+                Status = attempts >= OrderSyncLimits.MaxAttempts ? OrderQueueStatuses.Failed : OrderQueueStatuses.Pending
+            };
+            var orderIndex = _orders.FindIndex(item => item.Id == entry.OrderId);
+            if (orderIndex >= 0)
+                _orders[orderIndex] = _orders[orderIndex] with { PohodaOrderId = null };
             return Task.FromResult(0);
         }, cancellationToken);
 
@@ -141,7 +180,10 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                 Now = DateTimeOffset.Now,
                 ExistingCodes = _orders.Select(item => item.Code).ToArray(),
                 Current = current,
-                LastSent = lastSent
+                LastSent = lastSent,
+                SentCorrections = id is null
+                    ? 0
+                    : _queue.Count(item => item.OrderId == id && item.Action == OrderSyncActions.Correction && item.Status == OrderQueueStatuses.Sent)
             };
             var result = change(context, latest);
             if (result is not OrderChange.Saved saved)
@@ -149,7 +191,7 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
 
             var order = saved.Queue is null
                 ? saved.Order
-                : saved.Order with { LatestSyncStatus = saved.Queue.Status };
+                : saved.Order with { LatestSyncStatus = saved.Queue.Status, LatestSyncWarning = saved.Queue.Warning };
             var index = _orders.FindIndex(item => item.Id == order.Id);
             if (index < 0)
                 _orders.Add(order);
@@ -188,7 +230,8 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                 null,
                 DateTimeOffset.UtcNow,
                 null,
-                null));
+                null,
+                queue.Warning));
             return;
         }
 
@@ -203,6 +246,7 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
             Action = queue.Action,
             PayloadXml = queue.PayloadXml,
             Status = queue.Status,
+            Warning = queue.Warning,
             Attempts = queue.ResetAttempts ? 0 : current.Attempts,
             LastError = queue.ResetAttempts ? null : current.LastError,
             ProcessedUtc = queue.ResetAttempts ? null : current.ProcessedUtc

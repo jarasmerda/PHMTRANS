@@ -355,7 +355,8 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
         Assert.Contains("dispecink.js?v=5", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"order-sync-warning\"", html, StringComparison.Ordinal);
         Assert.Contains("Potvrdit k fakturaci", html, StringComparison.Ordinal);
         Assert.Contains("Fronta Pohody", html, StringComparison.Ordinal);
         Assert.Contains(">Upravit</button>", js, StringComparison.Ordinal);
@@ -406,7 +407,9 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(2, Count(script, "ALTER TABLE"));
+        Assert.Contains("IF COL_LENGTH(N'dbo.Disp_SyncQueue', N'Warning') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE dbo.Disp_SyncQueue ADD Warning nvarchar(1000) NULL", script, StringComparison.Ordinal);
+        Assert.Equal(3, Count(script, "ALTER TABLE"));
         Assert.DoesNotContain("DROP", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("DELETE", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("TRUNCATE", script, StringComparison.OrdinalIgnoreCase);

@@ -1,4 +1,6 @@
+using System.Xml;
 using System.Xml.Linq;
+using System.Xml.Schema;
 using Microsoft.Extensions.Options;
 using PHMTRANS.Dispatch;
 using PHMTRANS.Pohoda;
@@ -84,7 +86,10 @@ public sealed class OrderSyncTests
         Assert.Equal(OrderSyncAction.Correction, plan.Action);
         Assert.Equal(1, plan.VersionFrom);
         Assert.Equal(2, lines.Count);
-        Assert.Equal(-8200m, lines[0].UnitPrice);
+        Assert.Equal(-1m, lines[0].Quantity);
+        Assert.Equal(8200m, lines[0].UnitPrice);
+        Assert.Equal(-8200m, lines[0].Amount);
+        Assert.StartsWith("Storno: ", lines[0].Text, StringComparison.Ordinal);
         Assert.Contains("motorová nafta", lines[0].Text, StringComparison.Ordinal);
         Assert.Equal(10500m, lines[1].UnitPrice);
         Assert.Contains("benzin", lines[1].Text, StringComparison.Ordinal);
@@ -109,6 +114,7 @@ public sealed class OrderSyncTests
         Assert.Contains("receivedOrder", xml, StringComparison.Ordinal);
         Assert.Contains("Z2026-0007", xml, StringComparison.Ordinal);
         Assert.DoesNotContain("actionType", xml, StringComparison.Ordinal);
+        AssertOrderSchema(xml);
         Assert.Equal("42", Value(document, "partnerIdentity", "id"));
         var prices = Prices(document);
         Assert.Equal(new[] { 10000m, 250m }, prices);
@@ -116,16 +122,25 @@ public sealed class OrderSyncTests
     }
 
     [Fact]
-    public void Update_xml_targets_the_pohoda_id()
+    public void Unlocked_change_is_delete_then_add_in_one_pack()
     {
-        var order = Sent(version: 3, price: 9000m, surcharges: 0m, fuel: "nafta");
+        var order = Sent(version: 3, price: 9000m, surcharges: 0m, fuel: "nafta") with { Code = "Z2026-0001" };
         var plan = new OrderSyncPlan(OrderSyncAction.Update, 2, 3);
         var xml = OrderPohodaXml.Build(SampleOptions(), plan, order, order);
         var document = XDocument.Parse(xml);
+        var items = document.Descendants().Where(element => element.Name.LocalName == "dataPackItem").ToList();
 
-        Assert.Equal("15", document.Descendants().First(element => element.Name.LocalName == "filter")
-            .Elements().First(element => element.Name.LocalName == "id").Value);
-        Assert.Equal("242100045", order.PohodaOrderNumber);
+        Assert.Equal(2, items.Count);
+        Assert.Equal("Z2026-0001-del", items[0].Attribute("id")?.Value);
+        Assert.Equal("Z2026-0001-add", items[1].Attribute("id")?.Value);
+        Assert.Equal("prijate_objednavky", items[0].Descendants().First(element => element.Name.LocalName == "filter").Attribute("agenda")?.Value);
+        Assert.Equal("15", items[0].Descendants().First(element => element.Name.LocalName == "id").Value);
+        Assert.Equal("Z2026-0001", items[1].Descendants().First(element => element.Name.LocalName == "numberOrder").Value);
+        Assert.Contains("ord:delete", xml, StringComparison.Ordinal);
+        Assert.Contains("ord:add", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:update", xml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<update", xml, StringComparison.OrdinalIgnoreCase);
+        AssertOrderSchema(xml);
     }
 
     [Fact]
@@ -145,13 +160,18 @@ public sealed class OrderSyncTests
         var prices = Prices(XDocument.Parse(xml));
 
         Assert.Equal(2, prices.Count);
-        Assert.Equal(-8200m, prices[0]);
+        Assert.Equal(8200m, prices[0]);
         Assert.Equal(10500m, prices[1]);
-        Assert.Equal(2300m, prices[0] + prices[1]);
+        Assert.Equal("-1", XDocument.Parse(xml).Descendants().First(element => element.Name.LocalName == "quantity").Value);
+        Assert.Equal(2300m, -prices[0] + prices[1]);
         Assert.Contains("Oprava k 242100045", xml, StringComparison.Ordinal);
-        Assert.Contains("Storno motorová nafta", xml, StringComparison.Ordinal);
+        Assert.Contains("Storno: motorová nafta", xml, StringComparison.Ordinal);
         Assert.Contains("benzin", xml, StringComparison.Ordinal);
-        Assert.Contains("Z2026-0001/v4", xml, StringComparison.Ordinal);
+        Assert.Contains("Z2026-0001/1", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:delete", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain(">15<", xml, StringComparison.Ordinal);
+        Assert.Contains("<ord:add", xml, StringComparison.Ordinal);
+        AssertOrderSchema(xml);
     }
 
     [Fact]
@@ -325,6 +345,9 @@ public sealed class OrderSyncTests
         var numberOrder = XDocument.Parse(correctionXml).Descendants().First(element => element.Name.LocalName == "numberOrder").Value;
         Assert.InRange(numberOrder.Length, 1, 32);
         Assert.StartsWith(new string('K', 30), numberOrder, StringComparison.Ordinal);
+        Assert.EndsWith("/1", numberOrder, StringComparison.Ordinal);
+        AssertOrderSchema(xml);
+        AssertOrderSchema(correctionXml);
     }
 
     [Fact]
@@ -423,7 +446,13 @@ public sealed class OrderSyncTests
         Assert.Equal(OrderSyncActions.Update, update.Action);
         Assert.Equal(sent.LastSentVersion, update.VersionFrom);
         Assert.Contains(">15<", update.PayloadXml, StringComparison.Ordinal);
-        await store.MarkSentAsync(update, PohodaImportResult.Success(15, "242100045"), CancellationToken.None);
+        Assert.Contains("ord:delete", update.PayloadXml, StringComparison.Ordinal);
+        Assert.Contains("ord:add", update.PayloadXml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:update", update.PayloadXml, StringComparison.OrdinalIgnoreCase);
+        await store.MarkSentAsync(update, PohodaImportResult.Success(21, "242100050"), CancellationToken.None);
+        sent = (await store.GetAsync(created.Order.Id, CancellationToken.None))!.Order;
+        Assert.Equal(21, sent.PohodaOrderId);
+        Assert.Equal("242100050", sent.PohodaOrderNumber);
 
         var invoiced = Assert.IsType<OrderMutation.Success>(await store.MarkInvoicedAsync(created.Order.Id, "FV-1", CancellationToken.None));
         Assert.True(invoiced.Order.IsLocked);
@@ -437,14 +466,240 @@ public sealed class OrderSyncTests
         var correction = queue[0];
         Assert.Equal(OrderSyncActions.Correction, correction.Action);
         Assert.Equal(updated.Order.CurrentVersion, correction.VersionFrom);
+        Assert.Equal(OrderPohodaXml.LockedOrderWarning($"{created.Order.Code}/1"), correction.Warning);
+        Assert.Contains($"{created.Order.Code}/1", correction.PayloadXml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:delete", correction.PayloadXml, StringComparison.Ordinal);
+        Assert.DoesNotContain(">21<", correction.PayloadXml, StringComparison.Ordinal);
         var lines = OrderPohodaXml.Lines(OrderSyncAction.Correction, corrected.Order, (await store.GetAsync(created.Order.Id, CancellationToken.None))!
             .Versions.Single(version => version.CurrentVersion == correction.VersionFrom));
         Assert.Equal(2, lines.Count);
-        Assert.Equal(lines[1].Amount + lines[0].Amount, lines[1].UnitPrice + lines[0].UnitPrice);
+        Assert.Equal(-1m, lines[0].Quantity);
         Assert.Equal(OrderPohodaFields.Total(corrected.Order) - 13000m, lines[0].Amount + lines[1].Amount);
         Assert.Contains("motorová nafta", lines[0].Text, StringComparison.Ordinal);
+        Assert.StartsWith("Storno: ", lines[0].Text, StringComparison.Ordinal);
         Assert.Contains("benzin", lines[1].Text, StringComparison.Ordinal);
         Assert.True(corrected.Order.CurrentVersion > (correction.VersionFrom ?? 0));
+        Assert.Equal(correction.Warning, corrected.Order.LatestSyncWarning);
+    }
+
+    [Fact]
+    public void Import_reads_each_item_and_keeps_the_new_document_from_add()
+    {
+        var ok = OrderPohodaXml.ReadImport("""
+            <rsp:responsePack state="ok" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd" xmlns:rdc="http://www.stormware.cz/schema/version_2/documentresponse.xsd">
+              <rsp:responsePackItem id="Z2026-0001-del" state="ok">
+                <rdc:producedDetails>
+                  <rdc:id>15</rdc:id>
+                  <rdc:number>242100045</rdc:number>
+                </rdc:producedDetails>
+              </rsp:responsePackItem>
+              <rsp:responsePackItem id="Z2026-0001-add" state="ok">
+                <rdc:producedDetails>
+                  <rdc:id>99</rdc:id>
+                  <rdc:number>242100099</rdc:number>
+                </rdc:producedDetails>
+              </rsp:responsePackItem>
+            </rsp:responsePack>
+            """);
+
+        Assert.True(ok.Ok);
+        Assert.False(ok.DeleteCommitted);
+        Assert.Equal(99, ok.Id);
+        Assert.Equal("242100099", ok.Number);
+
+        var missing = OrderPohodaXml.ReadImport("""
+            <rsp:responsePack state="error" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd" xmlns:rdc="http://www.stormware.cz/schema/version_2/documentresponse.xsd">
+              <rsp:responsePackItem id="Z2026-0001-del" state="error" note="Záznam nebyl nalezen."/>
+              <rsp:responsePackItem id="Z2026-0001-add" state="ok">
+                <rdc:producedDetails>
+                  <rdc:id>100</rdc:id>
+                  <rdc:number>242100100</rdc:number>
+                </rdc:producedDetails>
+              </rsp:responsePackItem>
+            </rsp:responsePack>
+            """);
+        Assert.True(missing.Ok);
+        Assert.Equal(100, missing.Id);
+        Assert.Equal("242100100", missing.Number);
+
+        var partial = OrderPohodaXml.ReadImport("""
+            <rsp:responsePack state="error" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd">
+              <rsp:responsePackItem id="Z2026-0001-del" state="ok"/>
+              <rsp:responsePackItem id="Z2026-0001-add" state="error" note="Číslo objednávky už existuje."/>
+            </rsp:responsePack>
+            """);
+        Assert.False(partial.Ok);
+        Assert.True(partial.DeleteCommitted);
+        Assert.Contains("Smazání původní objednávky v Pohodě proběhlo", partial.Error, StringComparison.Ordinal);
+        Assert.Contains("už doklad nemaže", partial.Error, StringComparison.Ordinal);
+        Assert.Contains("Z2026-0001-add: Číslo objednávky už existuje.", partial.Error, StringComparison.Ordinal);
+
+        var alreadyGone = OrderPohodaXml.ReadImport("""
+            <rsp:responsePack state="error" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd">
+              <rsp:responsePackItem id="Z2026-0001-del" state="error" note="Záznam nebyl nalezen."/>
+              <rsp:responsePackItem id="Z2026-0001-add" state="error" note="Import selhal."/>
+            </rsp:responsePack>
+            """);
+        Assert.False(alreadyGone.Ok);
+        Assert.True(alreadyGone.DeleteCommitted);
+        Assert.Contains("už neexistuje", alreadyGone.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Partial_delete_retries_with_add_only_and_stores_the_new_id()
+    {
+        var live = SampleOptions();
+        live.SyncMode = "Live";
+        var store = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(live));
+        var created = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request(), CancellationToken.None));
+        Assert.IsType<OrderMutation.Success>(await store.ConfirmAsync(created.Order.Id, CancellationToken.None));
+        var create = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
+        await store.MarkSentAsync(create, PohodaImportResult.Success(15, "242100045"), CancellationToken.None);
+
+        Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(
+            created.Order.Id,
+            Request(price: 13000m, status: OrderStatuses.KFakturaci),
+            CancellationToken.None));
+        var update = (await store.ListQueueAsync(CancellationToken.None))[0];
+        Assert.Equal(OrderSyncActions.Update, update.Action);
+        Assert.Contains("ord:delete", update.PayloadXml, StringComparison.Ordinal);
+
+        var partial = OrderPohodaXml.ReadImport("""
+            <rsp:responsePack state="error" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd">
+              <rsp:responsePackItem id="Z2026-0001-del" state="ok"/>
+              <rsp:responsePackItem id="Z2026-0001-add" state="error" note="mServer odmítl založení."/>
+            </rsp:responsePack>
+            """);
+        Assert.True(partial.DeleteCommitted);
+        var bundle = (await store.GetAsync(created.Order.Id, CancellationToken.None))!;
+        var addOnly = OrderPohodaXml.AddOnly(live, update, bundle.Order, bundle.Versions.First(item => item.CurrentVersion == update.VersionFrom), 0);
+        await store.MarkDeleteCommittedAsync(update, partial.Error!, addOnly, CancellationToken.None);
+
+        var retry = (await store.ListQueueAsync(CancellationToken.None))[0];
+        var after = (await store.GetAsync(created.Order.Id, CancellationToken.None))!.Order;
+        Assert.Equal(OrderQueueStatuses.Pending, retry.Status);
+        Assert.Equal(1, retry.Attempts);
+        Assert.Null(after.PohodaOrderId);
+        Assert.Contains("už doklad nemaže", retry.LastError, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:delete", retry.PayloadXml, StringComparison.Ordinal);
+        Assert.DoesNotContain(">15<", retry.PayloadXml, StringComparison.Ordinal);
+        Assert.Contains("<ord:add", retry.PayloadXml, StringComparison.Ordinal);
+        Assert.Equal(created.Order.Code, XDocument.Parse(retry.PayloadXml).Descendants().Single(element => element.Name.LocalName == "numberOrder").Value);
+        Assert.Equal(1, XDocument.Parse(retry.PayloadXml).Descendants().Count(element => element.Name.LocalName == "dataPackItem"));
+        Assert.Same(retry.PayloadXml, OrderPohodaXml.EnsureCurrent(live, retry, after, null, 0));
+        AssertOrderSchema(retry.PayloadXml);
+
+        var added = OrderPohodaXml.ReadImport("""
+            <rsp:responsePack state="ok" xmlns:rsp="http://www.stormware.cz/schema/version_2/response.xsd" xmlns:rdc="http://www.stormware.cz/schema/version_2/documentresponse.xsd">
+              <rsp:responsePackItem id="Z2026-0001-add" state="ok">
+                <rdc:producedDetails>
+                  <rdc:id>40</rdc:id>
+                  <rdc:number>242100040</rdc:number>
+                </rdc:producedDetails>
+              </rsp:responsePackItem>
+            </rsp:responsePack>
+            """);
+        Assert.True(added.Ok);
+        Assert.Equal(40, added.Id);
+        await store.MarkSentAsync(retry, added, CancellationToken.None);
+        var stored = (await store.GetAsync(created.Order.Id, CancellationToken.None))!.Order;
+        Assert.Equal(40, stored.PohodaOrderId);
+        Assert.Equal("242100040", stored.PohodaOrderNumber);
+        Assert.Equal(retry.VersionTo, stored.LastSentVersion);
+    }
+
+    [Fact]
+    public async Task Locked_corrections_use_the_next_suffix_and_storno_the_last_sent_version()
+    {
+        var live = SampleOptions();
+        live.SyncMode = "Live";
+        var store = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(live));
+        var created = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request(price: 8000m), CancellationToken.None));
+        Assert.IsType<OrderMutation.Success>(await store.ConfirmAsync(created.Order.Id, CancellationToken.None));
+        var create = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
+        await store.MarkSentAsync(create, PohodaImportResult.Success(15, "242100045"), CancellationToken.None);
+        Assert.IsType<OrderMutation.Success>(await store.MarkInvoicedAsync(created.Order.Id, "FV-9", CancellationToken.None));
+
+        var first = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(
+            created.Order.Id,
+            Request(price: 10000m, surcharges: 500m, fuel: "benzin"),
+            CancellationToken.None));
+        var correction = (await store.ListQueueAsync(CancellationToken.None))[0];
+        Assert.Equal(OrderSyncActions.Correction, correction.Action);
+        Assert.Equal($"{created.Order.Code}/1", NumberOrder(correction.PayloadXml));
+        Assert.Equal(OrderPohodaXml.LockedOrderWarning($"{created.Order.Code}/1"), correction.Warning);
+        Assert.Equal(correction.Warning, first.Order.LatestSyncWarning);
+        var firstLines = Items(correction.PayloadXml);
+        Assert.Equal(2, firstLines.Count);
+        Assert.Equal("-1", firstLines[0].Quantity);
+        Assert.StartsWith("Storno: ", firstLines[0].Text, StringComparison.Ordinal);
+        Assert.Contains("motorová nafta", firstLines[0].Text, StringComparison.Ordinal);
+        Assert.Equal("8000.00", firstLines[0].Price);
+        Assert.Contains("benzin", firstLines[1].Text, StringComparison.Ordinal);
+        Assert.Equal("10500.00", firstLines[1].Price);
+        Assert.DoesNotContain("ord:delete", correction.PayloadXml, StringComparison.Ordinal);
+        Assert.DoesNotContain(">15<", correction.PayloadXml, StringComparison.Ordinal);
+        AssertOrderSchema(correction.PayloadXml);
+
+        await store.MarkSentAsync(correction, PohodaImportResult.Success(30, "242100060"), CancellationToken.None);
+        var linked = (await store.GetAsync(created.Order.Id, CancellationToken.None))!.Order;
+        Assert.Equal(30, linked.PohodaOrderId);
+        Assert.Equal("242100060", linked.PohodaOrderNumber);
+
+        var second = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(
+            created.Order.Id,
+            Request(price: 16000m, fuel: "benzin"),
+            CancellationToken.None));
+        var next = (await store.ListQueueAsync(CancellationToken.None))[0];
+        Assert.Equal($"{created.Order.Code}/2", NumberOrder(next.PayloadXml));
+        Assert.Equal(OrderPohodaXml.LockedOrderWarning($"{created.Order.Code}/2"), next.Warning);
+        Assert.Equal(next.Warning, second.Order.LatestSyncWarning);
+        var secondLines = Items(next.PayloadXml);
+        Assert.Equal(2, secondLines.Count);
+        Assert.Equal("-1", secondLines[0].Quantity);
+        Assert.StartsWith("Storno: ", secondLines[0].Text, StringComparison.Ordinal);
+        Assert.Contains("benzin", secondLines[0].Text, StringComparison.Ordinal);
+        Assert.Equal("10500.00", secondLines[0].Price);
+        Assert.DoesNotContain("motorová nafta", secondLines[0].Text, StringComparison.Ordinal);
+        Assert.Equal("16000.00", secondLines[1].Price);
+        Assert.DoesNotContain(">30<", next.PayloadXml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:delete", next.PayloadXml, StringComparison.Ordinal);
+        AssertOrderSchema(next.PayloadXml);
+        Assert.Equal(32, OrderPohodaXml.CorrectionNumber(new string('K', 30), 10).Length);
+        Assert.EndsWith("/10", OrderPohodaXml.CorrectionNumber(new string('K', 30), 10), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Legacy_update_xml_is_rebuilt_as_delete_and_add()
+    {
+        const string legacy = """
+            <?xml version="1.0" encoding="Windows-1250"?>
+            <dat:dataPack version="2.0" id="order-Z2026-0001-v4" ico="12345678" application="PHMTRANS" note="Zakázka dispečinku" xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd" xmlns:ord="http://www.stormware.cz/schema/version_2/order.xsd" xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd" xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd">
+              <dat:dataPackItem version="2.0" id="Z2026-0001">
+                <ord:order version="2.0">
+                  <ord:actionType>
+                    <ord:update>
+                      <ftr:filter><ftr:id>15</ftr:id></ftr:filter>
+                    </ord:update>
+                  </ord:actionType>
+                </ord:order>
+              </dat:dataPackItem>
+            </dat:dataPack>
+            """;
+        var order = Sent(version: 4, price: 13000m, surcharges: 0m, fuel: "motorová nafta");
+        var entry = new OrderSyncEntry(8, order.Id, order.Code, 2, 4, OrderSyncActions.Update, legacy, OrderQueueStatuses.Pending, 1, "ord:update není ve schématu", DateTimeOffset.Parse("2026-11-04T08:00:00Z"), DateTimeOffset.Parse("2026-11-04T08:01:00Z"), null);
+        var rebuilt = OrderPohodaXml.EnsureCurrent(SampleOptions(), entry, order, order, 0);
+        var document = XDocument.Parse(rebuilt);
+        var items = document.Descendants().Where(element => element.Name.LocalName == "dataPackItem").ToList();
+
+        Assert.NotEqual(legacy, rebuilt);
+        Assert.Equal(2, items.Count);
+        Assert.Equal("15", items[0].Descendants().First(element => element.Name.LocalName == "id").Value);
+        Assert.Equal(order.Code, items[1].Descendants().First(element => element.Name.LocalName == "numberOrder").Value);
+        Assert.Contains("13000.00", rebuilt, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:update", rebuilt, StringComparison.OrdinalIgnoreCase);
+        AssertOrderSchema(rebuilt);
+        Assert.Equal(rebuilt, OrderPohodaXml.EnsureCurrent(SampleOptions(), entry with { PayloadXml = rebuilt }, order, order, 0));
     }
 
     private static DispatchOrder Sample(int version, decimal price, string fuel) => new(
@@ -530,4 +785,46 @@ public sealed class OrderSyncTests
             .Where(element => element.Name.LocalName == "unitPrice")
             .Select(element => decimal.Parse(element.Value, System.Globalization.CultureInfo.InvariantCulture))
             .ToArray();
+
+    private static string NumberOrder(string xml) =>
+        XDocument.Parse(xml).Descendants().Single(element => element.Name.LocalName == "numberOrder").Value;
+
+    private static IReadOnlyList<(string Text, string Quantity, string Price)> Items(string xml) =>
+        XDocument.Parse(xml).Descendants()
+            .Where(element => element.Name.LocalName == "orderItem")
+            .Select(element => (
+                element.Elements().First(child => child.Name.LocalName == "text").Value,
+                element.Elements().First(child => child.Name.LocalName == "quantity").Value,
+                element.Descendants().First(child => child.Name.LocalName == "unitPrice").Value))
+            .ToArray();
+
+    private static readonly XmlSchemaSet OrderSchema = LoadOrderSchema();
+
+    private static XmlSchemaSet LoadOrderSchema()
+    {
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "Schemas", "order.xsd"));
+        var errors = new List<string>();
+        var set = new XmlSchemaSet { XmlResolver = new XmlUrlResolver() };
+        set.ValidationEventHandler += (_, args) => errors.Add(args.Message);
+        set.Add(null, path);
+        set.Compile();
+        if (errors.Count > 0)
+            throw new InvalidOperationException(string.Join(Environment.NewLine, errors.Distinct().Take(20)));
+        return set;
+    }
+
+    private static void AssertOrderSchema(string xml)
+    {
+        var orders = XDocument.Parse(xml).Descendants()
+            .Where(element => element.Name.LocalName == "order")
+            .ToList();
+        Assert.NotEmpty(orders);
+        foreach (var order in orders)
+        {
+            var errors = new List<string>();
+            var document = new XDocument(new XElement(order));
+            document.Validate(OrderSchema, (_, args) => errors.Add(args.Message), true);
+            Assert.True(errors.Count == 0, string.Join(Environment.NewLine, errors));
+        }
+    }
 }

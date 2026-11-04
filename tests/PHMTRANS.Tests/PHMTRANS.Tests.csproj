@@ -22,4 +22,8 @@
     <ProjectReference Include="..\..\PHMTRANS.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Schemas\*.xsd" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
