@@ -20,6 +20,10 @@ public static class DispatchEndpoints
         api.MapPatch("/trips/{id}", UpdateTrip);
         api.MapPost("/trips/{id}/assign", AssignTrip);
         api.MapPost("/trips/{id}/status", ChangeStatus);
+        api.MapPost("/trips/{id}/orders", AddOrderToTrip);
+        api.MapDelete("/trips/{id}/orders/{orderId}", RemoveOrderFromTrip);
+        api.MapGet("/rates", GetRates);
+        api.MapPut("/rates", SaveRates);
     }
 
     private static Task<IResult> GetBoard(IDispatchStore store, CancellationToken cancellationToken) =>
@@ -52,8 +56,24 @@ public static class DispatchEndpoints
             return Results.Ok(trips);
         });
 
-    private static Task<IResult> CreateTrip(NewTripRequest request, IDispatchStore store, CancellationToken cancellationToken) =>
-        Execute(async () => ToResult(await store.AddTripAsync(request, cancellationToken)));
+    private static Task<IResult> CreateTrip(
+        NewTripRequest request,
+        IDispatchStore store,
+        IOrderStore orders,
+        CancellationToken cancellationToken) =>
+        Execute(async () =>
+        {
+            var mutation = await store.AddTripAsync(request, cancellationToken);
+            if (mutation is not DispatchMutation.Success success)
+                return ToResult(mutation);
+            if (request.OrderIds is not { Count: > 0 })
+                return Results.Ok(success.Trip);
+
+            var error = await orders.AttachOrdersAsync(success.Trip.Id, request.OrderIds, onlyIfFree: true, cancellationToken);
+            return error is null
+                ? Results.Ok(success.Trip)
+                : Results.BadRequest(new { message = error });
+        });
 
     private static Task<IResult> UpdateTrip(
         string id,
@@ -75,6 +95,75 @@ public static class DispatchEndpoints
         IDispatchStore store,
         CancellationToken cancellationToken) =>
         Execute(async () => ToResult(await store.SetStatusAsync(id, request.Status, cancellationToken)));
+
+    private static async Task<IResult> AddOrderToTrip(
+        string id,
+        TripOrderRequest request,
+        IOrderStore orders,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.OrderId))
+            return Results.BadRequest(new { message = "Vyberte zakázku." });
+        return await OrderResult(() => orders.AttachTripAsync(request.OrderId, id, onlyIfFree: true, cancellationToken));
+    }
+
+    private static async Task<IResult> RemoveOrderFromTrip(
+        string id,
+        string orderId,
+        IOrderStore orders,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var bundle = await orders.GetAsync(orderId, cancellationToken);
+            if (bundle is null)
+                return Results.NotFound(new { message = "Zakázka neexistuje." });
+            if (!string.Equals(bundle.Order.TripId, id, StringComparison.Ordinal))
+                return Results.BadRequest(new { message = "Zakázka na této jízdě není." });
+        }
+        catch (OrderStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        return await OrderResult(() => orders.AttachTripAsync(orderId, null, onlyIfFree: false, cancellationToken));
+    }
+
+    private static Task<IResult> GetRates(IDispatchStore store, CancellationToken cancellationToken) =>
+        Execute(async () => Results.Ok(await store.GetRatesAsync(cancellationToken)));
+
+    private static Task<IResult> SaveRates(
+        SaveRatesRequest request,
+        IDispatchStore store,
+        CancellationToken cancellationToken) =>
+        Execute(async () =>
+        {
+            if (request.DefaultCostPerKm is null)
+                return Results.BadRequest(new { message = "Vyplňte výchozí nákladovou sazbu." });
+            var error = await store.SaveRatesAsync(request.DefaultCostPerKm.Value, request.Vehicles ?? [], cancellationToken);
+            return error is null
+                ? Results.Ok(await store.GetRatesAsync(cancellationToken))
+                : Results.BadRequest(new { message = error });
+        });
+
+    private static async Task<IResult> OrderResult(Func<Task<OrderMutation>> action)
+    {
+        try
+        {
+            var mutation = await action();
+            return mutation switch
+            {
+                OrderMutation.Success success => Results.Ok(success.Order),
+                OrderMutation.NotFound => Results.NotFound(new { message = "Zakázka neexistuje." }),
+                OrderMutation.Rejected rejected => Results.BadRequest(new { message = rejected.Message }),
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        }
+        catch (OrderStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
 
     private static async Task<IResult> Execute(Func<Task<IResult>> action)
     {

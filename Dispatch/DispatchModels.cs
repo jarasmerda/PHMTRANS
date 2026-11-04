@@ -26,14 +26,13 @@ public static class DispatchStatuses
     };
 }
 
-public sealed record DispatchVehicle(string Id, string Plate, string Label);
+public sealed record DispatchVehicle(string Id, string Plate, string Label, decimal? CostPerKm = null);
 
 public sealed record DispatchDriver(string Id, string Name, string? Phone);
 
 public sealed record DispatchTrip(
     string Id,
     string Code,
-    string? OrderCode,
     string Customer,
     string LoadingPlace,
     string UnloadingPlace,
@@ -56,12 +55,15 @@ public sealed class DispatchDocument
     public List<DispatchDriver> Drivers { get; set; } = [];
 
     public List<DispatchTrip> Trips { get; set; } = [];
+
+    public decimal DefaultCostPerKm { get; set; }
 }
 
 public sealed record DispatchSnapshot(
     IReadOnlyList<DispatchTrip> Trips,
     IReadOnlyList<DispatchVehicle> Vehicles,
-    IReadOnlyList<DispatchDriver> Drivers);
+    IReadOnlyList<DispatchDriver> Drivers,
+    decimal DefaultCostPerKm = 0m);
 
 public sealed record DispatchStatusCount(string Status, int Count);
 
@@ -74,7 +76,6 @@ public sealed record DispatchBoard(
     IReadOnlyList<DispatchDriver> Drivers);
 
 public sealed record NewTripRequest(
-    string? OrderCode,
     string? Customer,
     string? LoadingPlace,
     string? UnloadingPlace,
@@ -82,10 +83,10 @@ public sealed record NewTripRequest(
     DateTimeOffset? PlannedStart,
     string? Note,
     string? VehicleId = null,
-    string? DriverId = null);
+    string? DriverId = null,
+    IReadOnlyList<string>? OrderIds = null);
 
 public sealed record UpdateTripRequest(
-    string? OrderCode,
     string? Customer,
     string? LoadingPlace,
     string? UnloadingPlace,
@@ -95,6 +96,14 @@ public sealed record UpdateTripRequest(
     string? VehicleId = null,
     string? DriverId = null,
     string? Status = null);
+
+public sealed record VehicleCostUpdate(string? Id, decimal? CostPerKm);
+
+public sealed record DispatchRateCard(decimal DefaultCostPerKm, IReadOnlyList<DispatchVehicle> Vehicles);
+
+public sealed record SaveRatesRequest(decimal? DefaultCostPerKm, IReadOnlyList<VehicleCostUpdate>? Vehicles);
+
+public sealed record TripOrderRequest(string? OrderId);
 
 public sealed record AssignTripRequest(string? VehicleId, string? DriverId);
 

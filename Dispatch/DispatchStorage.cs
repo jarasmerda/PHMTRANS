@@ -25,4 +25,8 @@ public interface IDispatchStore
     Task<DispatchMutation> AssignAsync(string id, string? vehicleId, string? driverId, CancellationToken cancellationToken);
 
     Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken);
+
+    Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken);
+
+    Task<string?> SaveRatesAsync(decimal defaultCostPerKm, IReadOnlyList<VehicleCostUpdate> vehicles, CancellationToken cancellationToken);
 }

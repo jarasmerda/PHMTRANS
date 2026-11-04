@@ -13,23 +13,25 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
     private long _nextQueueId;
 
     public Task<IReadOnlyList<DispatchOrder>> ListAsync(CancellationToken cancellationToken) =>
-        With(token =>
+        With(async token =>
         {
-            var list = _orders.Select(order => order with
+            var catalog = await Catalog(token);
+            var list = _orders.Select(order => OrderRoute.Display(order with
             {
                 LatestSyncStatus = Latest(order.Id)?.Status,
                 LatestSyncError = Latest(order.Id)?.LastError,
                 LatestSyncWarning = Latest(order.Id)?.Warning
-            }).ToArray();
-            return Task.FromResult<IReadOnlyList<DispatchOrder>>(list);
+            }, catalog)).ToArray();
+            return (IReadOnlyList<DispatchOrder>)list;
         }, cancellationToken);
 
     public Task<OrderBundle?> GetAsync(string id, CancellationToken cancellationToken) =>
-        With(token =>
+        With(async token =>
         {
             var order = _orders.FirstOrDefault(item => item.Id == id);
             if (order is null)
-                return Task.FromResult<OrderBundle?>(null);
+                return (OrderBundle?)null;
+            var catalog = await Catalog(token);
             var versions = _versions.Where(item => item.Id == id).OrderByDescending(item => item.CurrentVersion).ToArray();
             var sync = _queue.Where(item => item.OrderId == id).OrderByDescending(item => item.Id).ToArray();
             var latest = sync.FirstOrDefault();
@@ -41,7 +43,7 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
                     LatestSyncError = latest.LastError,
                     LatestSyncWarning = latest.Warning
                 };
-            return Task.FromResult<OrderBundle?>(new OrderBundle(shown, versions, sync));
+            return (OrderBundle?)new OrderBundle(OrderRoute.Display(shown, catalog), versions, sync);
         }, cancellationToken);
 
     public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken) =>
@@ -58,6 +60,27 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
 
     public Task<OrderMutation> ResendAsync(string id, CancellationToken cancellationToken) =>
         Change(id, (context, latest) => OrderWorkflow.Resend(latest, context), cancellationToken);
+
+    public Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken) =>
+        Change(orderId, (context, _) => OrderWorkflow.AssignTrip(tripId, onlyIfFree, context), cancellationToken);
+
+    public async Task<string?> AttachOrdersAsync(
+        string tripId,
+        IReadOnlyList<string> orderIds,
+        bool onlyIfFree,
+        CancellationToken cancellationToken)
+    {
+        foreach (var orderId in orderIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal))
+        {
+            var result = await AttachTripAsync(orderId, tripId, onlyIfFree, cancellationToken);
+            if (result is OrderMutation.Rejected rejected)
+                return rejected.Message;
+            if (result is OrderMutation.NotFound)
+                return "Zakázka neexistuje.";
+        }
+
+        return null;
+    }
 
     public Task<IReadOnlyList<OrderSyncEntry>> ListQueueAsync(CancellationToken cancellationToken) =>
         With(token => Task.FromResult<IReadOnlyList<OrderSyncEntry>>(_queue.OrderByDescending(item => item.Id).ToArray()), cancellationToken);
@@ -155,11 +178,7 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var snapshot = await dispatch.ReadAsync(cancellationToken);
-            var catalog = new OrderCatalog(
-                snapshot.Vehicles.Select(item => item.Id).ToHashSet(StringComparer.Ordinal),
-                snapshot.Drivers.Select(item => item.Id).ToHashSet(StringComparer.Ordinal),
-                snapshot.Trips.Select(item => item.Id).ToHashSet(StringComparer.Ordinal));
+            var catalog = OrderCatalogs.From(await dispatch.ReadAsync(cancellationToken));
             DispatchOrder? current = null;
             DispatchOrder? lastSent = null;
             OrderSyncEntry? latest = null;
@@ -253,6 +272,9 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
             ProcessedUtc = queue.ResetAttempts ? null : current.ProcessedUtc
         };
     }
+
+    private async Task<OrderCatalog> Catalog(CancellationToken cancellationToken) =>
+        OrderCatalogs.From(await dispatch.ReadAsync(cancellationToken));
 
     private OrderSyncEntry? Latest(string orderId) =>
         _queue.Where(item => item.OrderId == orderId).OrderByDescending(item => item.Id).FirstOrDefault();

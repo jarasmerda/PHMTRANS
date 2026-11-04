@@ -3,7 +3,7 @@ namespace PHMTRANS.Dispatch;
 public static class DispatchRules
 {
     public static DispatchSnapshot Snapshot(DispatchDocument document) =>
-        new(document.Trips.ToArray(), document.Vehicles.ToArray(), document.Drivers.ToArray());
+        new(document.Trips.ToArray(), document.Vehicles.ToArray(), document.Drivers.ToArray(), document.DefaultCostPerKm);
 
     public static DispatchMutation AddTrip(DispatchDocument document, NewTripRequest request, DateTimeOffset now)
     {
@@ -20,7 +20,6 @@ public static class DispatchRules
         var trip = new DispatchTrip(
             NewId(document.Trips),
             NextCode(document.Trips, now),
-            Optional(request.OrderCode, 40),
             request.Customer!.Trim(),
             request.LoadingPlace!.Trim(),
             request.UnloadingPlace!.Trim(),
@@ -46,7 +45,6 @@ public static class DispatchRules
             request.LoadingPlace,
             request.UnloadingPlace,
             request.Cargo,
-            request.OrderCode,
             request.Note,
             request.PlannedStart);
         if (error is not null)
@@ -64,7 +62,6 @@ public static class DispatchRules
 
         var updated = current with
         {
-            OrderCode = Optional(request.OrderCode, 40),
             Customer = request.Customer!.Trim(),
             LoadingPlace = request.LoadingPlace!.Trim(),
             UnloadingPlace = request.UnloadingPlace!.Trim(),
@@ -132,6 +129,37 @@ public static class DispatchRules
         return new DispatchMutation.Success(updated);
     }
 
+    public static DispatchRateCard Rates(DispatchDocument document) =>
+        new(document.DefaultCostPerKm, document.Vehicles.ToArray());
+
+    public static string? SaveRates(DispatchDocument document, decimal defaultCostPerKm, IReadOnlyList<VehicleCostUpdate> vehicles)
+    {
+        if (defaultCostPerKm is < 0m or > 1_000_000m)
+            return "Nákladová sazba je mimo povolený rozsah.";
+
+        var updates = new List<(int Index, decimal? Cost)>();
+        foreach (var vehicle in vehicles)
+        {
+            if (string.IsNullOrWhiteSpace(vehicle.Id))
+                return "Neznámé vozidlo.";
+            var index = document.Vehicles.FindIndex(item => item.Id == vehicle.Id);
+            if (index < 0)
+                return "Neznámé vozidlo.";
+            if (vehicle.CostPerKm is < 0m or > 1_000_000m)
+                return "Nákladová sazba je mimo povolený rozsah.";
+            updates.Add((index, vehicle.CostPerKm is null ? null : OrderPricing.Rate(vehicle.CostPerKm.Value)));
+        }
+
+        document.DefaultCostPerKm = OrderPricing.Rate(defaultCostPerKm);
+        foreach (var update in updates)
+        {
+            var current = document.Vehicles[update.Index];
+            document.Vehicles[update.Index] = current with { CostPerKm = update.Cost };
+        }
+
+        return null;
+    }
+
     private static string? ValidateAssignment(DispatchDocument document, string? vehicleId, string? driverId)
     {
         if (vehicleId is not null && document.Vehicles.All(vehicle => vehicle.Id != vehicleId))
@@ -157,7 +185,6 @@ public static class DispatchRules
             request.LoadingPlace,
             request.UnloadingPlace,
             request.Cargo,
-            request.OrderCode,
             request.Note,
             request.PlannedStart);
 
@@ -166,7 +193,6 @@ public static class DispatchRules
         string? loadingPlace,
         string? unloadingPlace,
         string? cargo,
-        string? orderCode,
         string? note,
         DateTimeOffset? plannedStart)
     {
@@ -184,8 +210,6 @@ public static class DispatchRules
             return "Místo vykládky může mít nejvýše 160 znaků.";
         if (Optional(cargo, 80) is null && !string.IsNullOrWhiteSpace(cargo))
             return "Náklad může mít nejvýše 80 znaků.";
-        if (Optional(orderCode, 40) is null && !string.IsNullOrWhiteSpace(orderCode))
-            return "Zakázka může mít nejvýše 40 znaků.";
         if (Optional(note, 500) is null && !string.IsNullOrWhiteSpace(note))
             return "Poznámka může mít nejvýše 500 znaků.";
         if (plannedStart is null)

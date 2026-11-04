@@ -115,7 +115,14 @@ public sealed record DispatchOrder(
     DateTimeOffset UpdatedAt,
     string? LatestSyncStatus = null,
     string? LatestSyncError = null,
-    string? LatestSyncWarning = null);
+    string? LatestSyncWarning = null,
+    string PricingMode = OrderPricing.ByKm,
+    decimal SalePerKm = 0m,
+    decimal SalePerLiter = 0m,
+    decimal CostPerKm = 0m,
+    IReadOnlyList<OrderStop>? Stops = null,
+    IReadOnlyList<OrderLeg>? Legs = null,
+    OrderQuote? Quote = null);
 
 public sealed record OrderSaveRequest(
     int? CustomerPohodaId,
@@ -134,7 +141,13 @@ public sealed record OrderSaveRequest(
     string? DriverId,
     string? TripId,
     string? Status,
-    string? PohodaInvoiceNumber);
+    string? PohodaInvoiceNumber,
+    string? PricingMode = null,
+    decimal? SalePerKm = null,
+    decimal? SalePerLiter = null,
+    decimal? CostPerKm = null,
+    IReadOnlyList<OrderStopInput>? Stops = null,
+    IReadOnlyList<OrderLegInput>? Legs = null);
 
 public sealed record OrderSyncEntry(
     long Id,

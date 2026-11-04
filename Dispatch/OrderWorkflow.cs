@@ -5,7 +5,10 @@ namespace PHMTRANS.Dispatch;
 public sealed record OrderCatalog(
     IReadOnlySet<string> VehicleIds,
     IReadOnlySet<string> DriverIds,
-    IReadOnlySet<string> TripIds)
+    IReadOnlySet<string> TripIds,
+    IReadOnlyDictionary<string, TripLink>? Trips = null,
+    decimal DefaultCostPerKm = 0m,
+    IReadOnlyDictionary<string, decimal>? VehicleCostPerKm = null)
 {
     public static OrderCatalog Empty { get; } = new(
         new HashSet<string>(StringComparer.Ordinal),
@@ -69,7 +72,10 @@ public static class OrderWorkflow
             return new OrderChange.Rejected(assignment);
 
         var order = Build(draft, context, id: NewId(), code: NextCode(context.ExistingCodes, context.Now), version: 1, createdAt: context.Now);
-        return Finish(order, previous: null, context, versionAdded: true, confirmRequested: false);
+        var routed = OrderRoute.Materialize(order, request, context.Catalog);
+        if (routed.Error is not null)
+            return new OrderChange.Rejected(routed.Error);
+        return Finish(routed.Order!, previous: null, context, versionAdded: true, confirmRequested: false);
     }
 
     public static OrderChange Save(OrderSaveRequest request, OrderEditContext context)
@@ -86,10 +92,13 @@ public static class OrderWorkflow
             return new OrderChange.Rejected(assignment);
 
         var order = Build(draft, context, context.Current.Id, context.Current.Code, context.Current.CurrentVersion + 1, context.Current.CreatedAt);
-        if (OrderPohodaFields.SameDocument(context.Current, order))
+        var routed = OrderRoute.Materialize(order, request, context.Catalog, context.Current);
+        if (routed.Error is not null)
+            return new OrderChange.Rejected(routed.Error);
+        if (OrderPohodaFields.SameDocument(context.Current, routed.Order!))
             return new OrderChange.Saved(context.Current, false, null);
 
-        return Finish(order, context.Current, context, versionAdded: true, confirmRequested: false);
+        return Finish(routed.Order!, context.Current, context, versionAdded: true, confirmRequested: false);
     }
 
     public static OrderChange Confirm(OrderEditContext context)
@@ -167,6 +176,31 @@ public static class OrderWorkflow
         return new OrderChange.Saved(context.Current, false, Queue(context, context.Current, plan, targetId: null));
     }
 
+    public static OrderChange AssignTrip(string? tripId, bool onlyIfFree, OrderEditContext context)
+    {
+        if (context.Current is null)
+            return new OrderChange.Rejected("Zakázka neexistuje.");
+
+        var trip = Blank(tripId);
+        var error = OrderAssignment.Check(context.Current, trip, onlyIfFree, context.Catalog);
+        if (error is not null)
+            return new OrderChange.Rejected(error);
+
+        var crew = OrderRoute.Crew(trip, context.Current.VehicleId, context.Current.DriverId, context.Catalog);
+        var order = context.Current with
+        {
+            TripId = trip,
+            VehicleId = crew.VehicleId,
+            DriverId = crew.DriverId,
+            UpdatedAt = context.Now
+        };
+        if (OrderPohodaFields.SameDocument(context.Current, order))
+            return new OrderChange.Saved(context.Current, false, null);
+
+        // Jízda, vozidlo a řidič nejsou v Pohodě. Bez nové verze a bez fronty.
+        return new OrderChange.Saved(order, false, null);
+    }
+
     private static OrderChange Finish(
         DispatchOrder order,
         DispatchOrder? previous,
@@ -235,7 +269,8 @@ public static class OrderWorkflow
             createdAt,
             context.Now,
             current?.LatestSyncStatus,
-            current?.LatestSyncError);
+            current?.LatestSyncError,
+            current?.LatestSyncWarning);
     }
 
     private static (string Status, bool Locked, string? Invoice) ResolveState(
@@ -271,7 +306,10 @@ public static class OrderWorkflow
         var loading = Required(request.LoadingPlace, 160, "Vyplňte místo nakládky.", "Místo nakládky může mít nejvýše 160 znaků.");
         if (loading.Error is not null)
             return Draft.Fail(loading.Error);
-        var unloading = Required(request.UnloadingPlace, 160, "Vyplňte místo vykládky.", "Místo vykládky může mít nejvýše 160 znaků.");
+        var unloadingSource = request.UnloadingPlace;
+        if (string.IsNullOrWhiteSpace(unloadingSource) && request.Stops is { Count: > 0 })
+            unloadingSource = request.Stops[^1].Place;
+        var unloading = Required(unloadingSource, 160, "Vyplňte místo vykládky.", "Místo vykládky může mít nejvýše 160 znaků.");
         if (unloading.Error is not null)
             return Draft.Fail(unloading.Error);
         var fuel = Required(request.FuelType, 80, "Vyplňte druh paliva.", "Druh paliva může mít nejvýše 80 znaků.");
@@ -288,9 +326,10 @@ public static class OrderWorkflow
             return Draft.Fail("Vyplňte litry.");
         if (request.Liters < 0 || request.Liters > 1_000_000m)
             return Draft.Fail("Litry musí být od 0 do 1 000 000.");
-        if (request.AgreedPrice is null)
+        var agreedPrice = request.AgreedPrice ?? 0m;
+        if (request.Stops is null && request.AgreedPrice is null)
             return Draft.Fail("Vyplňte dohodnutou cenu.");
-        if (request.AgreedPrice < 0 || request.AgreedPrice > 1_000_000_000m)
+        if (agreedPrice < 0 || agreedPrice > 1_000_000_000m)
             return Draft.Fail("Dohodnutá cena musí být od 0 do 1 000 000 000.");
         var surcharges = request.Surcharges ?? 0m;
         if (surcharges is < -1_000_000_000m or > 1_000_000_000m)
@@ -320,7 +359,7 @@ public static class OrderWorkflow
             request.UnloadingDate,
             fuel.Value,
             decimal.Round(request.Liters.Value, 3, MidpointRounding.AwayFromZero),
-            OrderPohodaFields.Money(request.AgreedPrice.Value),
+            OrderPohodaFields.Money(agreedPrice),
             OrderPohodaFields.Money(surcharges),
             Blank(request.Note),
             Blank(request.CmrNumber),
@@ -333,9 +372,9 @@ public static class OrderWorkflow
 
     private static string? CheckLinks(Draft draft, OrderCatalog catalog)
     {
-        if (draft.VehicleId is not null && !catalog.VehicleIds.Contains(draft.VehicleId))
+        if (draft.TripId is null && draft.VehicleId is not null && !catalog.VehicleIds.Contains(draft.VehicleId))
             return "Neznámé vozidlo.";
-        if (draft.DriverId is not null && !catalog.DriverIds.Contains(draft.DriverId))
+        if (draft.TripId is null && draft.DriverId is not null && !catalog.DriverIds.Contains(draft.DriverId))
             return "Neznámý řidič.";
         if (draft.TripId is not null && !catalog.TripIds.Contains(draft.TripId))
             return "Neznámá jízda.";

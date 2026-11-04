@@ -6,29 +6,32 @@ namespace PHMTRANS.Dispatch;
 public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOptions> options) : IOrderStore
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly List<DispatchOrder> _orders = [];
-    private readonly List<DispatchOrder> _versions = [];
+    private static readonly DispatchOrder[] Samples = PreviewOrders.Seed();
+    private readonly List<DispatchOrder> _orders = [.. Samples];
+    private readonly List<DispatchOrder> _versions = [.. Samples];
     private readonly List<OrderSyncEntry> _queue = [];
     private long _nextQueueId;
 
     public Task<IReadOnlyList<DispatchOrder>> ListAsync(CancellationToken cancellationToken) =>
-        With(token =>
+        With(async token =>
         {
-            var list = _orders.Select(order => order with
+            var catalog = OrderCatalogs.From(await dispatch.ReadAsync(token));
+            var list = _orders.Select(order => OrderRoute.Display(order with
             {
                 LatestSyncStatus = Latest(order.Id)?.Status,
                 LatestSyncError = Latest(order.Id)?.LastError,
                 LatestSyncWarning = Latest(order.Id)?.Warning
-            }).ToArray();
-            return Task.FromResult<IReadOnlyList<DispatchOrder>>(list);
+            }, catalog)).ToArray();
+            return (IReadOnlyList<DispatchOrder>)list;
         }, cancellationToken);
 
     public Task<OrderBundle?> GetAsync(string id, CancellationToken cancellationToken) =>
-        With(token =>
+        With(async token =>
         {
             var order = _orders.FirstOrDefault(item => item.Id == id);
             if (order is null)
-                return Task.FromResult<OrderBundle?>(null);
+                return (OrderBundle?)null;
+            var catalog = OrderCatalogs.From(await dispatch.ReadAsync(token));
             var versions = _versions.Where(item => item.Id == id).OrderByDescending(item => item.CurrentVersion).ToArray();
             var sync = _queue.Where(item => item.OrderId == id).OrderByDescending(item => item.Id).ToArray();
             var latest = sync.FirstOrDefault();
@@ -40,7 +43,7 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
                     LatestSyncError = latest.LastError,
                     LatestSyncWarning = latest.Warning
                 };
-            return Task.FromResult<OrderBundle?>(new OrderBundle(shown, versions, sync));
+            return (OrderBundle?)new OrderBundle(OrderRoute.Display(shown, catalog), versions, sync);
         }, cancellationToken);
 
     public Task<OrderMutation> CreateAsync(OrderSaveRequest request, CancellationToken cancellationToken) =>
@@ -57,6 +60,27 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
 
     public Task<OrderMutation> ResendAsync(string id, CancellationToken cancellationToken) =>
         Change(id, (context, latest) => OrderWorkflow.Resend(latest, context), cancellationToken);
+
+    public Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken) =>
+        Change(orderId, (context, _) => OrderWorkflow.AssignTrip(tripId, onlyIfFree, context), cancellationToken);
+
+    public async Task<string?> AttachOrdersAsync(
+        string tripId,
+        IReadOnlyList<string> orderIds,
+        bool onlyIfFree,
+        CancellationToken cancellationToken)
+    {
+        foreach (var orderId in orderIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal))
+        {
+            var result = await AttachTripAsync(orderId, tripId, onlyIfFree, cancellationToken);
+            if (result is OrderMutation.Rejected rejected)
+                return rejected.Message;
+            if (result is OrderMutation.NotFound)
+                return "Zakázka neexistuje.";
+        }
+
+        return null;
+    }
 
     public Task<IReadOnlyList<OrderSyncEntry>> ListQueueAsync(CancellationToken cancellationToken) =>
         With(token => Task.FromResult<IReadOnlyList<OrderSyncEntry>>(_queue.OrderByDescending(item => item.Id).ToArray()), cancellationToken);
@@ -154,11 +178,7 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
         await _gate.WaitAsync(cancellationToken);
         try
         {
-            var snapshot = await dispatch.ReadAsync(cancellationToken);
-            var catalog = new OrderCatalog(
-                snapshot.Vehicles.Select(item => item.Id).ToHashSet(StringComparer.Ordinal),
-                snapshot.Drivers.Select(item => item.Id).ToHashSet(StringComparer.Ordinal),
-                snapshot.Trips.Select(item => item.Id).ToHashSet(StringComparer.Ordinal));
+            var catalog = OrderCatalogs.From(await dispatch.ReadAsync(cancellationToken));
             DispatchOrder? current = null;
             DispatchOrder? lastSent = null;
             OrderSyncEntry? latest = null;
@@ -267,5 +287,166 @@ public sealed class PreviewOrderStore(IDispatchStore dispatch, IOptions<PohodaOp
         {
             _gate.Release();
         }
+    }
+}
+
+public static class PreviewOrders
+{
+    public static DispatchOrder[] Seed()
+    {
+        var now = DateTimeOffset.Parse("2026-11-04T06:00:00+01:00");
+        return
+        [
+            Order(
+                "ord-preview-1",
+                "Z2026-0301",
+                "Síť stanic Demo s.r.o.",
+                "Sklad Kralupy",
+                "motorová nafta",
+                30000m,
+                OrderPricing.ByKm,
+                salePerKm: 46m,
+                salePerLiter: 1.1m,
+                costPerKm: 31.5m,
+                "trip-preview",
+                "veh-1",
+                "drv-1",
+                now,
+                [
+                    Stop("st-1", 1, "ČS Brno Slatina", 8000m),
+                    Stop("st-2", 2, "ČS Olomouc", 10000m),
+                    Stop("st-3", 3, "ČS Plzeň Bory", 12000m)
+                ],
+                [
+                    Leg("lg-1", 1, "Sklad Kralupy", "ČS Brno Slatina", 8000m, 180m, false, 0m, OrderPricing.ByKm, 46m, 1.1m, 31.5m),
+                    Leg("lg-2", 2, "ČS Brno Slatina", "ČS Olomouc", 10000m, 140m, false, 0m, OrderPricing.ByKm, 46m, 1.1m, 31.5m),
+                    Leg("lg-3", 3, "ČS Olomouc", "ČS Plzeň Bory", 12000m, 160m, false, 0m, OrderPricing.ByKm, 46m, 1.1m, 31.5m)
+                ]),
+            Order(
+                "ord-preview-2",
+                "Z2026-0302",
+                "Agropodnik Demo a.s.",
+                "Sklad Kralupy",
+                "motorová nafta",
+                16000m,
+                OrderPricing.ByLiters,
+                salePerKm: 40m,
+                salePerLiter: 1.25m,
+                costPerKm: 31.5m,
+                "trip-preview",
+                "veh-1",
+                "drv-1",
+                now,
+                [
+                    Stop("st-4", 1, "ČS Hradec Králové", 9000m),
+                    Stop("st-5", 2, "ČS Liberec", 7000m)
+                ],
+                [
+                    Leg("lg-4", 1, "Sklad Kralupy", "ČS Hradec Králové", 9000m, 90m, false, 0m, OrderPricing.ByLiters, 40m, 1.25m, 31.5m),
+                    Leg("lg-5", 2, "ČS Hradec Králové", "ČS Liberec", 7000m, 70m, false, 0m, OrderPricing.ByLiters, 40m, 1.25m, 31.5m)
+                ]),
+            Order(
+                "ord-preview-3",
+                "Z2026-0303",
+                "Volná zakázka s.r.o.",
+                "Sklad Mělník",
+                "benzin BA95",
+                24000m,
+                OrderPricing.ByKm,
+                salePerKm: 42m,
+                salePerLiter: 0.9m,
+                costPerKm: 28m,
+                null,
+                null,
+                null,
+                now,
+                [Stop("st-6", 1, "ČS České Budějovice", 24000m)],
+                [Leg("lg-6", 1, "Sklad Mělník", "ČS České Budějovice", 24000m, 150m, false, 0m, OrderPricing.ByKm, 42m, 0.9m, 28m)])
+        ];
+    }
+
+    private static OrderStop Stop(string id, int sequence, string place, decimal liters) =>
+        new(id, sequence, place, liters, null, null);
+
+    private static OrderLeg Leg(
+        string id,
+        int sequence,
+        string from,
+        string to,
+        decimal liters,
+        decimal kilometers,
+        bool overridden,
+        decimal overridePrice,
+        string mode,
+        decimal salePerKm,
+        decimal salePerLiter,
+        decimal costPerKm) =>
+        new(
+            id,
+            sequence,
+            from,
+            to,
+            liters,
+            kilometers,
+            OrderPricing.Sale(kilometers, liters, overridden, overridePrice, mode, salePerKm, salePerLiter),
+            overridden,
+            OrderPricing.Cost(kilometers, costPerKm));
+
+    private static DispatchOrder Order(
+        string id,
+        string code,
+        string customer,
+        string loading,
+        string fuel,
+        decimal liters,
+        string mode,
+        decimal salePerKm,
+        decimal salePerLiter,
+        decimal costPerKm,
+        string? tripId,
+        string? vehicleId,
+        string? driverId,
+        DateTimeOffset now,
+        IReadOnlyList<OrderStop> stops,
+        IReadOnlyList<OrderLeg> legs)
+    {
+        var agreed = OrderPohodaFields.Money(legs.Sum(leg => leg.SalePrice));
+        var order = new DispatchOrder(
+            id,
+            code,
+            42,
+            customer,
+            loading,
+            stops[^1].Place,
+            DateOnly.FromDateTime(now.DateTime),
+            DateOnly.FromDateTime(now.DateTime),
+            fuel,
+            liters,
+            agreed,
+            0m,
+            null,
+            null,
+            vehicleId,
+            driverId,
+            tripId,
+            OrderStatuses.Naplanovana,
+            false,
+            1,
+            null,
+            null,
+            null,
+            null,
+            now,
+            now,
+            null,
+            null,
+            null,
+            mode,
+            salePerKm,
+            salePerLiter,
+            costPerKm,
+            stops,
+            legs);
+        return order with { Quote = OrderPricing.Summarize(order) };
     }
 }

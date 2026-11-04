@@ -85,16 +85,21 @@ public sealed class OrderSyncTests
 
         Assert.Equal(OrderSyncAction.Correction, plan.Action);
         Assert.Equal(1, plan.VersionFrom);
-        Assert.Equal(2, lines.Count);
+        Assert.Equal(4, lines.Count);
         Assert.Equal(-1m, lines[0].Quantity);
-        Assert.Equal(8200m, lines[0].UnitPrice);
-        Assert.Equal(-8200m, lines[0].Amount);
-        Assert.StartsWith("Storno: ", lines[0].Text, StringComparison.Ordinal);
-        Assert.Contains("motorová nafta", lines[0].Text, StringComparison.Ordinal);
-        Assert.Equal(10500m, lines[1].UnitPrice);
-        Assert.Contains("benzin", lines[1].Text, StringComparison.Ordinal);
-        Assert.DoesNotContain("15000", lines[0].UnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
-        Assert.Equal(OrderPohodaFields.Total(current) - OrderPohodaFields.Total(sent), lines[0].Amount + lines[1].Amount);
+        Assert.Equal(8000m, lines[0].UnitPrice);
+        Assert.Equal(-8000m, lines[0].Amount);
+        Assert.StartsWith("Storno: Leg 1:", lines[0].Text, StringComparison.Ordinal);
+        Assert.Contains("Sklad Cerekvice", lines[0].Text, StringComparison.Ordinal);
+        Assert.Equal(-1m, lines[1].Quantity);
+        Assert.Equal(200m, lines[1].UnitPrice);
+        Assert.Contains("Příplatky", lines[1].Text, StringComparison.Ordinal);
+        Assert.Equal(1m, lines[2].Quantity);
+        Assert.Equal(10000m, lines[2].UnitPrice);
+        Assert.StartsWith("Leg 1:", lines[2].Text, StringComparison.Ordinal);
+        Assert.Equal(500m, lines[3].UnitPrice);
+        Assert.DoesNotContain("15000", string.Join(' ', lines.Select(line => line.UnitPrice.ToString(System.Globalization.CultureInfo.InvariantCulture))), StringComparison.Ordinal);
+        Assert.Equal(OrderPohodaFields.Total(current) - OrderPohodaFields.Total(sent), lines.Sum(line => line.Amount));
     }
 
     [Fact]
@@ -136,6 +141,7 @@ public sealed class OrderSyncTests
         Assert.Equal("prijate_objednavky", items[0].Descendants().First(element => element.Name.LocalName == "filter").Attribute("agenda")?.Value);
         Assert.Equal("15", items[0].Descendants().First(element => element.Name.LocalName == "id").Value);
         Assert.Equal("Z2026-0001", items[1].Descendants().First(element => element.Name.LocalName == "numberOrder").Value);
+        Assert.Contains("Leg 1:", items[1].ToString(), StringComparison.Ordinal);
         Assert.Contains("ord:delete", xml, StringComparison.Ordinal);
         Assert.Contains("ord:add", xml, StringComparison.Ordinal);
         Assert.DoesNotContain("ord:update", xml, StringComparison.OrdinalIgnoreCase);
@@ -159,18 +165,62 @@ public sealed class OrderSyncTests
         var xml = OrderPohodaXml.Build(SampleOptions(), plan, current, sent);
         var prices = Prices(XDocument.Parse(xml));
 
-        Assert.Equal(2, prices.Count);
-        Assert.Equal(8200m, prices[0]);
-        Assert.Equal(10500m, prices[1]);
+        Assert.Equal(new[] { 8000m, 200m, 10000m, 500m }, prices);
         Assert.Equal("-1", XDocument.Parse(xml).Descendants().First(element => element.Name.LocalName == "quantity").Value);
-        Assert.Equal(2300m, -prices[0] + prices[1]);
+        Assert.Equal(2300m, prices[2] + prices[3] - prices[0] - prices[1]);
         Assert.Contains("Oprava k 242100045", xml, StringComparison.Ordinal);
-        Assert.Contains("Storno: motorová nafta", xml, StringComparison.Ordinal);
-        Assert.Contains("benzin", xml, StringComparison.Ordinal);
+        Assert.Contains("Storno: Leg 1:", xml, StringComparison.Ordinal);
+        Assert.Contains("Storno: Příplatky", xml, StringComparison.Ordinal);
         Assert.Contains("Z2026-0001/1", xml, StringComparison.Ordinal);
         Assert.DoesNotContain("ord:delete", xml, StringComparison.Ordinal);
         Assert.DoesNotContain(">15<", xml, StringComparison.Ordinal);
         Assert.Contains("<ord:add", xml, StringComparison.Ordinal);
+        AssertOrderSchema(xml);
+    }
+
+    [Fact]
+    public void Correction_stornos_each_sent_leg_then_adds_the_new_legs()
+    {
+        var sent = Sent(version: 1, price: 0m, surcharges: 0m, fuel: "nafta") with
+        {
+            AgreedPrice = 2300m,
+            Legs =
+            [
+                new OrderLeg("a", 1, "Sklad", "ČS Brno", 8000m, 100m, 1500m, false, 400m),
+                new OrderLeg("b", 2, "ČS Brno", "ČS Olomouc", 4000m, 80m, 800m, true, 320m)
+            ]
+        };
+        var current = sent with
+        {
+            CurrentVersion = 2,
+            AgreedPrice = 2600m,
+            IsLocked = true,
+            Legs =
+            [
+                new OrderLeg("c", 1, "Sklad", "ČS Brno", 8000m, 100m, 1600m, false, 400m),
+                new OrderLeg("d", 2, "ČS Brno", "ČS Olomouc", 4000m, 90m, 1000m, true, 360m)
+            ]
+        };
+        var plan = new OrderSyncPlan(OrderSyncAction.Correction, 1, 2, CorrectionIndex: 1);
+        var lines = OrderPohodaXml.Lines(plan.Action, current, sent);
+        var xml = OrderPohodaXml.Build(SampleOptions(), plan, current, sent);
+
+        Assert.Equal(4, lines.Count);
+        Assert.Equal(-1m, lines[0].Quantity);
+        Assert.Equal(1500m, lines[0].UnitPrice);
+        Assert.Equal("Storno: Leg 1: Sklad → ČS Brno, 8000 l", lines[0].Text);
+        Assert.Equal(-1m, lines[1].Quantity);
+        Assert.Equal(800m, lines[1].UnitPrice);
+        Assert.Equal("Storno: Leg 2: ČS Brno → ČS Olomouc, 4000 l", lines[1].Text);
+        Assert.Equal(1m, lines[2].Quantity);
+        Assert.Equal(1600m, lines[2].UnitPrice);
+        Assert.Equal(1000m, lines[3].UnitPrice);
+        var prices = Prices(XDocument.Parse(xml));
+        Assert.DoesNotContain(400m, prices);
+        Assert.DoesNotContain(320m, prices);
+        Assert.DoesNotContain(360m, prices);
+        Assert.Contains("Z2026-0001/1", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ord:delete", xml, StringComparison.Ordinal);
         AssertOrderSchema(xml);
     }
 
@@ -472,12 +522,13 @@ public sealed class OrderSyncTests
         Assert.DoesNotContain(">21<", correction.PayloadXml, StringComparison.Ordinal);
         var lines = OrderPohodaXml.Lines(OrderSyncAction.Correction, corrected.Order, (await store.GetAsync(created.Order.Id, CancellationToken.None))!
             .Versions.Single(version => version.CurrentVersion == correction.VersionFrom));
-        Assert.Equal(2, lines.Count);
+        Assert.Equal(3, lines.Count);
         Assert.Equal(-1m, lines[0].Quantity);
-        Assert.Equal(OrderPohodaFields.Total(corrected.Order) - 13000m, lines[0].Amount + lines[1].Amount);
-        Assert.Contains("motorová nafta", lines[0].Text, StringComparison.Ordinal);
-        Assert.StartsWith("Storno: ", lines[0].Text, StringComparison.Ordinal);
-        Assert.Contains("benzin", lines[1].Text, StringComparison.Ordinal);
+        Assert.Equal(13000m, lines[0].UnitPrice);
+        Assert.StartsWith("Storno: Leg 1:", lines[0].Text, StringComparison.Ordinal);
+        Assert.Equal(15000m, lines[1].UnitPrice);
+        Assert.Equal(500m, lines[2].UnitPrice);
+        Assert.Equal(OrderPohodaFields.Total(corrected.Order) - 13000m, lines.Sum(line => line.Amount));
         Assert.True(corrected.Order.CurrentVersion > (correction.VersionFrom ?? 0));
         Assert.Equal(correction.Warning, corrected.Order.LatestSyncWarning);
     }
@@ -630,13 +681,14 @@ public sealed class OrderSyncTests
         Assert.Equal(OrderPohodaXml.LockedOrderWarning($"{created.Order.Code}/1"), correction.Warning);
         Assert.Equal(correction.Warning, first.Order.LatestSyncWarning);
         var firstLines = Items(correction.PayloadXml);
-        Assert.Equal(2, firstLines.Count);
+        Assert.Equal(3, firstLines.Count);
         Assert.Equal("-1", firstLines[0].Quantity);
-        Assert.StartsWith("Storno: ", firstLines[0].Text, StringComparison.Ordinal);
-        Assert.Contains("motorová nafta", firstLines[0].Text, StringComparison.Ordinal);
+        Assert.StartsWith("Storno: Leg 1:", firstLines[0].Text, StringComparison.Ordinal);
         Assert.Equal("8000.00", firstLines[0].Price);
-        Assert.Contains("benzin", firstLines[1].Text, StringComparison.Ordinal);
-        Assert.Equal("10500.00", firstLines[1].Price);
+        Assert.Equal("1", firstLines[1].Quantity);
+        Assert.StartsWith("Leg 1:", firstLines[1].Text, StringComparison.Ordinal);
+        Assert.Equal("10000.00", firstLines[1].Price);
+        Assert.Equal("500.00", firstLines[2].Price);
         Assert.DoesNotContain("ord:delete", correction.PayloadXml, StringComparison.Ordinal);
         Assert.DoesNotContain(">15<", correction.PayloadXml, StringComparison.Ordinal);
         AssertOrderSchema(correction.PayloadXml);
@@ -655,13 +707,15 @@ public sealed class OrderSyncTests
         Assert.Equal(OrderPohodaXml.LockedOrderWarning($"{created.Order.Code}/2"), next.Warning);
         Assert.Equal(next.Warning, second.Order.LatestSyncWarning);
         var secondLines = Items(next.PayloadXml);
-        Assert.Equal(2, secondLines.Count);
+        Assert.Equal(3, secondLines.Count);
         Assert.Equal("-1", secondLines[0].Quantity);
-        Assert.StartsWith("Storno: ", secondLines[0].Text, StringComparison.Ordinal);
-        Assert.Contains("benzin", secondLines[0].Text, StringComparison.Ordinal);
-        Assert.Equal("10500.00", secondLines[0].Price);
-        Assert.DoesNotContain("motorová nafta", secondLines[0].Text, StringComparison.Ordinal);
-        Assert.Equal("16000.00", secondLines[1].Price);
+        Assert.StartsWith("Storno: Leg 1:", secondLines[0].Text, StringComparison.Ordinal);
+        Assert.Equal("10000.00", secondLines[0].Price);
+        Assert.Equal("-1", secondLines[1].Quantity);
+        Assert.StartsWith("Storno: Příplatky", secondLines[1].Text, StringComparison.Ordinal);
+        Assert.Equal("500.00", secondLines[1].Price);
+        Assert.DoesNotContain("8000.00", secondLines[0].Price, StringComparison.Ordinal);
+        Assert.Equal("16000.00", secondLines[2].Price);
         Assert.DoesNotContain(">30<", next.PayloadXml, StringComparison.Ordinal);
         Assert.DoesNotContain("ord:delete", next.PayloadXml, StringComparison.Ordinal);
         AssertOrderSchema(next.PayloadXml);

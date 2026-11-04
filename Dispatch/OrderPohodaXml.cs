@@ -54,19 +54,21 @@ public static class OrderPohodaXml
             if (lastSent is null)
                 throw new InvalidOperationException("Oprava potřebuje poslední odeslanou verzi.");
 
-            return
-            [
-                new OrderXmlLine("Storno: " + ItemText(lastSent), -1m, OrderPohodaFields.Total(lastSent)),
-                new OrderXmlLine(ItemText(current), 1m, OrderPohodaFields.Total(current))
-            ];
+            var lines = new List<OrderXmlLine>();
+            foreach (var line in SaleItems(lastSent))
+                lines.Add(new OrderXmlLine("Storno: " + line.Text, -line.Quantity, line.UnitPrice));
+            lines.AddRange(SaleItems(current));
+            return lines;
         }
 
-        var lines = new List<OrderXmlLine>
-        {
-            new(ItemText(current), 1m, OrderPohodaFields.Money(current.AgreedPrice))
-        };
-        if (current.Surcharges != 0)
-            lines.Add(new OrderXmlLine("Příplatky", 1m, OrderPohodaFields.Money(current.Surcharges)));
+        return SaleItems(current);
+    }
+
+    private static IReadOnlyList<OrderXmlLine> SaleItems(DispatchOrder order)
+    {
+        var lines = OrderLegItems.SaleLines(order).ToList();
+        if (order.Surcharges != 0)
+            lines.Add(new OrderXmlLine("Příplatky", 1m, OrderPohodaFields.Money(order.Surcharges)));
         return lines;
     }
 
@@ -373,9 +375,6 @@ public static class OrderPohodaXml
         return string.Join(" | ", parts);
     }
 
-    private static string ItemText(DispatchOrder order) =>
-        Trim($"{order.FuelType}, {Liters(order.Liters)} l, {order.LoadingPlace} → {order.UnloadingPlace}", 240);
-
     private static string DocumentText(OrderSyncPlan plan, DispatchOrder current, DispatchOrder? lastSent)
     {
         if (plan.Action == OrderSyncAction.Correction)
@@ -418,8 +417,6 @@ public static class OrderPohodaXml
                 new XElement(Typ + "unitPrice", line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture))));
 
     private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-    private static string Liters(decimal liters) => liters.ToString("0.###", CultureInfo.InvariantCulture);
 
     private static string Trim(string value, int max) => OrderSyncLimits.Cut(value, max);
 

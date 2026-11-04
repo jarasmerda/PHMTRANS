@@ -5,14 +5,20 @@ namespace PHMTRANS.Dispatch;
 public static class DispatchSchema
 {
     // Jen tabulky dispečinku. Skript nic nemaže a cizí tabulky nemění.
-    public const string Script = """
+    // Dávky běží zvlášť: SQL Server kompiluje dávku dřív, než přidá sloupec.
+    public static readonly string[] Batches = [Tables, Columns, Data];
+
+    public static string Script => string.Join("\n", Batches);
+
+    public const string Tables = """
         IF OBJECT_ID(N'dbo.Disp_Vehicle', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.Disp_Vehicle
             (
                 Id nvarchar(64) NOT NULL CONSTRAINT PK_Disp_Vehicle PRIMARY KEY,
                 Plate nvarchar(32) NOT NULL,
-                Label nvarchar(160) NOT NULL
+                Label nvarchar(160) NOT NULL,
+                CostPerKm decimal(18,4) NULL
             );
         END;
 
@@ -49,13 +55,6 @@ public static class DispatchSchema
             CREATE UNIQUE INDEX UX_Disp_Trip_Code ON dbo.Disp_Trip (Code);
         END;
 
-        -- Doplnění sloupců na už existující Disp_Trip. Řádky ani cizí tabulky se nemění.
-        IF COL_LENGTH(N'dbo.Disp_Trip', N'VehicleId') IS NULL
-            ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL;
-
-        IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL
-            ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL;
-
         IF OBJECT_ID(N'dbo.Disp_Order', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.Disp_Order
@@ -86,11 +85,16 @@ public static class DispatchSchema
                 LastSentVersion int NULL,
                 CreatedAt datetimeoffset(3) NOT NULL,
                 UpdatedAt datetimeoffset(3) NOT NULL,
+                PricingMode nvarchar(10) NOT NULL CONSTRAINT DF_Disp_Order_PricingMode DEFAULT N'Km',
+                SalePerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_SalePerKm DEFAULT 0,
+                SalePerLiter decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_SalePerLiter DEFAULT 0,
+                CostPerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_CostPerKm DEFAULT 0,
                 CONSTRAINT FK_Disp_Order_Vehicle FOREIGN KEY (VehicleId) REFERENCES dbo.Disp_Vehicle (Id),
                 CONSTRAINT FK_Disp_Order_Driver FOREIGN KEY (DriverId) REFERENCES dbo.Disp_Driver (Id),
                 CONSTRAINT FK_Disp_Order_Trip FOREIGN KEY (TripId) REFERENCES dbo.Disp_Trip (Id)
             );
             CREATE UNIQUE INDEX UX_Disp_Order_Code ON dbo.Disp_Order (Code);
+            CREATE INDEX IX_Disp_Order_Trip ON dbo.Disp_Order (TripId);
         END;
 
         IF OBJECT_ID(N'dbo.Disp_OrderVersion', N'U') IS NULL
@@ -120,6 +124,11 @@ public static class DispatchSchema
                 PohodaOrderNumber nvarchar(40) NULL,
                 PohodaInvoiceNumber nvarchar(40) NULL,
                 CreatedUtc datetimeoffset(3) NOT NULL,
+                PricingMode nvarchar(10) NOT NULL CONSTRAINT DF_Disp_OrderVersion_PricingMode DEFAULT N'Km',
+                SalePerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_SalePerKm DEFAULT 0,
+                SalePerLiter decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_SalePerLiter DEFAULT 0,
+                CostPerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_CostPerKm DEFAULT 0,
+                RouteJson nvarchar(max) NULL,
                 CONSTRAINT PK_Disp_OrderVersion PRIMARY KEY (OrderId, Version),
                 CONSTRAINT FK_Disp_OrderVersion_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
             );
@@ -148,16 +157,193 @@ public static class DispatchSchema
             CREATE INDEX IX_Disp_SyncQueue_Order ON dbo.Disp_SyncQueue (OrderId, Id);
         END;
 
+        IF OBJECT_ID(N'dbo.Disp_OrderStop', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_OrderStop
+            (
+                Id nvarchar(64) NOT NULL CONSTRAINT PK_Disp_OrderStop PRIMARY KEY,
+                OrderId nvarchar(64) NOT NULL,
+                Sequence int NOT NULL,
+                Place nvarchar(160) NOT NULL,
+                Liters decimal(18,3) NOT NULL,
+                Note nvarchar(500) NULL,
+                ArrivalAt datetimeoffset(3) NULL,
+                CONSTRAINT FK_Disp_OrderStop_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
+            );
+            CREATE UNIQUE INDEX UX_Disp_OrderStop_OrderSeq ON dbo.Disp_OrderStop (OrderId, Sequence);
+        END;
+
+        IF OBJECT_ID(N'dbo.Disp_OrderLeg', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_OrderLeg
+            (
+                Id nvarchar(64) NOT NULL CONSTRAINT PK_Disp_OrderLeg PRIMARY KEY,
+                OrderId nvarchar(64) NOT NULL,
+                Sequence int NOT NULL,
+                FromPlace nvarchar(160) NOT NULL,
+                ToPlace nvarchar(160) NOT NULL,
+                Liters decimal(18,3) NOT NULL,
+                Kilometers decimal(18,3) NULL,
+                SalePrice decimal(18,2) NOT NULL,
+                SaleOverridden bit NOT NULL,
+                CostPrice decimal(18,2) NOT NULL,
+                CONSTRAINT FK_Disp_OrderLeg_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id)
+            );
+            CREATE UNIQUE INDEX UX_Disp_OrderLeg_OrderSeq ON dbo.Disp_OrderLeg (OrderId, Sequence);
+        END;
+
+        IF OBJECT_ID(N'dbo.Disp_Setting', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_Setting
+            (
+                [Key] nvarchar(64) NOT NULL CONSTRAINT PK_Disp_Setting PRIMARY KEY,
+                Value nvarchar(200) NOT NULL
+            );
+        END;
+        """;
+
+    public const string Columns = """
+        IF COL_LENGTH(N'dbo.Disp_Trip', N'VehicleId') IS NULL
+            ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL;
+
+        IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL
+            ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL;
+
         IF COL_LENGTH(N'dbo.Disp_SyncQueue', N'Warning') IS NULL
             ALTER TABLE dbo.Disp_SyncQueue ADD Warning nvarchar(1000) NULL;
+
+        IF COL_LENGTH(N'dbo.Disp_Vehicle', N'CostPerKm') IS NULL
+            ALTER TABLE dbo.Disp_Vehicle ADD CostPerKm decimal(18,4) NULL;
+
+        IF COL_LENGTH(N'dbo.Disp_Order', N'PricingMode') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD PricingMode nvarchar(10) NOT NULL CONSTRAINT DF_Disp_Order_PricingMode DEFAULT N'Km';
+
+        IF COL_LENGTH(N'dbo.Disp_Order', N'SalePerKm') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD SalePerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_SalePerKm DEFAULT 0;
+
+        IF COL_LENGTH(N'dbo.Disp_Order', N'SalePerLiter') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD SalePerLiter decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_SalePerLiter DEFAULT 0;
+
+        IF COL_LENGTH(N'dbo.Disp_Order', N'CostPerKm') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD CostPerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_Order_CostPerKm DEFAULT 0;
+
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'PricingMode') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD PricingMode nvarchar(10) NOT NULL CONSTRAINT DF_Disp_OrderVersion_PricingMode DEFAULT N'Km';
+
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'SalePerKm') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD SalePerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_SalePerKm DEFAULT 0;
+
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'SalePerLiter') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD SalePerLiter decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_SalePerLiter DEFAULT 0;
+
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CostPerKm') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD CostPerKm decimal(18,4) NOT NULL CONSTRAINT DF_Disp_OrderVersion_CostPerKm DEFAULT 0;
+
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'RouteJson') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD RouteJson nvarchar(max) NULL;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes
+            WHERE name = N'IX_Disp_Order_Trip' AND object_id = OBJECT_ID(N'dbo.Disp_Order'))
+            CREATE INDEX IX_Disp_Order_Trip ON dbo.Disp_Order (TripId);
+        """;
+
+    // Textový OrderCode jen doplní chybějící TripId. Řádky, které už jízdu mají, se nemění.
+    // Stará zakázka bez vykládek dostane jednu zastávku a jeden úsek s původní prodejní cenou.
+    public const string Data = """
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+
+        IF NOT EXISTS (SELECT 1 FROM dbo.Disp_Setting WHERE [Key] = N'CostPerKm')
+            INSERT INTO dbo.Disp_Setting ([Key], Value) VALUES (N'CostPerKm', N'0');
+
+        UPDATE o
+        SET TripId = t.Id
+        FROM dbo.Disp_Order o
+        INNER JOIN dbo.Disp_Trip t ON t.OrderCode = o.Code
+        WHERE o.TripId IS NULL
+          AND t.OrderCode IS NOT NULL
+          AND LTRIM(RTRIM(t.OrderCode)) <> N''
+          AND 1 = (
+              SELECT COUNT(*)
+              FROM dbo.Disp_Trip t2
+              WHERE t2.OrderCode = o.Code
+                AND t2.OrderCode IS NOT NULL
+                AND LTRIM(RTRIM(t2.OrderCode)) <> N''
+          );
+
+        INSERT INTO dbo.Disp_OrderStop (Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt)
+        SELECT
+            LOWER(REPLACE(CONVERT(nvarchar(36), NEWID()), N'-', N'')),
+            o.Id,
+            1,
+            o.UnloadingPlace,
+            o.Liters,
+            NULL,
+            NULL
+        FROM dbo.Disp_Order o
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.Disp_OrderStop s WHERE s.OrderId = o.Id);
+
+        INSERT INTO dbo.Disp_OrderLeg
+            (Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice)
+        SELECT
+            LOWER(REPLACE(CONVERT(nvarchar(36), NEWID()), N'-', N'')),
+            o.Id,
+            1,
+            o.LoadingPlace,
+            o.UnloadingPlace,
+            o.Liters,
+            NULL,
+            o.AgreedPrice,
+            1,
+            0
+        FROM dbo.Disp_Order o
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.Disp_OrderLeg l WHERE l.OrderId = o.Id);
+
+        UPDATE v
+        SET RouteJson = (
+            SELECT
+                N'Km' AS pricingMode,
+                CAST(0 AS decimal(18,4)) AS salePerKm,
+                CAST(0 AS decimal(18,4)) AS salePerLiter,
+                CAST(0 AS decimal(18,4)) AS costPerKm,
+                JSON_QUERY((
+                    SELECT
+                        LOWER(REPLACE(CONVERT(nvarchar(36), NEWID()), N'-', N'')) AS id,
+                        1 AS sequence,
+                        v.UnloadingPlace AS place,
+                        v.Liters AS liters
+                    FOR JSON PATH
+                )) AS stops,
+                JSON_QUERY((
+                    SELECT
+                        LOWER(REPLACE(CONVERT(nvarchar(36), NEWID()), N'-', N'')) AS id,
+                        1 AS sequence,
+                        v.LoadingPlace AS fromPlace,
+                        v.UnloadingPlace AS toPlace,
+                        v.Liters AS liters,
+                        v.AgreedPrice AS salePrice,
+                        CAST(1 AS bit) AS saleOverridden,
+                        CAST(0 AS decimal(18,2)) AS costPrice
+                    FOR JSON PATH
+                )) AS legs
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        )
+        FROM dbo.Disp_OrderVersion v
+        WHERE v.RouteJson IS NULL;
+
+        COMMIT TRANSACTION;
         """;
 
     public static async Task EnsureAsync(string connectionString, CancellationToken cancellationToken)
     {
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = Script;
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        foreach (var batch in Batches)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = batch;
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
     }
 }
