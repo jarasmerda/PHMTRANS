@@ -39,28 +39,6 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
             return DispatchRules.Snapshot(document);
         }, cancellationToken);
 
-    public Task<DispatchMutation> AddTripAsync(NewTripRequest request, CancellationToken cancellationToken) =>
-        ChangeAsync((document, now) => DispatchRules.AddTrip(document, request, now), cancellationToken);
-
-    public Task<DispatchMutation> UpdateTripAsync(string id, UpdateTripRequest request, CancellationToken cancellationToken) =>
-        ChangeAsync((document, now) => DispatchRules.UpdateTrip(document, id, request, now), cancellationToken);
-
-    public Task<DispatchMutation> AssignAsync(
-        string id,
-        string? vehicleId,
-        string? driverId,
-        CancellationToken cancellationToken) =>
-        ChangeAsync((document, now) => DispatchRules.Assign(document, id, vehicleId, driverId, now), cancellationToken);
-
-    public Task<DispatchMutation> SetStatusAsync(string id, string? status, CancellationToken cancellationToken) =>
-        ChangeAsync((document, now) => DispatchRules.SetStatus(document, id, status, now), cancellationToken);
-
-    public Task<DispatchMutation> CancelTripAsync(string id, CancellationToken cancellationToken) =>
-        ChangeAsync((document, now) => DispatchRules.CancelTrip(document, id, now), cancellationToken);
-
-    public Task<DispatchMutation> DeleteTripAsync(string id, int orderCount, CancellationToken cancellationToken) =>
-        ChangeAsync((document, _) => DispatchRules.DeleteTrip(document, id, orderCount), cancellationToken);
-
     public Task<DispatchRateCard> GetRatesAsync(CancellationToken cancellationToken) =>
         InConnection(async (connection, _, token) =>
         {
@@ -102,38 +80,6 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
 
             await transaction!.CommitAsync(token);
             return (string?)null;
-        }, cancellationToken, transaction: true);
-
-    private async Task<DispatchMutation> ChangeAsync(
-        Func<DispatchDocument, DateTimeOffset, DispatchMutation> change,
-        CancellationToken cancellationToken) =>
-        await InConnection(async (connection, transaction, token) =>
-        {
-            await TakeLockAsync(connection, transaction!, token);
-            var document = await LoadAsync(connection, transaction, token);
-            var known = document.Trips.Select(trip => trip.Id).ToHashSet(StringComparer.Ordinal);
-            var mutation = change(document, DateTimeOffset.Now);
-            if (mutation is DispatchMutation.Deleted deleted)
-            {
-                await connection.ExecuteAsync(Command(
-                    "DELETE FROM dbo.Disp_Trip WHERE Id = @Id",
-                    transaction,
-                    token,
-                    new { deleted.Id }));
-                await transaction!.CommitAsync(token);
-                return mutation;
-            }
-
-            if (mutation is not DispatchMutation.Success success)
-                return mutation;
-
-            if (known.Contains(success.Trip.Id))
-                await UpdateTripAsync(connection, transaction!, success.Trip, token);
-            else
-                await InsertTripAsync(connection, transaction!, success.Trip, token);
-
-            await transaction!.CommitAsync(token);
-            return mutation;
         }, cancellationToken, transaction: true);
 
     private async Task<T> InConnection<T>(
@@ -229,14 +175,6 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
         var vehicles = BuildVehicles(vehicleRows, compartments);
         var drivers = (await connection.QueryAsync<DispatchDriver>(Command(
             "SELECT Id, Name, Phone FROM dbo.Disp_Driver", transaction, cancellationToken))).AsList();
-        var trips = (await connection.QueryAsync<DispatchTrip>(Command(
-            """
-            SELECT Id, Code, Customer, LoadingPlace, UnloadingPlace, Cargo,
-                   PlannedStart, Status, VehicleId, DriverId, Note, UpdatedAt
-            FROM dbo.Disp_Trip
-            """,
-            transaction,
-            cancellationToken))).AsList();
         var costText = await connection.ExecuteScalarAsync<string>(Command(
             "SELECT Value FROM dbo.Disp_Setting WHERE [Key] = N'CostPerKm'",
             transaction,
@@ -248,7 +186,6 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
         {
             Vehicles = vehicles,
             Drivers = drivers,
-            Trips = trips,
             DefaultCostPerKm = defaultCost
         };
     }
@@ -280,46 +217,6 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
     public sealed record VehicleRow(string Id, string Plate, string Label, decimal? CostPerKm);
 
     public sealed record CompartmentRow(string VehicleId, int Number, decimal CapacityLiters);
-
-    private static Task<int> InsertTripAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        DispatchTrip trip,
-        CancellationToken cancellationToken) =>
-        connection.ExecuteAsync(Command(
-            """
-            INSERT INTO dbo.Disp_Trip
-                (Id, Code, Customer, LoadingPlace, UnloadingPlace, Cargo, PlannedStart, Status, VehicleId, DriverId, Note, UpdatedAt)
-            VALUES
-                (@Id, @Code, @Customer, @LoadingPlace, @UnloadingPlace, @Cargo, @PlannedStart, @Status, @VehicleId, @DriverId, @Note, @UpdatedAt)
-            """,
-            transaction,
-            cancellationToken,
-            trip));
-
-    private static Task<int> UpdateTripAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        DispatchTrip trip,
-        CancellationToken cancellationToken) =>
-        connection.ExecuteAsync(Command(
-            """
-            UPDATE dbo.Disp_Trip
-            SET Customer = @Customer,
-                LoadingPlace = @LoadingPlace,
-                UnloadingPlace = @UnloadingPlace,
-                Cargo = @Cargo,
-                PlannedStart = @PlannedStart,
-                Status = @Status,
-                VehicleId = @VehicleId,
-                DriverId = @DriverId,
-                Note = @Note,
-                UpdatedAt = @UpdatedAt
-            WHERE Id = @Id
-            """,
-            transaction,
-            cancellationToken,
-            trip));
 
     private static CommandDefinition Command(
         string sql,

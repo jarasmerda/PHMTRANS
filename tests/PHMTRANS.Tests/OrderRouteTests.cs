@@ -176,10 +176,10 @@ public sealed class OrderRouteTests
     }
 
     [Fact]
-    public void Stop_change_is_pohoda_relevant_and_cost_or_trip_is_not()
+    public void Stop_change_is_pohoda_relevant_and_cost_or_crew_is_not()
     {
         var sent = Priced(OrderPricing.ByKm, 10m, 0m, 4m, 100m, 5000m, false);
-        var moved = sent with { TripId = "trip-2", VehicleId = "veh-1", DriverId = "drv-1", CurrentVersion = 3 };
+        var moved = sent with { VehicleId = "veh-1", DriverId = "drv-1", CurrentVersion = 3 };
         Assert.Equal(OrderSyncAction.None, OrderSyncPlanner.Plan(moved, sent, sent, confirmRequested: false).Action);
 
         var costlier = sent with
@@ -273,7 +273,6 @@ public sealed class OrderRouteTests
         null,
         null,
         null,
-        null,
         OrderStatuses.Nova,
         false,
         1,
@@ -308,7 +307,6 @@ public sealed class OrderRouteTests
             null,
             null,
             null,
-            null,
             OrderStatuses.Nova,
             null,
             mode,
@@ -321,60 +319,7 @@ public sealed class OrderRouteTests
 
 public sealed class OrderAssignmentTests
 {
-    [Fact]
-    public async Task One_trip_keeps_many_orders_and_a_taken_order_cannot_be_added()
-    {
-        var dispatch = new MemoryDispatchStore();
-        var orders = new MemoryOrderStore(dispatch, Options.Create(new PohodaOptions { SyncMode = "DryRun" }));
-        var first = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(Plain(), CancellationToken.None));
-        var second = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(Plain(), CancellationToken.None));
-        var third = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(Plain(), CancellationToken.None));
 
-        Assert.Null(await orders.AttachOrdersAsync("trip-2", [first.Order.Id, second.Order.Id], onlyIfFree: true, CancellationToken.None));
-        var taken = await orders.AttachTripAsync(third.Order.Id, "trip-4", onlyIfFree: true, CancellationToken.None);
-        Assert.IsType<OrderMutation.Success>(taken);
-        var blocked = await orders.AttachTripAsync(third.Order.Id, "trip-2", onlyIfFree: true, CancellationToken.None);
-        Assert.Equal(OrderAssignment.TakenMessage, Assert.IsType<OrderMutation.Rejected>(blocked).Message);
-
-        var list = await orders.ListAsync(CancellationToken.None);
-        var onTrip = list.Where(order => order.TripId == "trip-2").Select(order => order.Id).ToArray();
-        Assert.Equal(2, onTrip.Length);
-        Assert.Contains(first.Order.Id, onTrip);
-        Assert.Contains(second.Order.Id, onTrip);
-        Assert.All(list.Where(order => order.TripId == "trip-2"), order =>
-        {
-            Assert.Equal("veh-1", order.VehicleId);
-            Assert.Equal("drv-1", order.DriverId);
-        });
-        var queued = await orders.ListQueueAsync(CancellationToken.None);
-        Assert.Equal(3, queued.Count);
-        Assert.All(queued, item => Assert.Equal(OrderSyncActions.Create, item.Action));
-
-        var removed = Assert.IsType<OrderMutation.Success>(
-            await orders.AttachTripAsync(first.Order.Id, null, onlyIfFree: false, CancellationToken.None));
-        Assert.Null(removed.Order.TripId);
-        Assert.Equal("veh-1", removed.Order.VehicleId);
-    }
-
-    [Fact]
-    public async Task Assigning_a_trip_does_not_queue_a_pohoda_job()
-    {
-        var live = new PohodaOptions { SyncMode = "Live", Ico = "12345678", Username = "cteni", Password = "heslo" };
-        var orders = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(live));
-        var created = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(Plain(), CancellationToken.None));
-        Assert.IsType<OrderMutation.Success>(await orders.ConfirmAsync(created.Order.Id, CancellationToken.None));
-        var before = await orders.ListQueueAsync(CancellationToken.None);
-
-        var saved = Assert.IsType<OrderMutation.Success>(await orders.UpdateAsync(created.Order.Id, Plain() with { TripId = "trip-2" }, CancellationToken.None));
-        var after = await orders.ListQueueAsync(CancellationToken.None);
-
-        Assert.Equal("trip-2", saved.Order.TripId);
-        Assert.Equal("veh-1", saved.Order.VehicleId);
-        Assert.Equal("drv-1", saved.Order.DriverId);
-        Assert.Equal(before.Count, after.Count);
-        Assert.Equal(OrderSyncActions.Create, Assert.Single(after).Action);
-        Assert.Equal(before[0].VersionTo, after[0].VersionTo);
-    }
 
     private static OrderSaveRequest Plain() => new(
         42,
@@ -387,7 +332,6 @@ public sealed class OrderAssignmentTests
         12000m,
         10000m,
         0m,
-        null,
         null,
         null,
         null,

@@ -7,7 +7,7 @@ const orderTime = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeSty
 const orderStatuses = ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno"];
 const orderMessage = document.querySelector("#order-message");
 const queueMessage = document.querySelector("#queue-message");
-let orderCatalog = { vehicles: [], drivers: [], trips: [], fuelTypes: [], loadingPlaces: [], points: [] };
+let orderCatalog = { vehicles: [], drivers: [], fuelTypes: [], loadingPlaces: [], points: [] };
 const distanceCache = new Map();
 const distanceTimers = {};
 const distanceGeneration = {};
@@ -107,7 +107,6 @@ function priceText(order) {
 function formFields(prefix, order) {
   const vehicle = order?.vehicleId || "";
   const driver = order?.driverId || "";
-  const trip = order?.tripId || "";
   const status = order?.status || "Nová";
   const mode = order?.pricingMode === "Liters" ? "Liters" : "Km";
   const stops = order?.stops?.length
@@ -136,8 +135,6 @@ function formFields(prefix, order) {
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
     <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
-    <label>Jízda <select id="${prefix}-trip">${orderOptions(orderCatalog.trips.filter((item) => item.status !== "Stornováno" || item.id === trip), trip, "— bez jízdy —", (item) => `${item.code} · ${item.customer}`)}</select></label>
-    <div><button type="button" class="ghost" data-open-trip="${prefix}">Otevřít jízdu</button></div>
     <label>Režim prodeje
       <select id="${prefix}-mode">
         <option value="Km"${mode === "Km" ? " selected" : ""}>Za kilometr</option>
@@ -643,7 +640,6 @@ function readForm(prefix) {
     surcharges: Number.isFinite(surcharges) ? surcharges : null,
     vehicleId: value("vehicle"),
     driverId: value("driver"),
-    tripId: value("trip"),
     status: value("status"),
     cmrNumber: value("cmr"),
     pohodaInvoiceNumber: value("invoice"),
@@ -661,29 +657,6 @@ function readForm(prefix) {
       kmSource: leg.kmSource
     }))
   };
-}
-
-function applyTripCrew(prefix) {
-  const tripId = document.querySelector(`#${prefix}-trip`)?.value || "";
-  const trip = orderCatalog.trips.find((item) => item.id === tripId);
-  const vehicle = document.querySelector(`#${prefix}-vehicle`);
-  const driver = document.querySelector(`#${prefix}-driver`);
-  if (!vehicle || !driver) return;
-  if (!trip) {
-    vehicle.disabled = false;
-    driver.disabled = false;
-    return;
-  }
-  vehicle.value = trip.vehicleId || "";
-  driver.value = trip.driverId || "";
-  vehicle.disabled = true;
-  driver.disabled = true;
-  const cost = document.querySelector(`#${prefix}-cost-km`);
-  if (cost && cost.dataset.touched !== "1") {
-    const vehicleRate = orderCatalog.vehicles.find((item) => item.id === trip.vehicleId)?.costPerKm;
-    if (vehicleRate !== undefined && vehicleRate !== null && cost.value.trim() === "")
-      cost.value = vehicleRate;
-  }
 }
 
 function orderCount(data, status) {
@@ -735,7 +708,7 @@ function renderDetail(data) {
   const cancelNote = document.querySelector("#order-cancel-note");
   cancelNote.hidden = !cancelled;
   cancelNote.textContent = cancelled
-    ? `Stornováno.${order.cancelReason ? ` Důvod: ${order.cancelReason}` : ""} Zakázka je jen ke čtení, z jízdy je odebraná a do součtů se nepočítá.`
+    ? `Stornováno.${order.cancelReason ? ` Důvod: ${order.cancelReason}` : ""} Zakázka je jen ke čtení a do součtů ani kalendáře se nepočítá.`
     : "";
   document.querySelector("#order-confirm").disabled = !!order.isLocked || cancelled;
   for (const id of ["order-save", "order-confirm", "order-invoice", "order-resend", "order-cancel"])
@@ -746,7 +719,6 @@ function renderDetail(data) {
       element.disabled = true;
     });
   }
-  applyTripCrew("edit");
   stampPairs("edit");
   refreshRoute("edit");
   labelKnownKm("edit");
@@ -916,16 +888,18 @@ function renderQueue(data) {
 }
 
 function showView(name) {
-  document.querySelector("#trips-view").hidden = name !== "trips";
   document.querySelector("#orders-view").hidden = name !== "orders";
+  document.querySelector("#calendar-view").hidden = name !== "calendar";
   document.querySelector("#queue-view").hidden = name !== "queue";
   for (const button of document.querySelectorAll(".view-tabs button"))
     button.removeAttribute("aria-current");
-  document.querySelector(`#tab-${name}`)?.setAttribute("aria-current", "page");
+  // Kalendář patří pod záložku Zakázky.
+  document.querySelector(`#tab-${name === "calendar" ? "orders" : name}`)?.setAttribute("aria-current", "page");
   if (name === "orders") loadOrders();
   if (name === "queue") loadQueue();
-  if (name === "trips") history.replaceState(null, "", window.keepQuery(""));
+  if (name === "calendar" && typeof window.loadCalendar === "function") window.loadCalendar();
   if (name === "orders") history.replaceState(null, "", window.keepQuery("#zakazky"));
+  if (name === "calendar") history.replaceState(null, "", window.keepQuery("#kalendar"));
   if (name === "queue") history.replaceState(null, "", window.keepQuery("#fronta"));
 }
 
@@ -945,17 +919,15 @@ async function orderFetch(url, options) {
 }
 
 async function fetchCatalog() {
-  const [vehicles, drivers, trips, fuels, loadingPlaces, points] = await Promise.all([
+  const [vehicles, drivers, fuels, loadingPlaces, points] = await Promise.all([
     orderFetch("/api/dispatch/vehicles"),
     orderFetch("/api/dispatch/drivers"),
-    orderFetch("/api/dispatch/trips"),
     orderFetch("/api/dispatch/fuel-types"),
     orderFetch("/api/dispatch/loading-places"),
     orderFetch("/api/dispatch/points")
   ]);
   if (Array.isArray(vehicles.data)) orderCatalog.vehicles = vehicles.data;
   if (Array.isArray(drivers.data)) orderCatalog.drivers = drivers.data;
-  if (Array.isArray(trips.data)) orderCatalog.trips = trips.data;
   if (Array.isArray(fuels.data)) orderCatalog.fuelTypes = fuels.data;
   if (Array.isArray(loadingPlaces.data)) orderCatalog.loadingPlaces = loadingPlaces.data;
   if (Array.isArray(points.data)) orderCatalog.points = points.data;
@@ -964,7 +936,6 @@ async function fetchCatalog() {
 async function loadCatalog() {
   await fetchCatalog();
   document.querySelector("#order-create").innerHTML = formFields("create");
-  applyTripCrew("create");
   stampPairs("create");
   refreshRoute("create");
   labelKnownKm("create");
@@ -992,9 +963,6 @@ async function openOrder(id, scroll) {
     orderShow(orderMessage, result.data.message || "Zakázku se nepodařilo načíst.");
     return;
   }
-  const tripId = result.data?.order?.tripId || "";
-  if (tripId && !orderCatalog.trips.some((item) => item.id === tripId))
-    await fetchCatalog();
   renderDetail(result.data);
   if (scroll)
     document.querySelector("#order-detail").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1056,9 +1024,10 @@ async function saveOrder(url, body, method) {
   return result.data;
 }
 
-document.querySelector("#tab-trips").addEventListener("click", () => showView("trips"));
 document.querySelector("#tab-orders").addEventListener("click", () => showView("orders"));
 document.querySelector("#tab-queue").addEventListener("click", () => showView("queue"));
+document.querySelector("#open-calendar").addEventListener("click", () => showView("calendar"));
+document.querySelector("#calendar-back").addEventListener("click", () => showView("orders"));
 document.querySelector("#order-reload").addEventListener("click", () => loadOrders());
 document.querySelector("#queue-reload").addEventListener("click", () => loadQueue());
 
@@ -1100,20 +1069,6 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     if (warn) warn.hidden = true;
     document.querySelector(`#${prefix}-results`).innerHTML = "";
     orderShow(orderMessage, "");
-    return;
-  }
-  const openTripButton = event.target.closest("[data-open-trip]");
-  if (openTripButton) {
-    const prefix = openTripButton.dataset.openTrip;
-    const selected = document.querySelector(`#${prefix}-trip`)?.value || "";
-    const assigned = prefix === "edit" ? (orderDetail?.order?.tripId || "") : "";
-    const tripId = selected || assigned;
-    if (tripId && typeof window.openTrip === "function") {
-      orderShow(orderMessage, "");
-      window.openTrip(tripId);
-    } else {
-      orderShow(orderMessage, "Nejdřív vyberte jízdu.");
-    }
     return;
   }
   const loadsBox = event.target.closest("[data-loads]");
@@ -1209,10 +1164,6 @@ document.querySelector("#orders-view").addEventListener("change", (event) => {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
     refreshRoute(prefix);
     scheduleDistanceFill(prefix);
-  }
-  if (event.target.matches("[id$='-trip']")) {
-    const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
-    applyTripCrew(prefix);
   }
   if (event.target.matches("[data-load-fuel]")) {
     const prefix = event.target.closest("[data-loads]")?.dataset.loads;
@@ -1348,6 +1299,7 @@ document.querySelector("#open-order-create")?.addEventListener("click", () => {
 });
 
 loadCatalog().then(() => {
-  if (location.hash === "#zakazky") showView("orders");
   if (location.hash === "#fronta") showView("queue");
+  else if (location.hash === "#kalendar") showView("calendar");
+  else showView("orders");
 });

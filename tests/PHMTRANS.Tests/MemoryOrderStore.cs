@@ -91,27 +91,6 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
     public Task<OrderMutation> CancelAsync(string id, string? reason, bool delete, CancellationToken cancellationToken) =>
         Change(id, (context, _) => OrderWorkflow.Cancel(reason, delete, context), cancellationToken);
 
-    public Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken) =>
-        Change(orderId, (context, _) => OrderWorkflow.AssignTrip(tripId, onlyIfFree, context), cancellationToken);
-
-    public async Task<string?> AttachOrdersAsync(
-        string tripId,
-        IReadOnlyList<string> orderIds,
-        bool onlyIfFree,
-        CancellationToken cancellationToken)
-    {
-        foreach (var orderId in orderIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal))
-        {
-            var result = await AttachTripAsync(orderId, tripId, onlyIfFree, cancellationToken);
-            if (result is OrderMutation.Rejected rejected)
-                return rejected.Message;
-            if (result is OrderMutation.NotFound)
-                return "Zakázka neexistuje.";
-        }
-
-        return null;
-    }
-
     public Task<IReadOnlyList<OrderSyncEntry>> ListQueueAsync(CancellationToken cancellationToken) =>
         With(token => Task.FromResult<IReadOnlyList<OrderSyncEntry>>(_queue.OrderByDescending(item => item.Id).ToArray()), cancellationToken);
 

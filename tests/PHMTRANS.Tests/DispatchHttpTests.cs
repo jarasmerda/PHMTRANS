@@ -59,149 +59,11 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal(DispatchStorage.Kind, json.RootElement.GetProperty("storage").GetString());
         Assert.Equal("sql", json.RootElement.GetProperty("storage").GetString());
         Assert.Contains("Pohody", json.RootElement.GetProperty("storageNote").GetString(), StringComparison.Ordinal);
-        Assert.True(json.RootElement.GetProperty("trips").GetArrayLength() >= 5);
-
-        var trip = json.RootElement.GetProperty("trips").EnumerateArray()
-            .Single(item => item.GetProperty("status").GetString() == DispatchStatuses.Nova);
-        var assign = new HttpRequestMessage(HttpMethod.Post, $"/api/dispatch/trips/{trip.GetProperty("id").GetString()}/assign")
-        {
-            Content = new StringContent(
-                """{"vehicleId":"veh-1","driverId":"drv-1"}""",
-                System.Text.Encoding.UTF8,
-                "application/json")
-        };
-        assign.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
-        var assigned = await client.SendAsync(assign);
-        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
-        using var assignedJson = JsonDocument.Parse(await assigned.Content.ReadAsStringAsync());
-        Assert.Equal(DispatchStatuses.Prirazena, assignedJson.RootElement.GetProperty("status").GetString());
+        Assert.False(json.RootElement.TryGetProperty("trips", out _));
+        Assert.Equal(3, json.RootElement.GetProperty("drivers").GetArrayLength());
     }
 
-    [Fact]
-    public async Task Board_keeps_counts_and_returns_only_the_chosen_statuses()
-    {
-        using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var filtered = await client.SendAsync(Request(
-            "/api/dispatch/board?status=Nová&status=Vyložená",
-            "intranet.phmtrans.cz",
-            user: true));
-        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);
-        using var json = JsonDocument.Parse(await filtered.Content.ReadAsStringAsync());
-        var trips = json.RootElement.GetProperty("trips").EnumerateArray()
-            .Select(trip => trip.GetProperty("status").GetString())
-            .ToArray();
-        Assert.NotEmpty(trips);
-        Assert.All(trips, status => Assert.Contains(status, new[] { DispatchStatuses.Nova, DispatchStatuses.Vylozena }));
-        Assert.Equal(DispatchStatuses.All.Count, json.RootElement.GetProperty("counts").GetArrayLength());
-
-        var comma = await client.SendAsync(Request(
-            "/api/dispatch/board?status=Nová,Na cestě",
-            "intranet.phmtrans.cz",
-            user: true));
-        Assert.Equal(HttpStatusCode.OK, comma.StatusCode);
-
-        var unknown = await client.SendAsync(Request(
-            "/api/dispatch/board?status=Potvrzená",
-            "intranet.phmtrans.cz",
-            user: true));
-        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
-        Assert.Contains(DispatchStatuses.UnknownMessage, await unknown.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-
-        var defaults = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
-        using var defaultJson = JsonDocument.Parse(await defaults.Content.ReadAsStringAsync());
-        var defaultTrips = defaultJson.RootElement.GetProperty("trips").EnumerateArray()
-            .Select(trip => trip.GetProperty("status").GetString())
-            .ToArray();
-        Assert.DoesNotContain(DispatchStatuses.Stornovano, defaultTrips);
-        Assert.Contains(DispatchStatuses.Nova, defaultTrips);
-        Assert.Equal(DispatchStatuses.All.Count, defaultJson.RootElement.GetProperty("counts").GetArrayLength());
-
-        var everything = await client.SendAsync(Request("/api/dispatch/board?status=*", "intranet.phmtrans.cz", user: true));
-        Assert.Equal(HttpStatusCode.OK, everything.StatusCode);
-        using var everythingJson = JsonDocument.Parse(await everything.Content.ReadAsStringAsync());
-        var everyStatus = everythingJson.RootElement.GetProperty("trips").EnumerateArray()
-            .Select(trip => trip.GetProperty("status").GetString())
-            .ToArray();
-        Assert.Contains(DispatchStatuses.Stornovano, everyStatus);
-    }
-
-    [Fact]
-    public async Task Vehicles_and_drivers_can_be_chosen_when_a_trip_is_created()
-    {
-        using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-
-        var anonymous = await client.SendAsync(Request("/api/dispatch/vehicles", "intranet.phmtrans.cz", user: false));
-        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
-
-        var vehicles = await client.SendAsync(Request("/api/dispatch/vehicles", "intranet.phmtrans.cz", user: true));
-        Assert.Equal(HttpStatusCode.OK, vehicles.StatusCode);
-        using var vehicleJson = JsonDocument.Parse(await vehicles.Content.ReadAsStringAsync());
-        Assert.Contains(vehicleJson.RootElement.EnumerateArray(), item => item.GetProperty("plate").GetString() == "1A2 3456");
-        var man = vehicleJson.RootElement.EnumerateArray().Single(item => item.GetProperty("plate").GetString() == "1A2 3456");
-        var compartments = man.GetProperty("compartments").EnumerateArray().ToArray();
-        Assert.Equal(5, compartments.Length);
-        Assert.Equal(1, compartments[0].GetProperty("number").GetInt32());
-        Assert.Equal(8000m, compartments[0].GetProperty("capacityLiters").GetDecimal());
-
-        var drivers = await client.SendAsync(Request("/api/dispatch/drivers", "intranet.phmtrans.cz", user: true));
-        Assert.Equal(HttpStatusCode.OK, drivers.StatusCode);
-        using var driverJson = JsonDocument.Parse(await drivers.Content.ReadAsStringAsync());
-        Assert.Contains(driverJson.RootElement.EnumerateArray(), item => item.GetProperty("name").GetString() == "Jan Novák");
-
-        var create = new HttpRequestMessage(HttpMethod.Post, "/api/dispatch/trips")
-        {
-            Content = new StringContent(
-                """
-                {
-                  "customer": "Zákazník HTTP",
-                  "loadingPlace": "Sklad",
-                  "unloadingPlace": "ČS",
-                  "cargo": "nafta",
-                  "plannedStart": "2026-11-02T06:00:00Z",
-                  "vehicleId": "veh-1",
-                  "driverId": "drv-1"
-                }
-                """,
-                System.Text.Encoding.UTF8,
-                "application/json")
-        };
-        create.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
-        var created = await client.SendAsync(create);
-        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
-        using var createdJson = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
-        Assert.Equal("veh-1", createdJson.RootElement.GetProperty("vehicleId").GetString());
-        Assert.Equal("drv-1", createdJson.RootElement.GetProperty("driverId").GetString());
-        Assert.Equal(DispatchStatuses.Prirazena, createdJson.RootElement.GetProperty("status").GetString());
-
-        var board = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
-        using var boardJson = JsonDocument.Parse(await board.Content.ReadAsStringAsync());
-        var stored = boardJson.RootElement.GetProperty("trips").EnumerateArray()
-            .Single(item => item.GetProperty("customer").GetString() == "Zákazník HTTP");
-        Assert.Equal("veh-1", stored.GetProperty("vehicleId").GetString());
-        Assert.Equal("drv-1", stored.GetProperty("driverId").GetString());
-        Assert.Equal(DispatchStatuses.Prirazena, stored.GetProperty("status").GetString());
-
-        var rejected = new HttpRequestMessage(HttpMethod.Post, "/api/dispatch/trips")
-        {
-            Content = new StringContent(
-                """
-                {
-                  "customer": "Zákazník HTTP",
-                  "loadingPlace": "Sklad",
-                  "unloadingPlace": "ČS",
-                  "plannedStart": "2026-11-02T06:00:00Z",
-                  "vehicleId": "veh-missing"
-                }
-                """,
-                System.Text.Encoding.UTF8,
-                "application/json")
-        };
-        rejected.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
-        var rejectedResponse = await client.SendAsync(rejected);
-        Assert.Equal(HttpStatusCode.BadRequest, rejectedResponse.StatusCode);
-        Assert.Contains("Neznámé vozidlo", await rejectedResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-    }
 
     [Fact]
     public async Task Saving_a_distance_needs_login_and_valid_kilometers()
@@ -226,118 +88,18 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
     }
 
     [Fact]
-    public async Task Existing_trip_can_be_edited_and_unknown_trip_is_not_found()
+    public async Task Calendar_needs_login_and_a_valid_range_and_trips_are_gone()
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var anonymous = Put("/api/dispatch/trips/trip-3", """{"customer":"A","loadingPlace":"B","unloadingPlace":"C","plannedStart":"2026-11-02T06:00:00Z"}""", user: false);
-        var denied = await client.SendAsync(anonymous);
-        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        var anonymous = await client.SendAsync(Request("/api/dispatch/calendar", "intranet.phmtrans.cz", user: false));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
 
-        var create = new HttpRequestMessage(HttpMethod.Post, "/api/dispatch/trips")
-        {
-            Content = Json("""
-                {
-                  "customer": "Zákazník před úpravou",
-                  "orderCode": "Z-puvodni",
-                  "loadingPlace": "Sklad",
-                  "unloadingPlace": "ČS",
-                  "cargo": "nafta",
-                  "plannedStart": "2026-11-02T06:00:00Z"
-                }
-                """)
-        };
-        create.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
-        var created = await client.SendAsync(create);
-        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
-        using var createdJson = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
-        var id = createdJson.RootElement.GetProperty("id").GetString();
-        var code = createdJson.RootElement.GetProperty("code").GetString();
-        Assert.Equal(DispatchStatuses.Nova, createdJson.RootElement.GetProperty("status").GetString());
+        var invalid = await client.SendAsync(Request("/api/dispatch/calendar?days=500", "intranet.phmtrans.cz", user: true));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
 
-        var update = Put($"/api/dispatch/trips/{id}", """
-            {
-              "customer": "Zákazník po úpravě",
-              "orderCode": "Z-nova",
-              "loadingPlace": "Sklad Kralupy",
-              "unloadingPlace": "ČS Liberec",
-              "cargo": "benzin",
-              "plannedStart": "2026-11-03T07:30:00Z",
-              "note": "změněno",
-              "vehicleId": "veh-2",
-              "driverId": "drv-2",
-              "status": "Nová"
-            }
-            """);
-        var updated = await client.SendAsync(update);
-        Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
-        using var updatedJson = JsonDocument.Parse(await updated.Content.ReadAsStringAsync());
-        Assert.Equal(code, updatedJson.RootElement.GetProperty("code").GetString());
-        Assert.Equal("veh-2", updatedJson.RootElement.GetProperty("vehicleId").GetString());
-        Assert.Equal("drv-2", updatedJson.RootElement.GetProperty("driverId").GetString());
-        Assert.Equal(DispatchStatuses.Prirazena, updatedJson.RootElement.GetProperty("status").GetString());
-        Assert.Equal("Zákazník po úpravě", updatedJson.RootElement.GetProperty("customer").GetString());
-
-        var board = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
-        using var boardJson = JsonDocument.Parse(await board.Content.ReadAsStringAsync());
-        var stored = boardJson.RootElement.GetProperty("trips").EnumerateArray()
-            .Single(item => item.GetProperty("id").GetString() == id);
-        Assert.Equal("veh-2", stored.GetProperty("vehicleId").GetString());
-        Assert.Equal("drv-2", stored.GetProperty("driverId").GetString());
-        Assert.Equal(DispatchStatuses.Prirazena, stored.GetProperty("status").GetString());
-        Assert.Equal("Zákazník po úpravě", stored.GetProperty("customer").GetString());
-        Assert.Equal("Sklad Kralupy", stored.GetProperty("loadingPlace").GetString());
-
-        var cleared = Put($"/api/dispatch/trips/{id}", """
-            {
-              "customer": "Zákazník po úpravě",
-              "loadingPlace": "Sklad Kralupy",
-              "unloadingPlace": "ČS Liberec",
-              "plannedStart": "2026-11-03T07:30:00Z",
-              "vehicleId": "veh-2",
-              "driverId": "",
-              "status": "Přiřazená"
-            }
-            """);
-        var clearedResponse = await client.SendAsync(cleared);
-        Assert.Equal(HttpStatusCode.OK, clearedResponse.StatusCode);
-        using var clearedJson = JsonDocument.Parse(await clearedResponse.Content.ReadAsStringAsync());
-        Assert.Equal(DispatchStatuses.Nova, clearedJson.RootElement.GetProperty("status").GetString());
-        Assert.Equal("veh-2", clearedJson.RootElement.GetProperty("vehicleId").GetString());
-        Assert.Equal(JsonValueKind.Null, clearedJson.RootElement.GetProperty("driverId").ValueKind);
-
-        var missing = Put("/api/dispatch/trips/trip-missing", """
-            {
-              "customer": "Zákazník",
-              "loadingPlace": "Sklad",
-              "unloadingPlace": "ČS",
-              "plannedStart": "2026-11-03T07:30:00Z"
-            }
-            """);
-        var missingResponse = await client.SendAsync(missing);
-        Assert.Equal(HttpStatusCode.NotFound, missingResponse.StatusCode);
-        Assert.Contains("Jízda neexistuje", await missingResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-
-        var rejected = Put($"/api/dispatch/trips/{id}", """
-            {
-              "customer": "Zákazník po úpravě",
-              "loadingPlace": "Sklad Kralupy",
-              "unloadingPlace": "ČS Liberec",
-              "plannedStart": "2026-11-03T07:30:00Z",
-              "vehicleId": "veh-missing",
-              "driverId": "drv-2"
-            }
-            """);
-        var rejectedResponse = await client.SendAsync(rejected);
-        Assert.Equal(HttpStatusCode.BadRequest, rejectedResponse.StatusCode);
-        Assert.Contains("Neznámé vozidlo", await rejectedResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-
-        var afterReject = await client.SendAsync(Request("/api/dispatch/board", "intranet.phmtrans.cz", user: true));
-        using var afterJson = JsonDocument.Parse(await afterReject.Content.ReadAsStringAsync());
-        var unchanged = afterJson.RootElement.GetProperty("trips").EnumerateArray()
-            .Single(item => item.GetProperty("id").GetString() == id);
-        Assert.Equal("veh-2", unchanged.GetProperty("vehicleId").GetString());
-        Assert.Equal(DispatchStatuses.Nova, unchanged.GetProperty("status").GetString());
+        var trips = await client.SendAsync(Request("/api/dispatch/trips", "intranet.phmtrans.cz", user: true));
+        Assert.Equal(HttpStatusCode.NotFound, trips.StatusCode);
     }
 
     private static HttpRequestMessage Put(string path, string json, bool user = true)

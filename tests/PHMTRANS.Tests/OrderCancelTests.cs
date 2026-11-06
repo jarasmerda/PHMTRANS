@@ -17,8 +17,7 @@ public sealed class OrderCancelTests
     public async Task Draft_can_be_deleted_or_cancelled_without_a_pohoda_job()
     {
         var store = Store();
-        var created = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request(tripId: "trip-3"), CancellationToken.None));
-        Assert.Equal("trip-3", created.Order.TripId);
+        var created = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request(), CancellationToken.None));
 
         var denied = await store.UpdateAsync(created.Order.Id, Request(status: OrderStatuses.Stornovano), CancellationToken.None);
         Assert.Equal("Storno zakázky se dělá tlačítkem Stornovat.", Assert.IsType<OrderMutation.Rejected>(denied).Message);
@@ -27,7 +26,6 @@ public sealed class OrderCancelTests
             await store.CancelAsync(created.Order.Id, "  zákazník odřekl  ", delete: false, CancellationToken.None));
         Assert.Equal(OrderStatuses.Stornovano, cancelled.Order.Status);
         Assert.Equal("zákazník odřekl", cancelled.Order.CancelReason);
-        Assert.Null(cancelled.Order.TripId);
         Assert.Equal(2, cancelled.Order.CurrentVersion);
         var bundle = await store.GetAsync(created.Order.Id, CancellationToken.None);
         Assert.NotNull(bundle);
@@ -78,14 +76,13 @@ public sealed class OrderCancelTests
     {
         var store = Store();
         var created = await SendOrder(store);
-        await store.UpdateAsync(created.Id, Request(tripId: "trip-2"), CancellationToken.None);
+        await store.UpdateAsync(created.Id, Request(), CancellationToken.None);
 
         var removed = await store.CancelAsync(created.Id, "duplicita", delete: true, CancellationToken.None);
         Assert.Equal("Zakázku odeslanou do Pohody nelze smazat, jen stornovat.", Assert.IsType<OrderMutation.Rejected>(removed).Message);
 
         var cancelled = Assert.IsType<OrderMutation.Success>(await store.CancelAsync(created.Id, "duplicita", false, CancellationToken.None));
         Assert.Equal(OrderStatuses.Stornovano, cancelled.Order.Status);
-        Assert.Null(cancelled.Order.TripId);
         Assert.Equal("duplicita", cancelled.Order.CancelReason);
         var job = (await store.ListQueueAsync(CancellationToken.None)).Single(item => item.Action == OrderSyncActions.Delete && OrderQueueStatuses.IsOpen(item.Status));
         var document = XDocument.Parse(job.PayloadXml);
@@ -136,42 +133,6 @@ public sealed class OrderCancelTests
         Assert.Equal("Stornovaná zakázka je jen ke čtení.", Assert.IsType<OrderMutation.Rejected>(again).Message);
     }
 
-    [Fact]
-    public async Task Trip_cancel_unassigns_orders_and_unused_trip_can_be_deleted()
-    {
-        var dispatch = new MemoryDispatchStore();
-        var orders = new MemoryOrderStore(dispatch, Options.Create(new PohodaOptions { SyncMode = "DryRun" }));
-        var first = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(Request(tripId: "trip-3"), CancellationToken.None));
-        var second = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(Request(tripId: "trip-3"), CancellationToken.None));
-
-        var blocked = await dispatch.DeleteTripAsync("trip-3", 2, CancellationToken.None);
-        Assert.Equal("Jízdu s historií nebo se zakázkami lze jen stornovat.", Assert.IsType<DispatchMutation.Rejected>(blocked).Message);
-
-        foreach (var order in new[] { first.Order, second.Order })
-            Assert.IsType<OrderMutation.Success>(await orders.AttachTripAsync(order.Id, null, false, CancellationToken.None));
-        var cancelled = Assert.IsType<DispatchMutation.Success>(await dispatch.CancelTripAsync("trip-3", CancellationToken.None));
-        Assert.Equal(DispatchStatuses.Stornovano, cancelled.Trip.Status);
-        Assert.Null((await orders.GetAsync(first.Order.Id, CancellationToken.None))!.Order.TripId);
-        Assert.Null((await orders.GetAsync(second.Order.Id, CancellationToken.None))!.Order.TripId);
-        Assert.NotNull(await orders.GetAsync(first.Order.Id, CancellationToken.None));
-
-        var refused = await orders.AttachTripAsync(first.Order.Id, "trip-3", false, CancellationToken.None);
-        Assert.Equal("Stornovaná jízda už zakázky nepřijímá.", Assert.IsType<OrderMutation.Rejected>(refused).Message);
-        var edited = await dispatch.UpdateTripAsync("trip-3", new UpdateTripRequest("A", "B", "C", null, DateTimeOffset.Now, null), CancellationToken.None);
-        Assert.Equal("Stornovaná jízda je jen ke čtení.", Assert.IsType<DispatchMutation.Rejected>(edited).Message);
-
-        var fresh = Assert.IsType<DispatchMutation.Success>(await dispatch.AddTripAsync(
-            new NewTripRequest("Zákazník", "Sklad", "ČS", null, DateTimeOffset.Now.AddHours(2), null),
-            CancellationToken.None));
-        Assert.True(DispatchRules.CanHardDelete(fresh.Trip, 0));
-        var deleted = Assert.IsType<DispatchMutation.Deleted>(await dispatch.DeleteTripAsync(fresh.Trip.Id, 0, CancellationToken.None));
-        Assert.Equal(fresh.Trip.Id, deleted.Id);
-        Assert.DoesNotContain((await dispatch.ReadAsync(CancellationToken.None)).Trips, trip => trip.Id == fresh.Trip.Id);
-
-        var used = (await dispatch.ReadAsync(CancellationToken.None)).Trips.Single(trip => trip.Id == "trip-2");
-        Assert.False(DispatchRules.CanHardDelete(used, 0));
-        Assert.IsType<DispatchMutation.Rejected>(await dispatch.DeleteTripAsync(used.Id, 0, CancellationToken.None));
-    }
 
     [Fact]
     public async Task Partner_identity_links_the_address_book_id_and_matches_the_schema()
@@ -189,7 +150,6 @@ public sealed class OrderCancelTests
             12000m,
             10000m,
             0m,
-            null,
             null,
             null,
             null,
@@ -314,7 +274,7 @@ public sealed class OrderCancelTests
         return (await store.GetAsync(created.Order.Id, CancellationToken.None))!.Order;
     }
 
-    private static OrderSaveRequest Request(string? status = null, string? tripId = null) =>
+    private static OrderSaveRequest Request(string? status = null) =>
         new(
             42,
             "Velkoobchod Demo s.r.o.",
@@ -330,7 +290,6 @@ public sealed class OrderCancelTests
             null,
             null,
             null,
-            tripId,
             status ?? OrderStatuses.Nova,
             null,
             CustomerIco: "12345678",

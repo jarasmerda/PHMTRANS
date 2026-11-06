@@ -37,16 +37,15 @@ public sealed class SqlOrderStore(
                     o.Id, o.Code, o.CustomerPohodaId, o.CustomerName, o.LoadingPlace, o.UnloadingPlace,
                     o.LoadingDate, o.UnloadingDate, o.FuelType, o.FuelTypeId, o.Liters, o.AgreedPrice, o.Surcharges,
                     o.Note, o.CmrNumber,
-                    CASE WHEN o.TripId IS NULL THEN o.VehicleId ELSE t.VehicleId END AS VehicleId,
-                    CASE WHEN o.TripId IS NULL THEN o.DriverId ELSE t.DriverId END AS DriverId,
-                    o.TripId, o.Status, o.IsLocked,
+                    o.VehicleId,
+                    o.DriverId,
+                    o.Status, o.IsLocked,
                     o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
                     o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
                     o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
                     o.CancelReason, o.CustomerIco, o.CustomerDic, o.CustomerStreet, o.CustomerCity, o.CustomerZip, o.CustomerEmail, o.CustomerPhone,
                     q.Status AS LatestSyncStatus, q.LastError AS LatestSyncError, q.Warning AS LatestSyncWarning
                 FROM dbo.Disp_Order o
-                LEFT JOIN dbo.Disp_Trip t ON t.Id = o.TripId
                 OUTER APPLY (
                     SELECT TOP (1) Status, LastError, Warning
                     FROM dbo.Disp_SyncQueue
@@ -135,27 +134,6 @@ public sealed class SqlOrderStore(
 
     public Task<OrderMutation> CancelAsync(string id, string? reason, bool delete, CancellationToken cancellationToken) =>
         ChangeAsync(id, (context, _) => OrderWorkflow.Cancel(reason, delete, context), cancellationToken);
-
-    public Task<OrderMutation> AttachTripAsync(string orderId, string? tripId, bool onlyIfFree, CancellationToken cancellationToken) =>
-        ChangeAsync(orderId, (context, _) => OrderWorkflow.AssignTrip(tripId, onlyIfFree, context), cancellationToken);
-
-    public async Task<string?> AttachOrdersAsync(
-        string tripId,
-        IReadOnlyList<string> orderIds,
-        bool onlyIfFree,
-        CancellationToken cancellationToken)
-    {
-        foreach (var orderId in orderIds.Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal))
-        {
-            var result = await AttachTripAsync(orderId, tripId, onlyIfFree, cancellationToken);
-            if (result is OrderMutation.Rejected rejected)
-                return rejected.Message;
-            if (result is OrderMutation.NotFound)
-                return "Zakázka neexistuje.";
-        }
-
-        return null;
-    }
 
     public async Task<IReadOnlyList<OrderSyncEntry>> ListQueueAsync(CancellationToken cancellationToken)
     {
@@ -544,8 +522,6 @@ public sealed class SqlOrderStore(
         var vehicles = (await connection.QueryAsync<VehicleCostRow>(Command(
             "SELECT Id, CostPerKm FROM dbo.Disp_Vehicle", transaction, cancellationToken))).AsList();
         var drivers = await connection.QueryAsync<string>(Command("SELECT Id FROM dbo.Disp_Driver", transaction, cancellationToken));
-        var trips = (await connection.QueryAsync<TripLink>(Command(
-            "SELECT Id, VehicleId, DriverId, Status FROM dbo.Disp_Trip", transaction, cancellationToken))).AsList();
         var costText = await connection.ExecuteScalarAsync<string>(Command(
             "SELECT Value FROM dbo.Disp_Setting WHERE [Key] = N'CostPerKm'",
             transaction,
@@ -560,8 +536,6 @@ public sealed class SqlOrderStore(
         return new OrderCatalog(
             vehicles.Select(vehicle => vehicle.Id).ToHashSet(StringComparer.Ordinal),
             drivers.ToHashSet(StringComparer.Ordinal),
-            trips.Select(trip => trip.Id).ToHashSet(StringComparer.Ordinal),
-            trips.ToDictionary(trip => trip.Id, StringComparer.Ordinal),
             defaultCost,
             vehicles.Where(vehicle => vehicle.CostPerKm is not null)
                 .ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.CostPerKm!.Value, StringComparer.Ordinal),
@@ -669,15 +643,14 @@ public sealed class SqlOrderStore(
                 o.Id, o.Code, o.CustomerPohodaId, o.CustomerName, o.LoadingPlace, o.UnloadingPlace,
                 o.LoadingDate, o.UnloadingDate, o.FuelType, o.FuelTypeId, o.Liters, o.AgreedPrice, o.Surcharges,
                 o.Note, o.CmrNumber,
-                CASE WHEN o.TripId IS NULL THEN o.VehicleId ELSE t.VehicleId END AS VehicleId,
-                CASE WHEN o.TripId IS NULL THEN o.DriverId ELSE t.DriverId END AS DriverId,
-                o.TripId, o.Status, o.IsLocked,
+                o.VehicleId,
+                o.DriverId,
+                o.Status, o.IsLocked,
                 o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
                 o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
                 o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
                 o.CancelReason, o.CustomerIco, o.CustomerDic, o.CustomerStreet, o.CustomerCity, o.CustomerZip, o.CustomerEmail, o.CustomerPhone
             FROM dbo.Disp_Order o
-            LEFT JOIN dbo.Disp_Trip t ON t.Id = o.TripId
             WHERE o.Id = @Id
             """,
             transaction,
@@ -697,7 +670,7 @@ public sealed class SqlOrderStore(
             SELECT
                 Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace,
                 LoadingDate, UnloadingDate, FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges,
-                Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
+                Note, CmrNumber, VehicleId, DriverId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone
@@ -723,7 +696,7 @@ public sealed class SqlOrderStore(
             SELECT
                 Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace,
                 LoadingDate, UnloadingDate, FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges,
-                Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
+                Note, CmrNumber, VehicleId, DriverId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone
@@ -759,13 +732,13 @@ public sealed class SqlOrderStore(
             """
             INSERT INTO dbo.Disp_Order
                 (Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
-                 FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
+                 FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, Status,
                  IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
                  CreatedAt, UpdatedAt, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
                  CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
             VALUES
                 (@Id, @Code, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
-                 @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status,
+                 @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @Status,
                  @IsLocked, @CurrentVersion, @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @LastSentVersion,
                  @CreatedAt, @UpdatedAt, @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm,
                  @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
@@ -797,7 +770,6 @@ public sealed class SqlOrderStore(
                 CmrNumber = @CmrNumber,
                 VehicleId = @VehicleId,
                 DriverId = @DriverId,
-                TripId = @TripId,
                 Status = @Status,
                 IsLocked = @IsLocked,
                 CurrentVersion = @CurrentVersion,
@@ -833,13 +805,13 @@ public sealed class SqlOrderStore(
             """
             INSERT INTO dbo.Disp_OrderVersion
                 (OrderId, Version, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
-                 FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status, IsLocked,
+                 FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, Status, IsLocked,
                  PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                  PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
                  CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
             VALUES
                 (@Id, @CurrentVersion, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
-                 @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @TripId, @Status, @IsLocked,
+                 @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @Status, @IsLocked,
                  @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @UpdatedAt,
                  @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm, @RouteJson,
                  @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
@@ -865,7 +837,6 @@ public sealed class SqlOrderStore(
                 order.CmrNumber,
                 order.VehicleId,
                 order.DriverId,
-                order.TripId,
                 order.Status,
                 order.IsLocked,
                 order.PohodaOrderId,
@@ -1247,7 +1218,6 @@ public sealed class SqlOrderStore(
         public string? CmrNumber { get; set; }
         public string? VehicleId { get; set; }
         public string? DriverId { get; set; }
-        public string? TripId { get; set; }
         public string Status { get; set; } = "";
         public bool IsLocked { get; set; }
         public int CurrentVersion { get; set; }
@@ -1275,7 +1245,7 @@ public sealed class SqlOrderStore(
 
         public DispatchOrder ToOrder() => new(
             Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
-            FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
+            FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, Status,
             IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
             CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, LatestSyncWarning, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
             CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
@@ -1315,7 +1285,6 @@ public sealed class SqlOrderStore(
         public string? CmrNumber { get; set; }
         public string? VehicleId { get; set; }
         public string? DriverId { get; set; }
-        public string? TripId { get; set; }
         public string Status { get; set; } = "";
         public bool IsLocked { get; set; }
         public int? PohodaOrderId { get; set; }
@@ -1340,7 +1309,7 @@ public sealed class SqlOrderStore(
         {
             var version = new DispatchOrder(
                 order.Id, order.Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
-                FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, TripId, Status,
+                FuelType, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, Status,
                 IsLocked, Version, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, order.LastSentVersion,
                 order.CreatedAt, CreatedUtc, null, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
                 CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
