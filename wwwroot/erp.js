@@ -223,10 +223,18 @@ async function loadMonthly(event) {
 }
 
 const reports = { faktury: "Vydané faktury", mesicni: "Vydané faktury – měsíční přehled" };
+// Reporty, ke kterým má uživatel přístup. Doplní se z /api/auth/me, server je hlídá i u API.
+let allowedReports = Object.keys(reports);
+let invoicesLoaded = false;
 
 function showReport() {
   const raw = location.hash.replace(/^#/, "");
-  const id = Object.hasOwn(reports, raw) ? raw : "faktury";
+  const id = allowedReports.includes(raw) ? raw : allowedReports[0];
+  document.querySelector("#erp-none").hidden = Boolean(id);
+  if (!id) {
+    document.querySelectorAll("[data-report]").forEach((panel) => { panel.hidden = true; });
+    return;
+  }
   document.querySelectorAll("[data-report]").forEach((panel) => {
     panel.hidden = panel.dataset.report !== id;
   });
@@ -235,7 +243,30 @@ function showReport() {
     else link.removeAttribute("aria-current");
   });
   document.title = `${reports[id]} – PHM Trans`;
+  if (id === "faktury" && !invoicesLoaded) {
+    invoicesLoaded = true;
+    load(null, true);
+  }
   if (id === "mesicni" && monthlyLoadedYear === null) loadMonthly(null);
+}
+
+async function initReports() {
+  try {
+    const response = await fetch("/api/auth/me", { cache: "no-store" });
+    if (response.ok) {
+      const me = await response.json();
+      if (Array.isArray(me.erpReports))
+        allowedReports = Object.keys(reports).filter((id) => me.erpReports.includes(id));
+    }
+  } catch {
+    // Bez odpovědi zůstanou všechny záložky, server nepovolený report stejně odmítne.
+  }
+  document.querySelectorAll("[data-report-link]").forEach((link) => {
+    link.hidden = !allowedReports.includes(link.dataset.reportLink);
+  });
+  document.querySelector(".report-tabs").hidden = allowedReports.length < 2;
+  window.addEventListener("hashchange", showReport);
+  showReport();
 }
 
 document.querySelector("#logout").addEventListener("click", async () => {
@@ -245,8 +276,6 @@ document.querySelector("#logout").addEventListener("click", async () => {
 
 monthlyYear.value = String(today.getFullYear());
 document.querySelector("#monthly-form").addEventListener("submit", loadMonthly);
-window.addEventListener("hashchange", showReport);
-showReport();
 
 setRange("year");
 document.querySelector("#range").addEventListener("submit", (event) => load(event, true));
@@ -256,4 +285,4 @@ document.querySelectorAll("[data-range]").forEach((button) => {
     load(null, true);
   });
 });
-load(null, true);
+initReports();

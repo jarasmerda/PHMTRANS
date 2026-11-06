@@ -40,7 +40,7 @@ public sealed class SqlAuthStore(IConfiguration configuration, ILogger<SqlAuthSt
             return await connection.QuerySingleOrDefaultAsync<AuthUser>(new CommandDefinition(
                 """
                 SELECT Id, Username, DisplayName, PasswordHash, IsAdmin, IsActive, AllowErp, AllowDispatch, AllowCrm,
-                       CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil
+                       ErpReports, CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil
                 FROM dbo.Auth_User
                 WHERE LOWER(Username) = LOWER(@Username)
                 """,
@@ -54,7 +54,7 @@ public sealed class SqlAuthStore(IConfiguration configuration, ILogger<SqlAuthSt
             return await connection.QuerySingleOrDefaultAsync<AuthUser>(new CommandDefinition(
                 """
                 SELECT Id, Username, DisplayName, PasswordHash, IsAdmin, IsActive, AllowErp, AllowDispatch, AllowCrm,
-                       CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil
+                       ErpReports, CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil
                 FROM dbo.Auth_User
                 WHERE Id = @Id
                 """,
@@ -68,7 +68,7 @@ public sealed class SqlAuthStore(IConfiguration configuration, ILogger<SqlAuthSt
             var rows = await connection.QueryAsync<AuthUser>(new CommandDefinition(
                 """
                 SELECT Id, Username, DisplayName, PasswordHash, IsAdmin, IsActive, AllowErp, AllowDispatch, AllowCrm,
-                       CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil
+                       ErpReports, CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil
                 FROM dbo.Auth_User
                 ORDER BY Username
                 """,
@@ -102,10 +102,10 @@ public sealed class SqlAuthStore(IConfiguration configuration, ILogger<SqlAuthSt
                     """
                     INSERT INTO dbo.Auth_User
                         (Id, Username, DisplayName, PasswordHash, IsAdmin, IsActive, AllowErp, AllowDispatch, AllowCrm,
-                         CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil)
+                         ErpReports, CreatedAt, LastLoginAt, FailedAttempts, LockoutUntil)
                     VALUES
                         (@Id, @Username, @DisplayName, @PasswordHash, @IsAdmin, @IsActive, @AllowErp, @AllowDispatch, @AllowCrm,
-                         @CreatedAt, @LastLoginAt, @FailedAttempts, @LockoutUntil)
+                         @ErpReports, @CreatedAt, @LastLoginAt, @FailedAttempts, @LockoutUntil)
                     """,
                     user,
                     cancellationToken: token));
@@ -129,7 +129,8 @@ public sealed class SqlAuthStore(IConfiguration configuration, ILogger<SqlAuthSt
                     IsActive = @IsActive,
                     AllowErp = @AllowErp,
                     AllowDispatch = @AllowDispatch,
-                    AllowCrm = @AllowCrm
+                    AllowCrm = @AllowCrm,
+                    ErpReports = @ErpReports
                 WHERE Id = @Id
                 """,
                 user,

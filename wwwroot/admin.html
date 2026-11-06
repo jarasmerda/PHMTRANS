@@ -16,6 +16,11 @@
     }
     #users button.ghost:hover { background: var(--button); color: var(--on-button); }
     .row-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .erp-reports {
+      display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; align-items: center;
+      padding: 0.2rem 0.6rem; border-left: 2px solid var(--accent); font-size: 0.85rem;
+    }
+    .erp-reports[aria-disabled="true"] { opacity: 0.45; }
   </style>
 </head>
 <body>
@@ -42,7 +47,8 @@
     <label>Zobrazované jméno <input id="displayName" autocomplete="off"></label>
     <label>Heslo <input id="password" type="password" autocomplete="new-password" minlength="8" required></label>
     <div class="checks">
-      <label><input type="checkbox" id="allowErp" checked> ERP</label>
+      <label><input type="checkbox" id="allowErp" data-field="allowErp" checked> ERP</label>
+      <span class="erp-reports" id="create-reports"></span>
       <label><input type="checkbox" id="allowDispatch"> Dispečink</label>
       <label><input type="checkbox" id="allowCrm"> CRM</label>
       <label><input type="checkbox" id="isAdmin"> Správce</label>
@@ -80,6 +86,27 @@
       message.textContent = text || "";
     }
 
+    // Reporty ERP, ke kterým jde dát přístup zvlášť.
+    const erpReports = [
+      { id: "faktury", label: "Vydané faktury" },
+      { id: "mesicni", label: "Měsíční přehled" }
+    ];
+    function reportChecks(selected) {
+      return erpReports.map((report) =>
+        `<label><input type="checkbox" data-report="${report.id}" ${selected.includes(report.id) ? "checked" : ""}> ${text(report.label)}</label>`).join("");
+    }
+    function selectedReports(scope) {
+      return [...scope.querySelectorAll("[data-report]")].filter((box) => box.checked).map((box) => box.dataset.report);
+    }
+    // Bez modulu ERP jsou reporty vypnuté. Když se ERP zapne a žádný report není vybraný, vyberou se všechny.
+    function syncReports(scope, fillWhenEmpty) {
+      const erp = scope.querySelector("[data-field=allowErp]").checked;
+      const group = scope.querySelector(".erp-reports");
+      const boxes = [...group.querySelectorAll("[data-report]")];
+      if (erp && fillWhenEmpty && boxes.every((box) => !box.checked)) boxes.forEach((box) => { box.checked = true; });
+      boxes.forEach((box) => { box.disabled = !erp; });
+      group.setAttribute("aria-disabled", erp ? "false" : "true");
+    }
     function formatWhen(value) {
       return value ? dateFormat.format(new Date(value)) : "ještě ne";
     }
@@ -119,6 +146,7 @@
           <td>
             <div class="checks">
               <label><input data-field="allowErp" type="checkbox" ${user.allowErp ? "checked" : ""}> ERP</label>
+              <span class="erp-reports">${reportChecks(user.erpReports ?? [])}</span>
               <label><input data-field="allowDispatch" type="checkbox" ${user.allowDispatch ? "checked" : ""}> Dispečink</label>
               <label><input data-field="allowCrm" type="checkbox" ${user.allowCrm ? "checked" : ""}> CRM</label>
               <label><input data-field="isAdmin" type="checkbox" ${user.isAdmin ? "checked" : ""}> Správce</label>
@@ -148,6 +176,7 @@
         return;
       }
       render(data);
+      document.querySelectorAll("#rows tr[data-id]").forEach((row) => syncReports(row, false));
     }
 
     document.querySelector("#create").addEventListener("submit", async (event) => {
@@ -157,6 +186,7 @@
         displayName: document.querySelector("#displayName").value,
         password: document.querySelector("#password").value,
         allowErp: document.querySelector("#allowErp").checked,
+        erpReports: selectedReports(document.querySelector("#create")),
         allowDispatch: document.querySelector("#allowDispatch").checked,
         allowCrm: document.querySelector("#allowCrm").checked,
         isAdmin: document.querySelector("#isAdmin").checked,
@@ -166,6 +196,8 @@
       event.target.reset();
       document.querySelector("#allowErp").checked = true;
       document.querySelector("#isActive").checked = true;
+      document.querySelectorAll("#create [data-report]").forEach((box) => { box.checked = true; });
+      syncReports(document.querySelector("#create"), true);
       await load();
     });
 
@@ -178,6 +210,7 @@
         const saved = await send(`/api/admin/users/${encodeURIComponent(id)}`, "PUT", {
           displayName: row.querySelector("[data-field=displayName]").value,
           allowErp: row.querySelector("[data-field=allowErp]").checked,
+          erpReports: selectedReports(row),
           allowDispatch: row.querySelector("[data-field=allowDispatch]").checked,
           allowCrm: row.querySelector("[data-field=allowCrm]").checked,
           isAdmin: row.querySelector("[data-field=isAdmin]").checked,
@@ -197,6 +230,14 @@
       location.href = "/login.html";
     });
 
+    document.querySelector("#create-reports").innerHTML = reportChecks(erpReports.map((report) => report.id));
+    document.querySelector("#create").addEventListener("change", (event) => {
+      if (event.target.matches("[data-field=allowErp]")) syncReports(document.querySelector("#create"), true);
+    });
+    document.querySelector("#rows").addEventListener("change", (event) => {
+      if (event.target.matches("[data-field=allowErp]")) syncReports(event.target.closest("tr"), true);
+    });
+    syncReports(document.querySelector("#create"), true);
     load();
   </script>
 </body>

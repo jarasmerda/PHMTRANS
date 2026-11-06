@@ -25,7 +25,45 @@ public static class AuthModules
 public static class AuthClaimTypes
 {
     public const string Module = "module";
+    public const string ErpReport = "erp_report";
     public const string AdminRole = "Admin";
+}
+
+/// <summary>Reporty v ERP. Přístup k nim se nastavuje u uživatele zvlášť.</summary>
+public static class ErpReports
+{
+    public const string Invoices = "faktury";
+    public const string Monthly = "mesicni";
+
+    public static readonly string[] All = [Invoices, Monthly];
+
+    public static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<string, string>
+    {
+        [Invoices] = "Vydané faktury",
+        [Monthly] = "Vydané faktury – měsíční přehled"
+    };
+
+    /// <summary>Report, ke kterému patří API cesta, nebo null.</summary>
+    public static string? ForApiPath(string path)
+    {
+        if (path.StartsWith("/api/bi/issued-invoices", StringComparison.OrdinalIgnoreCase))
+            return Invoices;
+        if (path.StartsWith("/api/bi/monthly-invoices", StringComparison.OrdinalIgnoreCase))
+            return Monthly;
+        return null;
+    }
+
+    /// <summary>Uložená hodnota: null znamená všechny reporty (účty založené před zavedením výběru).</summary>
+    public static IReadOnlyList<string> Parse(string? stored) =>
+        stored is null
+            ? All
+            : All.Where(report => stored.Split(',', StringSplitOptions.TrimEntries).Contains(report, StringComparer.OrdinalIgnoreCase)).ToArray();
+
+    public static string Store(IEnumerable<string> reports) =>
+        string.Join(',', All.Where(report => reports.Contains(report, StringComparer.OrdinalIgnoreCase)));
+
+    public static bool AreKnown(IEnumerable<string> reports) =>
+        reports.All(report => All.Contains(report, StringComparer.OrdinalIgnoreCase));
 }
 
 public sealed class IntranetOptions
@@ -91,6 +129,15 @@ public sealed class AuthUser
 
     public DateTimeOffset? LockoutUntil { get; set; }
 
+    /// <summary>Povolené reporty ERP, čárkami. Null = všechny.</summary>
+    public string? ErpReports { get; set; }
+
+    public IReadOnlyList<string> AllowedErpReports() =>
+        AllowErp ? Auth.ErpReports.Parse(ErpReports) : [];
+
+    public bool CanSeeErpReport(string report) =>
+        AllowedErpReports().Contains(report, StringComparer.OrdinalIgnoreCase);
+
     public string HomePath() => AuthModules.HomePath(AllowErp, AllowDispatch, AllowCrm);
 }
 
@@ -104,7 +151,8 @@ public sealed record AuthUserResponse(
     bool AllowDispatch,
     bool AllowCrm,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? LastLoginAt)
+    DateTimeOffset? LastLoginAt,
+    IReadOnlyList<string> ErpReports)
 {
     public static AuthUserResponse From(AuthUser user) => new(
         user.Id,
@@ -116,7 +164,8 @@ public sealed record AuthUserResponse(
         user.AllowDispatch,
         user.AllowCrm,
         user.CreatedAt,
-        user.LastLoginAt);
+        user.LastLoginAt,
+        user.AllowedErpReports());
 }
 
 public sealed class AuthStoreException(string message, Exception? inner = null) : Exception(message, inner);

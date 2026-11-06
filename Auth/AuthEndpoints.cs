@@ -152,6 +152,8 @@ public static class AuthEndpoints
             return Results.BadRequest(new { message = "Vyplňte uživatelské jméno." });
         if (password.Length < AuthBootstrap.MinimumPasswordLength)
             return Results.BadRequest(new { message = AuthStorage.ShortPasswordMessage });
+        if (ErpReportsError(request.AllowErp, request.ErpReports) is { } reportError)
+            return Results.BadRequest(new { message = reportError });
 
         var user = new AuthUser
         {
@@ -163,6 +165,7 @@ public static class AuthEndpoints
             AllowErp = request.AllowErp,
             AllowDispatch = request.AllowDispatch,
             AllowCrm = request.AllowCrm,
+            ErpReports = request.ErpReports is null ? null : ErpReports.Store(request.ErpReports),
             CreatedAt = DateTimeOffset.UtcNow
         };
         user.PasswordHash = hasher.HashPassword(user, password);
@@ -201,6 +204,8 @@ public static class AuthEndpoints
             var displayName = request.DisplayName?.Trim() ?? "";
             if (displayName.Length == 0 || displayName.Length > 160)
                 return Results.BadRequest(new { message = "Vyplňte zobrazované jméno." });
+            if (ErpReportsError(request.AllowErp, request.ErpReports) is { } reportError)
+                return Results.BadRequest(new { message = reportError });
 
             var removesActiveAdmin = user.IsAdmin && user.IsActive && (!request.IsAdmin || !request.IsActive);
             if (removesActiveAdmin && await store.CountActiveAdminsAsync(cancellationToken) <= 1)
@@ -212,6 +217,8 @@ public static class AuthEndpoints
             user.AllowErp = request.AllowErp;
             user.AllowDispatch = request.AllowDispatch;
             user.AllowCrm = request.AllowCrm;
+            if (request.ErpReports is not null)
+                user.ErpReports = ErpReports.Store(request.ErpReports);
             await store.UpdateAsync(user, cancellationToken);
             return Results.Ok(AuthUserResponse.From(user));
         }
@@ -246,6 +253,17 @@ public static class AuthEndpoints
         }
 
         return Results.Ok(new { message = "Heslo je nastavené." });
+    }
+
+    private static string? ErpReportsError(bool allowErp, IReadOnlyList<string>? reports)
+    {
+        if (reports is null)
+            return null;
+        if (!ErpReports.AreKnown(reports))
+            return "Neznámý report ERP.";
+        if (allowErp && reports.Count == 0)
+            return "Vyberte aspoň jeden report ERP, nebo vypněte modul ERP.";
+        return null;
     }
 
     private static async Task<IResult> RejectPasswordAsync(
@@ -289,6 +307,8 @@ public static class AuthEndpoints
             claims.Add(new Claim(ClaimTypes.Role, AuthClaimTypes.AdminRole));
         if (user.AllowErp)
             claims.Add(new Claim(AuthClaimTypes.Module, AuthModules.Erp));
+        foreach (var report in user.AllowedErpReports())
+            claims.Add(new Claim(AuthClaimTypes.ErpReport, report));
         if (user.AllowDispatch)
             claims.Add(new Claim(AuthClaimTypes.Module, AuthModules.Dispatch));
         if (user.AllowCrm)
@@ -344,7 +364,8 @@ public sealed record CreateAuthUserRequest(
     bool IsActive,
     bool AllowErp,
     bool AllowDispatch,
-    bool AllowCrm);
+    bool AllowCrm,
+    IReadOnlyList<string>? ErpReports = null);
 
 public sealed record UpdateAuthUserRequest(
     string? DisplayName,
@@ -352,6 +373,7 @@ public sealed record UpdateAuthUserRequest(
     bool IsActive,
     bool AllowErp,
     bool AllowDispatch,
-    bool AllowCrm);
+    bool AllowCrm,
+    IReadOnlyList<string>? ErpReports = null);
 
 public sealed record ResetPasswordRequest(string? Password);

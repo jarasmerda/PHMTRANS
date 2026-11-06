@@ -295,6 +295,114 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
         Assert.Equal(HttpStatusCode.TooManyRequests, still.StatusCode);
     }
 
+    [Fact]
+    public async Task Erp_reports_can_be_granted_one_by_one()
+    {
+        using var admin = Client();
+        Assert.Equal(HttpStatusCode.OK, (await Login(admin, "spravce", "Heslo-spravce-123", "198.51.100.50")).StatusCode);
+
+        var none = await admin.PostAsJsonAsync("/api/admin/users", new
+        {
+            username = "bezreportu",
+            displayName = "Bez reportů",
+            password = "Heslo-reporty-1",
+            isAdmin = false,
+            isActive = true,
+            allowErp = true,
+            allowDispatch = false,
+            allowCrm = false,
+            erpReports = Array.Empty<string>()
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, none.StatusCode);
+
+        var unknown = await admin.PostAsJsonAsync("/api/admin/users", new
+        {
+            username = "neznamy",
+            displayName = "Neznámý",
+            password = "Heslo-reporty-1",
+            isAdmin = false,
+            isActive = true,
+            allowErp = true,
+            allowDispatch = false,
+            allowCrm = false,
+            erpReports = new[] { "tajny" }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+
+        var created = await admin.PostAsJsonAsync("/api/admin/users", new
+        {
+            username = "mesicni",
+            displayName = "Jen měsíční",
+            password = "Heslo-reporty-1",
+            isAdmin = false,
+            isActive = true,
+            allowErp = true,
+            allowDispatch = false,
+            allowCrm = false,
+            erpReports = new[] { ErpReports.Monthly }
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        using var user = Client();
+        Assert.Equal(HttpStatusCode.OK, (await Login(user, "mesicni", "Heslo-reporty-1", "198.51.100.51")).StatusCode);
+        var me = await user.GetFromJsonAsync<JsonElement>("/api/auth/me");
+        Assert.Equal([ErpReports.Monthly], me.GetProperty("erpReports").EnumerateArray().Select(item => item.GetString()));
+
+        var invoices = await user.SendAsync(Get("/api/bi/issued-invoices", "intranet.phmtrans.cz"));
+        Assert.Equal(HttpStatusCode.Forbidden, invoices.StatusCode);
+        var monthly = await user.SendAsync(Get("/api/bi/monthly-invoices?year=2026", "intranet.phmtrans.cz"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, monthly.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, monthly.StatusCode);
+        var page = await user.SendAsync(Get("/ERP", "intranet.phmtrans.cz"));
+        Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+
+        var switched = await admin.PutAsJsonAsync($"/api/admin/users/{id}", new
+        {
+            displayName = "Jen faktury",
+            isAdmin = false,
+            isActive = true,
+            allowErp = true,
+            allowDispatch = false,
+            allowCrm = false,
+            erpReports = new[] { ErpReports.Invoices }
+        });
+        Assert.Equal(HttpStatusCode.OK, switched.StatusCode);
+
+        var monthlyAfter = await user.SendAsync(Get("/api/bi/monthly-invoices?year=2026", "intranet.phmtrans.cz"));
+        Assert.Equal(HttpStatusCode.Forbidden, monthlyAfter.StatusCode);
+        var invoicesAfter = await user.SendAsync(Get("/api/bi/issued-invoices", "intranet.phmtrans.cz"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, invoicesAfter.StatusCode);
+
+        // Starší požadavek bez seznamu reportů výběr nemění.
+        var legacy = await admin.PutAsJsonAsync($"/api/admin/users/{id}", new
+        {
+            displayName = "Jen faktury",
+            isAdmin = false,
+            isActive = true,
+            allowErp = true,
+            allowDispatch = false,
+            allowCrm = false
+        });
+        Assert.Equal(HttpStatusCode.OK, legacy.StatusCode);
+        var listed = (await admin.GetFromJsonAsync<JsonElement>("/api/admin/users")).EnumerateArray()
+            .Single(item => item.GetProperty("username").GetString() == "mesicni");
+        Assert.Equal([ErpReports.Invoices], listed.GetProperty("erpReports").EnumerateArray().Select(item => item.GetString()));
+    }
+
+    [Fact]
+    public void Erp_reports_null_means_all_and_schema_adds_the_column()
+    {
+        var legacy = new AuthUser { AllowErp = true, ErpReports = null };
+        Assert.Equal(ErpReports.All, legacy.AllowedErpReports());
+        Assert.Empty(new AuthUser { AllowErp = false, ErpReports = null }.AllowedErpReports());
+        Assert.Equal([ErpReports.Monthly], new AuthUser { AllowErp = true, ErpReports = "mesicni" }.AllowedErpReports());
+        Assert.Equal("faktury,mesicni", ErpReports.Store(["mesicni", "FAKTURY"]));
+        Assert.Equal(ErpReports.Invoices, ErpReports.ForApiPath("/api/bi/issued-invoices"));
+        Assert.Equal(ErpReports.Monthly, ErpReports.ForApiPath("/api/bi/monthly-invoices"));
+        Assert.Contains("ADD ErpReports nvarchar(200) NULL", AuthSchema.Script, StringComparison.Ordinal);
+    }
+
     private HttpClient Client() =>
         _app.CreateClient(new WebApplicationFactoryClientOptions
         {

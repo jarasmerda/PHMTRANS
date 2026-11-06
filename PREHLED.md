@@ -79,9 +79,9 @@ Host se bere z `Request.Host`. `X-Forwarded-Host`, `X-Forwarded-Proto` a `X-Forw
 
 ## Přihlášení a účty
 
-Uživatelé jsou v `dbo.Auth_User`, heslo je hash ASP.NET Core `PasswordHasher`. Účet má příznak správce, aktivní a povolené moduly ERP, Dispečink a CRM. Vypnutý účet se nepřihlásí a otevřená relace na dalším požadavku spadne. Posledního aktivního správce nejde odebrat.
+Uživatelé jsou v `dbo.Auth_User`, heslo je hash ASP.NET Core `PasswordHasher`. Účet má příznak správce, aktivní a povolené moduly ERP, Dispečink a CRM. U ERP se navíc vybírají jednotlivé reporty (`Auth_User.ErpReports`, kódy čárkami, např. `faktury,mesicni`). `NULL` znamená všechny reporty, mají ho účty založené dřív. Vypnutý účet se nepřihlásí a otevřená relace na dalším požadavku spadne. Posledního aktivního správce nejde odebrat.
 
-`/heslo` mění vlastní heslo. `/Admin` je jen pro správce: založení, moduly, nové heslo, vypnutí.
+`/heslo` mění vlastní heslo. `/Admin` je jen pro správce: založení, moduly a reporty ERP, nové heslo, vypnutí. S modulem ERP musí být vybraný aspoň jeden report.
 
 První správce se založí, jen když v tabulce žádný není, z proměnných počítače `Intranet__AdminUsername` a `Intranet__AdminPassword` (aspoň 8 znaků).
 
@@ -112,7 +112,7 @@ XML je Windows-1250. Odpověď se čte podle deklarace, a když deklarace řík�
 
 ## ERP
 
-Dva reporty, přepínají se záložkami (`/ERP#faktury`, `/ERP#mesicni`). Faktury jsou `issuedInvoice`, částky v domácí měně.
+Dva reporty, přepínají se záložkami (`/ERP#faktury`, `/ERP#mesicni`). Uživatel vidí jen záložky povolených reportů, API nepovoleného reportu vrací 403 (`ModuleGate`, `ErpReports.ForApiPath`). Nový report se přidává do `ErpReports` v `Auth/AuthModels.cs`, do `admin.html` a do `erp.js`. Faktury jsou `issuedInvoice`, částky v domácí měně.
 
 - **Vydané faktury:** doklady za období s filtrem odběratele, částky s DPH. Stavy: Uhrazeno, Částečně, Po splatnosti, Neuhrazeno.
 - **Vydané faktury – měsíční přehled:** za zvolený rok tabulka odběratel × měsíc s mezisoučty 1Q–4Q a celkem, částky **bez DPH** podle data vystavení. Odběratel se páruje s adresářem podle `partnerIdentity/id` z faktury (ID v `dbo.AD`), když chybí, tak podle IČO. Odběratelé s `dbo.AD.Skupina = 'B'` jsou ve druhé tabulce, ostatní v první. Řádky jsou seřazené od největšího obratu, zobrazí se jen odběratelé s fakturou v daném roce.
