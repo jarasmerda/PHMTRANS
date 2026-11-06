@@ -362,6 +362,10 @@ public static class DispatchSchema
             ALTER TABLE dbo.Disp_Order ADD CustomerEmail nvarchar(98) NULL;
         IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerPhone') IS NULL
             ALTER TABLE dbo.Disp_Order ADD CustomerPhone nvarchar(40) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'LoadingTime') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD LoadingTime time(0) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'UnloadingTime') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD UnloadingTime time(0) NULL;
 
         IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CancelReason') IS NULL
             ALTER TABLE dbo.Disp_OrderVersion ADD CancelReason nvarchar(500) NULL;
@@ -379,6 +383,10 @@ public static class DispatchSchema
             ALTER TABLE dbo.Disp_OrderVersion ADD CustomerEmail nvarchar(98) NULL;
         IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerPhone') IS NULL
             ALTER TABLE dbo.Disp_OrderVersion ADD CustomerPhone nvarchar(40) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'LoadingTime') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD LoadingTime time(0) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'UnloadingTime') IS NULL
+            ALTER TABLE dbo.Disp_OrderVersion ADD UnloadingTime time(0) NULL;
 
         IF NOT EXISTS (
             SELECT 1 FROM sys.indexes

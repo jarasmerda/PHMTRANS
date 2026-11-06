@@ -44,6 +44,7 @@ public sealed class SqlOrderStore(
                     o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
                     o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
                     o.CancelReason, o.CustomerIco, o.CustomerDic, o.CustomerStreet, o.CustomerCity, o.CustomerZip, o.CustomerEmail, o.CustomerPhone,
+                    CONVERT(char(5), o.LoadingTime, 108) AS LoadingTime, CONVERT(char(5), o.UnloadingTime, 108) AS UnloadingTime,
                     q.Status AS LatestSyncStatus, q.LastError AS LatestSyncError, q.Warning AS LatestSyncWarning
                 FROM dbo.Disp_Order o
                 OUTER APPLY (
@@ -649,7 +650,8 @@ public sealed class SqlOrderStore(
                 o.CurrentVersion, o.PohodaOrderId, o.PohodaOrderNumber, o.PohodaInvoiceNumber,
                 o.LastSentVersion, o.CreatedAt, o.UpdatedAt,
                 o.PricingMode, o.SalePerKm, o.SalePerLiter, o.CostPerKm,
-                o.CancelReason, o.CustomerIco, o.CustomerDic, o.CustomerStreet, o.CustomerCity, o.CustomerZip, o.CustomerEmail, o.CustomerPhone
+                o.CancelReason, o.CustomerIco, o.CustomerDic, o.CustomerStreet, o.CustomerCity, o.CustomerZip, o.CustomerEmail, o.CustomerPhone,
+                CONVERT(char(5), o.LoadingTime, 108) AS LoadingTime, CONVERT(char(5), o.UnloadingTime, 108) AS UnloadingTime
             FROM dbo.Disp_Order o
             WHERE o.Id = @Id
             """,
@@ -673,7 +675,8 @@ public sealed class SqlOrderStore(
                 Note, CmrNumber, VehicleId, DriverId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
-                CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone
+                CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone,
+                CONVERT(char(5), LoadingTime, 108) AS LoadingTime, CONVERT(char(5), UnloadingTime, 108) AS UnloadingTime
             FROM dbo.Disp_OrderVersion
             WHERE OrderId = @Id
             ORDER BY Version DESC
@@ -699,7 +702,8 @@ public sealed class SqlOrderStore(
                 Note, CmrNumber, VehicleId, DriverId, Status, IsLocked,
                 PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                 PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
-                CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone
+                CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone,
+                CONVERT(char(5), LoadingTime, 108) AS LoadingTime, CONVERT(char(5), UnloadingTime, 108) AS UnloadingTime
             FROM dbo.Disp_OrderVersion
             WHERE OrderId = @Id AND Version = @Version
             """,
@@ -735,13 +739,13 @@ public sealed class SqlOrderStore(
                  FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, Status,
                  IsLocked, CurrentVersion, PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, LastSentVersion,
                  CreatedAt, UpdatedAt, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
-                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
+                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone, LoadingTime, UnloadingTime)
             VALUES
                 (@Id, @Code, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
                  @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @Status,
                  @IsLocked, @CurrentVersion, @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @LastSentVersion,
                  @CreatedAt, @UpdatedAt, @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm,
-                 @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
+                 @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone, @LoadingTime, @UnloadingTime)
             """,
             transaction,
             cancellationToken,
@@ -789,6 +793,8 @@ public sealed class SqlOrderStore(
                 CustomerZip = @CustomerZip,
                 CustomerEmail = @CustomerEmail,
                 CustomerPhone = @CustomerPhone,
+                LoadingTime = @LoadingTime,
+                UnloadingTime = @UnloadingTime,
                 UpdatedAt = @UpdatedAt
             WHERE Id = @Id
             """,
@@ -808,13 +814,13 @@ public sealed class SqlOrderStore(
                  FuelType, FuelTypeId, Liters, AgreedPrice, Surcharges, Note, CmrNumber, VehicleId, DriverId, Status, IsLocked,
                  PohodaOrderId, PohodaOrderNumber, PohodaInvoiceNumber, CreatedUtc,
                  PricingMode, SalePerKm, SalePerLiter, CostPerKm, RouteJson,
-                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone)
+                 CancelReason, CustomerIco, CustomerDic, CustomerStreet, CustomerCity, CustomerZip, CustomerEmail, CustomerPhone, LoadingTime, UnloadingTime)
             VALUES
                 (@Id, @CurrentVersion, @CustomerPohodaId, @CustomerName, @LoadingPlace, @UnloadingPlace, @LoadingDate, @UnloadingDate,
                  @FuelType, @FuelTypeId, @Liters, @AgreedPrice, @Surcharges, @Note, @CmrNumber, @VehicleId, @DriverId, @Status, @IsLocked,
                  @PohodaOrderId, @PohodaOrderNumber, @PohodaInvoiceNumber, @UpdatedAt,
                  @PricingMode, @SalePerKm, @SalePerLiter, @CostPerKm, @RouteJson,
-                 @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone)
+                 @CancelReason, @CustomerIco, @CustomerDic, @CustomerStreet, @CustomerCity, @CustomerZip, @CustomerEmail, @CustomerPhone, @LoadingTime, @UnloadingTime)
             """,
             transaction,
             cancellationToken,
@@ -855,7 +861,9 @@ public sealed class SqlOrderStore(
                 order.CustomerCity,
                 order.CustomerZip,
                 order.CustomerEmail,
-                order.CustomerPhone
+                order.CustomerPhone,
+                order.LoadingTime,
+                order.UnloadingTime
             }));
 
     private static Task<int> DeleteOrderAsync(
@@ -1242,6 +1250,8 @@ public sealed class SqlOrderStore(
         public string? CustomerZip { get; set; }
         public string? CustomerEmail { get; set; }
         public string? CustomerPhone { get; set; }
+        public string? LoadingTime { get; set; }
+        public string? UnloadingTime { get; set; }
 
         public DispatchOrder ToOrder() => new(
             Id, Code, CustomerPohodaId, CustomerName, LoadingPlace, UnloadingPlace, LoadingDate, UnloadingDate,
@@ -1250,7 +1260,7 @@ public sealed class SqlOrderStore(
             CreatedAt, UpdatedAt, LatestSyncStatus, LatestSyncError, LatestSyncWarning, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
             CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
             CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone,
-            FuelTypeId: FuelTypeId);
+            FuelTypeId: FuelTypeId, LoadingTime: LoadingTime, UnloadingTime: UnloadingTime);
     }
 
     private sealed class DistanceSqlRow
@@ -1304,6 +1314,8 @@ public sealed class SqlOrderStore(
         public string? CustomerZip { get; set; }
         public string? CustomerEmail { get; set; }
         public string? CustomerPhone { get; set; }
+        public string? LoadingTime { get; set; }
+        public string? UnloadingTime { get; set; }
 
         public DispatchOrder ToOrder(DispatchOrder order)
         {
@@ -1314,7 +1326,7 @@ public sealed class SqlOrderStore(
                 order.CreatedAt, CreatedUtc, null, null, null, PricingMode, SalePerKm, SalePerLiter, CostPerKm,
                 CancelReason: CancelReason, CustomerIco: CustomerIco, CustomerDic: CustomerDic, CustomerStreet: CustomerStreet,
                 CustomerCity: CustomerCity, CustomerZip: CustomerZip, CustomerEmail: CustomerEmail, CustomerPhone: CustomerPhone,
-                FuelTypeId: FuelTypeId);
+                FuelTypeId: FuelTypeId, LoadingTime: LoadingTime, UnloadingTime: UnloadingTime);
             return OrderRoute.Read(version, RouteJson);
         }
     }

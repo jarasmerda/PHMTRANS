@@ -111,6 +111,9 @@
     #calendar .over { background: #fde8e8; }
     #calendar .cal-order { display: block; margin: 0 0 0.2rem; font-size: 0.78rem; text-align: left; }
     #calendar .cal-order small { display: block; font-weight: 400; color: var(--text-secondary); }
+    .date-time { display: flex; gap: 0.3rem; }
+    .date-time input[type="date"] { flex: 1 1 8.5rem; min-width: 0; }
+    .date-time input[type="time"] { flex: 0 0 6.2rem; min-width: 0; }
     .availability { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; min-width: 0; }
     .avail-panel { flex-basis: 100%; min-width: 0; }
     .avail-scroll { overflow-x: auto; max-width: 100%; }
@@ -401,7 +404,7 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=18"></script>
+  <script src="/dispecink-orders.js?v=19"></script>
   <script src="/dispecink-doklady.js?v=1"></script>
 </body>
 </html>
