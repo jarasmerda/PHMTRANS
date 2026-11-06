@@ -39,7 +39,7 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
 
         var portal = await client.SendAsync(Request("/", null, user: false));
         Assert.Equal(HttpStatusCode.OK, portal.StatusCode);
-        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", await portal.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/\">Intranet</a>", await portal.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
         var signedDispatch = await client.SendAsync(Request("/Dispecink", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, signedDispatch.StatusCode);
