@@ -22,9 +22,12 @@ public static class SecurityHeaders
                 headers["Content-Security-Policy"] = ContentSecurityPolicy;
                 headers.Remove("X-Powered-By");
 
-                // Odpovědi API obsahují firemní data, prohlížeč ani proxy je nemají ukládat.
-                if (context.Request.Path.StartsWithSegments("/api"))
-                    headers.CacheControl = "no-store";
+                // API vrací firemní data a stránky modulů se smí ukázat jen přihlášeným.
+                // IIS/ARR ani prohlížeč je proto nesmí uložit, jinak by cache vracela stránku bez kontroly přihlášení.
+                var contentType = context.Response.ContentType ?? "";
+                if (context.Request.Path.StartsWithSegments("/api")
+                    || contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+                    headers.CacheControl = "no-store, private";
 
                 return Task.CompletedTask;
             });

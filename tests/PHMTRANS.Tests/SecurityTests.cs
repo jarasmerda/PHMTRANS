@@ -56,7 +56,9 @@ public sealed class SecurityTests : IClassFixture<PublicSiteApp>
         Assert.Equal("nosniff", page.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.Equal("DENY", page.Headers.GetValues("X-Frame-Options").Single());
         Assert.Contains("frame-ancestors 'none'", page.Headers.GetValues("Content-Security-Policy").Single(), StringComparison.Ordinal);
-        Assert.Equal("no-store", api.Headers.CacheControl?.ToString());
+        Assert.True(api.Headers.CacheControl?.NoStore);
+        Assert.True(page.Headers.CacheControl?.NoStore);
+        Assert.True(page.Headers.CacheControl?.Private);
     }
 
     [Fact]
