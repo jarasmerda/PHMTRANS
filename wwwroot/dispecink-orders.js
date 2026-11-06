@@ -7,7 +7,7 @@ const orderTime = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeSty
 const orderStatuses = ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno"];
 const orderMessage = document.querySelector("#order-message");
 const queueMessage = document.querySelector("#queue-message");
-let orderCatalog = { vehicles: [], drivers: [], trips: [], fuelTypes: [] };
+let orderCatalog = { vehicles: [], drivers: [], trips: [], fuelTypes: [], loadingPlaces: [] };
 const distanceCache = new Map();
 const distanceTimers = {};
 const distanceGeneration = {};
@@ -130,7 +130,7 @@ function formFields(prefix, order) {
     <input type="hidden" id="${prefix}-customer-zip" value="${orderText(order?.customerZip || "")}">
     <input type="hidden" id="${prefix}-customer-email" value="${orderText(order?.customerEmail || "")}">
     <input type="hidden" id="${prefix}-customer-phone" value="${orderText(order?.customerPhone || "")}">
-    <label>Nakládka <input id="${prefix}-loading" required maxlength="160" value="${orderText(order?.loadingPlace || "")}"></label>
+    ${loadingField(prefix, order?.loadingPlace || "")}
     <label>Datum nakládky <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}"></label>
     <label>Datum vykládky <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}"></label>
     <label>Druh paliva <select id="${prefix}-fuel" required>${fuelOptions(order?.fuelTypeId, order?.fuelType, !order)}</select></label>
@@ -162,6 +162,23 @@ function formFields(prefix, order) {
     </div>
     ${prefix === "create" ? `<div class="wide"><button type="submit">Založit zakázku</button></div>` : ""}
   `;
+}
+
+function loadingField(prefix, current) {
+  const places = orderCatalog.loadingPlaces || [];
+  if (!places.length) {
+    return `<label>Nakládka <input id="${prefix}-loading" required maxlength="160" value="${orderText(current)}">
+      <span class="note">Seznam nakládek je prázdný (tabulka Disp_LoadingPlace).</span></label>`;
+  }
+  const known = places.some((item) => item.name === current);
+  const legacy = current && !known
+    ? `<option value="${orderText(current)}" selected>${orderText(current)} (mimo seznam)</option>`
+    : "";
+  const body = places.map((item) =>
+    `<option value="${orderText(item.name)}"${item.name === current ? " selected" : ""}>${orderText(item.name)}</option>`).join("");
+  return `<label>Nakládka <select id="${prefix}-loading" required>
+      <option value=""${current ? "" : " selected"}>— vyberte nakládku —</option>${legacy}${body}
+    </select></label>`;
 }
 
 function fuelOptions(selectedId, fallbackName, preferFirst) {
@@ -826,16 +843,18 @@ async function orderFetch(url, options) {
 }
 
 async function fetchCatalog() {
-  const [vehicles, drivers, trips, fuels] = await Promise.all([
+  const [vehicles, drivers, trips, fuels, loadingPlaces] = await Promise.all([
     orderFetch("/api/dispatch/vehicles"),
     orderFetch("/api/dispatch/drivers"),
     orderFetch("/api/dispatch/trips"),
-    orderFetch("/api/dispatch/fuel-types")
+    orderFetch("/api/dispatch/fuel-types"),
+    orderFetch("/api/dispatch/loading-places")
   ]);
   if (Array.isArray(vehicles.data)) orderCatalog.vehicles = vehicles.data;
   if (Array.isArray(drivers.data)) orderCatalog.drivers = drivers.data;
   if (Array.isArray(trips.data)) orderCatalog.trips = trips.data;
   if (Array.isArray(fuels.data)) orderCatalog.fuelTypes = fuels.data;
+  if (Array.isArray(loadingPlaces.data)) orderCatalog.loadingPlaces = loadingPlaces.data;
 }
 
 async function loadCatalog() {
@@ -1060,6 +1079,11 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
 });
 
 document.querySelector("#orders-view").addEventListener("change", (event) => {
+  if (event.target.matches("select[id$='-loading']")) {
+    const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
+    refreshRoute(prefix);
+    scheduleDistanceFill(prefix);
+  }
   if (event.target.matches("[id$='-trip']")) {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
     applyTripCrew(prefix);

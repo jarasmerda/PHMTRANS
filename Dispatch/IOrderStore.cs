@@ -12,6 +12,8 @@ public interface IOrderStore
 
     Task<IReadOnlyList<FuelTypeItem>> ListFuelTypesAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<LoadingPlaceItem>> ListLoadingPlacesAsync(CancellationToken cancellationToken);
+
     Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken);
 
     Task SaveDistanceAsync(DistanceWrite write, string? updatedBy, CancellationToken cancellationToken);

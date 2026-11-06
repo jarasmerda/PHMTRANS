@@ -56,6 +56,9 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
     public Task<IReadOnlyList<FuelTypeItem>> ListFuelTypesAsync(CancellationToken cancellationToken) =>
         Task.FromResult(FuelTypeCatalog.Seed);
 
+    public Task<IReadOnlyList<LoadingPlaceItem>> ListLoadingPlacesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<LoadingPlaceItem>>([new(1, "Sklad Kralupy"), new(2, "Sklad Mělník")]);
+
     public Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken) =>
         Task.FromResult(_distances.Lookup(pairs));
 

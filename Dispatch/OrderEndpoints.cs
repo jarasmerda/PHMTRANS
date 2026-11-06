@@ -11,6 +11,7 @@ public static class OrderEndpoints
         api.MapGet("/orders", ListOrders);
         api.MapGet("/orders/{id}", GetOrder);
         api.MapGet("/fuel-types", ListFuelTypes);
+        api.MapGet("/loading-places", ListLoadingPlaces);
         api.MapPost("/distances/lookup", LookupDistances);
         api.MapPost("/distances", SaveDistance);
         api.MapPost("/orders", CreateOrder);
@@ -68,6 +69,9 @@ public static class OrderEndpoints
 
     private static Task<IResult> ListFuelTypes(IOrderStore store, CancellationToken cancellationToken) =>
         Execute(async () => Results.Ok(await store.ListFuelTypesAsync(cancellationToken)));
+
+    private static Task<IResult> ListLoadingPlaces(IOrderStore store, CancellationToken cancellationToken) =>
+        Execute(async () => Results.Ok(await store.ListLoadingPlacesAsync(cancellationToken)));
 
     private static Task<IResult> LookupDistances(
         DistanceLookupRequest? request,
