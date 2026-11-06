@@ -469,10 +469,22 @@ tbody tr:nth-child(even) { background: rgba(247, 244, 238, 0.94); }
 
 table.monthly { font-size: 0.82rem; white-space: nowrap; }
 table.monthly th, table.monthly td { padding: 0.35rem 0.4rem; }
-table.monthly td:first-child, table.monthly th:first-child { position: sticky; left: 0; background: #fff; }
+table.monthly td:first-child, table.monthly th:first-child { position: sticky; left: 0; z-index: 1; }
+table.monthly td:first-child { background: #fff; }
+table.monthly th:first-child { background: var(--table-header); }
+/* Název firmy se zalomí po zhruba 60 znacích, na úzkém displeji dřív, aby zůstalo místo pro čísla. */
+table.monthly .company {
+  display: block;
+  max-width: min(60ch, 45vw);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 table.monthly .quarter { background: rgba(214, 205, 178, 0.55); font-weight: 700; }
 table.monthly .total { background: rgba(196, 184, 148, 0.75); }
-table.monthly tfoot th, table.monthly tfoot td { font-weight: 700; border-top: 2px solid var(--ink); }
+table.monthly th.quarter { background: #d6cdb2; color: var(--ink); }
+table.monthly th.total { background: #c4b894; }
+table.monthly tr.sum td { font-weight: 700; border-top: 2px solid var(--ink); }
+table.monthly tr.gap td { height: 1.4rem; padding: 0; background: #fff; border: 0; }
 
 .monthly-note {
   width: var(--page);

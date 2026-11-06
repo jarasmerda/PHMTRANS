@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vydané faktury – PHM Trans</title>
-  <link rel="stylesheet" href="/erp.css?v=19">
+  <link rel="stylesheet" href="/erp.css?v=20">
   <link rel="stylesheet" href="/filter.css?v=1">
 </head>
 <body>
@@ -85,15 +85,12 @@
     <button type="submit">Zobrazit</button>
   </form>
   <p id="monthly-message" hidden></p>
-  <section class="monthly-wrap" id="monthly-main-wrap" hidden>
-    <div class="table-scroll"><table class="monthly" id="monthly-main"></table></div>
+  <section class="monthly-wrap" id="monthly-wrap" hidden>
+    <div class="table-scroll"><table class="monthly" id="monthly"></table></div>
   </section>
-  <section class="monthly-wrap" id="monthly-b-wrap" hidden>
-    <div class="table-scroll"><table class="monthly" id="monthly-b"></table></div>
-  </section>
-  <p class="monthly-note" id="monthly-note" hidden>Částky bez DPH podle data vystavení. Druhá tabulka jsou odběratelé ze skupiny B adresáře Pohody.</p>
+  <p class="monthly-note" id="monthly-note" hidden>Částky bez DPH podle data vystavení. Spodní část jsou odběratelé ze skupiny B adresáře Pohody.</p>
   </div>
   <script src="/multi-filter.js?v=1"></script>
-  <script src="/erp.js?v=8"></script>
+  <script src="/erp.js?v=10"></script>
 </body>
 </html>
