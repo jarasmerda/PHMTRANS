@@ -159,20 +159,33 @@ function monthlyCells(months, quarters, total) {
   return cells.join("");
 }
 
-function monthlyTable(section, empty) {
-  const head = ["<th>Fakturace v Kč</th>"];
+function monthlyHead(title) {
+  const head = [`<th>${text(title)}</th>`];
   for (let quarter = 0; quarter < 4; quarter++) {
     for (let month = quarter * 3 + 1; month <= quarter * 3 + 3; month++)
       head.push(`<th class="num">${month}</th>`);
     head.push(`<th class="num quarter">${quarter + 1}Q</th>`);
   }
   head.push(`<th class="num quarter total">Celkem</th>`);
+  return `<tr class="head">${head.join("")}</tr>`;
+}
+
+function monthlySection(section, empty) {
   const rows = section.rows.map((row) =>
-    `<tr><td>${text(row.customer)}</td>${monthlyCells(row.months, row.quarters, row.total)}</tr>`).join("")
+    `<tr><td><span class="company">${text(row.customer)}</span></td>${monthlyCells(row.months, row.quarters, row.total)}</tr>`).join("")
     || `<tr><td colspan="18">${text(empty)}</td></tr>`;
-  return `<thead><tr>${head.join("")}</tr></thead>
-    <tbody>${rows}</tbody>
-    <tfoot><tr><th>Celkem</th>${monthlyCells(section.months, section.quarters, section.total)}</tr></tfoot>`;
+  return `${rows}<tr class="sum"><td>Celkem</td>${monthlyCells(section.months, section.quarters, section.total)}</tr>`;
+}
+
+// Obě části jsou v jedné tabulce, aby se při posunu do strany hýbaly spolu a sloupce měsíců byly pod sebou.
+function monthlyTable(data) {
+  return `<thead>${monthlyHead("Fakturace v Kč")}</thead>
+    <tbody>
+      ${monthlySection(data.main, "V tomto roce není žádná faktura.")}
+      <tr class="gap"><td colspan="18"></td></tr>
+      ${monthlyHead("Fakturace v Kč – skupina B")}
+      ${monthlySection(data.groupB, "Odběratelé ze skupiny B v tomto roce nemají fakturu.")}
+    </tbody>`;
 }
 
 async function loadMonthly(event) {
@@ -180,8 +193,7 @@ async function loadMonthly(event) {
   const year = Number(monthlyYear.value);
   const current = ++monthlySeq;
   showMonthlyMessage("Načítám faktury z Pohody…");
-  document.querySelector("#monthly-main-wrap").hidden = true;
-  document.querySelector("#monthly-b-wrap").hidden = true;
+  document.querySelector("#monthly-wrap").hidden = true;
   document.querySelector("#monthly-note").hidden = true;
 
   let response;
@@ -205,10 +217,8 @@ async function loadMonthly(event) {
 
   showMonthlyMessage("");
   monthlyLoadedYear = year;
-  document.querySelector("#monthly-main").innerHTML = monthlyTable(data.main, "V tomto roce není žádná faktura.");
-  document.querySelector("#monthly-b").innerHTML = monthlyTable(data.groupB, "Odběratelé ze skupiny B v tomto roce nemají fakturu.");
-  document.querySelector("#monthly-main-wrap").hidden = false;
-  document.querySelector("#monthly-b-wrap").hidden = false;
+  document.querySelector("#monthly").innerHTML = monthlyTable(data);
+  document.querySelector("#monthly-wrap").hidden = false;
   document.querySelector("#monthly-note").hidden = false;
 }
 

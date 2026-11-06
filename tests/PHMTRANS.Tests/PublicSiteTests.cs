@@ -25,7 +25,7 @@ public sealed class PublicSitePageTests
         var webConfig = File.ReadAllText(Path.Combine(root, "web.config"));
 
         Assert.Contains("lang=\"cs\"", html, StringComparison.Ordinal);
-        Assert.Contains("erp.css?v=19", html, StringComparison.Ordinal);
+        Assert.Contains("erp.css?v=20", html, StringComparison.Ordinal);
         Assert.Contains("landing.css?v=14", html, StringComparison.Ordinal);
         Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Intranet\"", html, StringComparison.Ordinal);
