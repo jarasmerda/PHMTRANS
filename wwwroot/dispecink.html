@@ -324,15 +324,6 @@
       <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
       <p id="order-cancel-note" class="note warn" hidden></p>
       <p id="order-sync-warning" class="note warn" hidden></p>
-      <form id="order-edit"></form>
-      <div class="order-actions">
-        <button type="button" id="order-save">Uložit změny</button>
-        <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
-        <button type="button" id="order-invoice">Označit jako vyfakturované</button>
-        <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
-        <button type="button" id="order-cancel" class="ghost">Stornovat</button>
-        <button type="button" id="order-close" class="ghost">Zavřít</button>
-      </div>
       <section id="order-docs" class="docs">
         <h3>Doklady</h3>
         <p class="note">Fotky a PDF se ukládají do složky zakázky na serveru, odkud je OneDrive synchronizuje.</p>
@@ -344,7 +335,16 @@
         </div>
         <p id="doc-message" class="note" hidden></p>
         <ul id="doc-list" class="doc-list"></ul>
-      </section>
+      </section>      <form id="order-edit"></form>
+      <div class="order-actions">
+        <button type="button" id="order-save">Uložit změny</button>
+        <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
+        <button type="button" id="order-invoice">Označit jako vyfakturované</button>
+        <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
+        <button type="button" id="order-cancel" class="ghost">Stornovat</button>
+        <button type="button" id="order-close" class="ghost">Zavřít</button>
+      </div>
+
       <h3>Historie verzí</h3>
       <p class="note">Starší uložené snímky. Aktuální údaje jsou ve formuláři nahoře.</p>
       <ul id="version-links" class="version-links"></ul>
@@ -454,8 +454,8 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=20"></script>
+  <script src="/dispecink-orders.js?v=21"></script>
   <script src="/dispecink-doklady.js?v=1"></script>
-  <script src="/dispecink-tyden.js?v=1"></script>
+  <script src="/dispecink-tyden.js?v=2"></script>
 </body>
 </html>

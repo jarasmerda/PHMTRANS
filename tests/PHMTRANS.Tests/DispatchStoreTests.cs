@@ -41,15 +41,17 @@ public sealed class DispatchPageTests
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
         Assert.Contains("dispecink.js?v=14", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=20", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=21", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
         Assert.Contains("table.avail", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-tyden.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-tyden.js?v=2", html, StringComparison.Ordinal);
         Assert.Contains("id=\"open-week\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"week-view\" hidden", html, StringComparison.Ordinal);
         Assert.Contains("#zakazka=", ordersJs, StringComparison.Ordinal);
+        Assert.Contains("data-open-week", ordersJs, StringComparison.Ordinal);
+        Assert.True(html.IndexOf("id=\"order-docs\"", StringComparison.Ordinal) < html.IndexOf("id=\"order-edit\"", StringComparison.Ordinal));
         var weekJs = File.ReadAllText(Path.Combine(root, "dispecink-tyden.js"));
         Assert.Contains("/api/dispatch/calendar/events?from=", weekJs, StringComparison.Ordinal);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
