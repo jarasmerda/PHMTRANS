@@ -197,12 +197,19 @@ function stopRow(prefix, stop, leg, headerFuelId, headerFuelName) {
   const linked = !stop?.fuelTypeId || String(stop.fuelTypeId) === String(headerDefault) ? "1" : "0";
   const source = leg?.kmSource === "Matrix" || leg?.kmSource === "Manual" ? leg.kmSource : "";
   return `<div class="stop-row" data-stop-row data-km-source="${orderText(source)}">
+      <p class="stop-pair" data-stop-pair></p>
       <label>Místo <input data-stop-place maxlength="160" value="${orderText(stop?.place || "")}"></label>
       <label>Palivo <select data-stop-fuel data-fuel-linked="${linked}">${fuelOptions(fuelId, stop?.fuelType || headerFuelName, false)}</select></label>
       <label>Litry <input data-stop-liters type="number" min="0" step="0.001" value="${orderText(stop?.liters ?? "")}"></label>
-      <label>Km <input data-leg-km type="number" min="0" step="0.001" value="${orderText(leg?.kilometers ?? "")}"><span class="km-source" data-km-label></span></label>
-      <label>Prodej Kč <input data-leg-sale type="number" min="0" step="0.01" value="${orderText(leg?.salePrice ?? "")}"${leg?.saleOverridden ? "" : " readonly"}></label>
-      <label class="stop-override"><input data-leg-override type="checkbox"${leg?.saleOverridden ? " checked" : ""}> Ruční cena</label>
+      <div class="stop-km">
+        <label>Km <input data-leg-km type="number" min="0" step="0.001" value="${orderText(leg?.kilometers ?? "")}"></label>
+        <span class="km-source" data-km-label></span>
+        <button type="button" class="km-save" data-km-save hidden>Uložit do matice</button>
+      </div>
+      <div class="stop-sale">
+        <label>Prodej Kč <input data-leg-sale type="number" min="0" step="0.01" value="${orderText(leg?.salePrice ?? "")}"${leg?.saleOverridden ? "" : " readonly"}></label>
+        <label class="stop-override"><input data-leg-override type="checkbox"${leg?.saleOverridden ? " checked" : ""}> Ruční cena</label>
+      </div>
       <label class="stop-note">Poznámka <input data-stop-note maxlength="500" value="${orderText(stop?.note || "")}"></label>
       <label class="stop-arrival">Příjezd <input data-stop-arrival type="datetime-local" value="${orderText(arrival)}"></label>
       <div class="stop-actions">
@@ -248,10 +255,56 @@ function paintKmSource(row) {
   const km = row.querySelector("[data-leg-km]")?.value.trim() ?? "";
   const place = row.querySelector("[data-stop-place]")?.value.trim() ?? "";
   label.classList.toggle("manual", source === "Manual");
+  label.classList.toggle("missing", source !== "Matrix" && source !== "Manual" && !!place && km === "");
   if (source === "Matrix") label.textContent = "z matice";
-  else if (source === "Manual") label.textContent = "ručně";
-  else if (place && km === "") label.textContent = "není v matici";
+  else if (source === "Manual") label.textContent = "ručně, není v matici";
+  else if (place && km === "") label.textContent = "není v matici, zadejte km";
   else label.textContent = "";
+  const save = row.querySelector("[data-km-save]");
+  if (save) {
+    const pair = row.dataset.kmFrom && row.dataset.kmTo;
+    save.hidden = !(pair && source === "Manual" && Number(km) > 0);
+    save.disabled = false;
+  }
+}
+
+function paintPairs(prefix) {
+  const rows = [...document.querySelectorAll(`#${prefix}-stops [data-stop-row]`)];
+  const loading = document.querySelector(`#${prefix}-loading`)?.value.trim() || "";
+  rows.forEach((row, index) => {
+    const from = index === 0 ? loading : (rows[index - 1].querySelector("[data-stop-place]")?.value.trim() || "");
+    const to = row.querySelector("[data-stop-place]")?.value.trim() || "";
+    row.dataset.kmFrom = from;
+    row.dataset.kmTo = to;
+    const fromName = index === 0 ? "Nakládka" : `Vykládka ${index}`;
+    const target = row.querySelector("[data-stop-pair]");
+    if (target) target.textContent = `Úsek ${index + 1}: ${fromName}${from ? ` (${from})` : ""} → Vykládka ${index + 1}${to ? ` (${to})` : ""}`;
+    paintKmSource(row);
+  });
+}
+
+async function saveKmToMatrix(prefix, row) {
+  const button = row.querySelector("[data-km-save]");
+  const km = Number(row.querySelector("[data-leg-km]")?.value);
+  const from = row.dataset.kmFrom || "";
+  const to = row.dataset.kmTo || "";
+  if (!from || !to || !(km > 0)) return;
+  if (button) button.disabled = true;
+  const result = await orderFetch("/api/dispatch/distances", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to, km })
+  });
+  if (!result.ok) {
+    if (button) button.disabled = false;
+    orderShow(orderMessage, result.data?.message || "Kilometry se nepodařilo uložit do matice.");
+    return;
+  }
+  distanceCache.set(canonicalKey(from, to), Number(result.data?.km ?? km));
+  row.dataset.kmSource = "Matrix";
+  orderShow(orderMessage, "");
+  paintKmSource(row);
+  refreshRoute(prefix);
 }
 
 function applyLookedUpKm(row, km) {
@@ -405,6 +458,7 @@ function routeState(prefix) {
 }
 
 function refreshRoute(prefix) {
+  paintPairs(prefix);
   const state = routeState(prefix);
   const loaded = Number(document.querySelector(`#${prefix}-liters`)?.value || 0);
   const surcharges = Number(document.querySelector(`#${prefix}-surcharges`)?.value || 0);
@@ -952,6 +1006,10 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
   }
   if (!row) {
     refreshRoute(prefix);
+    return;
+  }
+  if (event.target.closest("[data-km-save]")) {
+    saveKmToMatrix(prefix, row);
     return;
   }
   if (event.target.closest("[data-stop-remove]")) {

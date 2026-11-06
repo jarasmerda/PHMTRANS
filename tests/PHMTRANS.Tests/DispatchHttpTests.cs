@@ -204,6 +204,28 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
     }
 
     [Fact]
+    public async Task Saving_a_distance_needs_login_and_valid_kilometers()
+    {
+        using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        HttpRequestMessage Post(string path, string body, bool user)
+        {
+            var message = new HttpRequestMessage(HttpMethod.Post, path) { Content = Json(body) };
+            if (user)
+                message.Headers.TryAddWithoutValidation("X-Test-User", "dispecer");
+            return message;
+        }
+
+        var anonymous = await client.SendAsync(Post("/api/dispatch/distances", """{"from":"Sklad Test","to":"ČS Test","km":42}""", user: false));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        var invalid = await client.SendAsync(Post("/api/dispatch/distances", """{"from":"Sklad Test","to":"ČS Test","km":0}""", user: true));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        using var json = JsonDocument.Parse(await invalid.Content.ReadAsStringAsync());
+        Assert.Contains("Kilometry", json.RootElement.GetProperty("message").GetString());
+    }
+
+    [Fact]
     public async Task Existing_trip_can_be_edited_and_unknown_trip_is_not_found()
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });

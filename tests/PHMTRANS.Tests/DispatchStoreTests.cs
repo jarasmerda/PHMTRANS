@@ -404,7 +404,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
         Assert.Contains("dispecink.js?v=12", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=10", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=11", html, StringComparison.Ordinal);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("filter.css?v=1", html, StringComparison.Ordinal);
         Assert.Contains("value=\"Nová\" checked", html, StringComparison.Ordinal);

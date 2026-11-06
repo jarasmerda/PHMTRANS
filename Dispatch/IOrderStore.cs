@@ -14,6 +14,8 @@ public interface IOrderStore
 
     Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken);
 
+    Task SaveDistanceAsync(DistanceWrite write, string? updatedBy, CancellationToken cancellationToken);
+
     Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken);
 
     Task<OrderMutation> MarkInvoicedAsync(string id, string? invoiceNumber, CancellationToken cancellationToken);

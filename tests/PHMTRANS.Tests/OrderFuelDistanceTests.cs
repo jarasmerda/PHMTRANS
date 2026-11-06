@@ -34,6 +34,32 @@ public sealed class OrderFuelDistanceTests
     }
 
     [Fact]
+    public void Saving_a_pair_by_hand_checks_places_and_kilometers()
+    {
+        var ok = DistanceSave.Validate(new DistanceSaveRequest(" Sklad Kralupy ", "ČS Brno", 180.12345m));
+        Assert.Null(ok.Error);
+        Assert.Equal(new DistanceWrite("Sklad Kralupy", "ČS Brno", 180.123m), ok.Write);
+
+        Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("", "ČS Brno", 10m)).Error);
+        Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("ČS Brno", " čs  brno ", 10m)).Error);
+        Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("A", "B", null)).Error);
+        Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("A", "B", 0m)).Error);
+        Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("A", "B", 100_001m)).Error);
+        Assert.NotNull(DistanceSave.Validate(null).Error);
+    }
+
+    [Fact]
+    public async Task A_pair_saved_by_hand_is_found_in_both_directions_with_its_author()
+    {
+        var orders = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(new PohodaOptions { SyncMode = "DryRun" }));
+        await orders.SaveDistanceAsync(new DistanceWrite("Sklad Test", "ČS Test", 42.5m), "Jana", CancellationToken.None);
+
+        var hits = await orders.LookupDistancesAsync([new DistanceQuery("čs test", "SKLAD TEST")], CancellationToken.None);
+        Assert.Equal(42.5m, hits.Single().Km);
+        Assert.Equal("Jana", orders.FindDistance("ČS Test", "Sklad Test")!.UpdatedBy);
+    }
+
+    [Fact]
     public void Distance_book_remembers_the_writer_and_the_reverse_direction()
     {
         var book = new DistanceBook();

@@ -96,6 +96,14 @@ public sealed class SqlOrderStore(
             return Lookup(map, pairs);
         }, cancellationToken);
 
+    public Task SaveDistanceAsync(DistanceWrite write, string? updatedBy, CancellationToken cancellationToken) =>
+        InConnection(async (connection, transaction, token) =>
+        {
+            await UpsertDistancesAsync(connection, transaction!, [write], updatedBy, DateTimeOffset.Now, token);
+            await transaction!.CommitAsync(token);
+            return true;
+        }, cancellationToken, transaction: true);
+
     public Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken) =>
         ChangeAsync(id, (context, _) => OrderWorkflow.Confirm(context), cancellationToken);
 

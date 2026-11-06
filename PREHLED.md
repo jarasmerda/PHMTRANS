@@ -154,7 +154,7 @@ VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 
 **Ceny.** Prodej za kilometr, nebo za litr. Náklad úseku je km × Kč/km. Prodej je km × sazba, litry × sazba, nebo ruční cena úseku, plus příplatky. Deska ukazuje km, naloženo, vyloženo, náklad, prodej a marži v Kč, Kč/km a procentech. Vyložené litry nad naložené se jen upozorní.
 
-**Matice vzdáleností.** `Disp_Distance` má normalizované `FromPlace` a `ToPlace`, A→B je totéž co B→A. U km je vidět `z matice`, nebo `ručně`. Chybějící nebo přepsané km se při uložení zakázky zapíšou i s uživatelem.
+**Matice vzdáleností.** `Disp_Distance` má normalizované `FromPlace` a `ToPlace`, A→B je totéž co B→A. Každá vykládka ukazuje svůj úsek (Nakládka → Vykládka 1, Vykládka 1 → Vykládka 2 …) a km se doplní z matice. Když pár v matici chybí, řádek napíše „není v matici, zadejte km“. Po zadání km se objeví tlačítko **Uložit do matice**, které pár hned zapíše do `Disp_Distance` i s uživatelem (`POST /api/dispatch/distances`). Chybějící nebo přepsané km se zapíšou i při uložení zakázky. Km slouží pro nákladovou cenu úseku.
 
 **Verze.** Každá obchodní změna přidá řádek `Disp_OrderVersion` se sazbami, vykládkami a úseky v `RouteJson`. Starší verze jde otevřít jen ke čtení. Přiřazení jízdy, vozidla a řidiče verzi ani frontu nedělá.
 
