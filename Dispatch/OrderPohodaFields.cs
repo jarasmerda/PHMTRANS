@@ -35,7 +35,6 @@ public static class OrderPohodaFields
         && left.CmrNumber == right.CmrNumber
         && left.VehicleId == right.VehicleId
         && left.DriverId == right.DriverId
-        && left.TripId == right.TripId
         && left.Status == right.Status
         && left.IsLocked == right.IsLocked
         && left.PohodaInvoiceNumber == right.PohodaInvoiceNumber

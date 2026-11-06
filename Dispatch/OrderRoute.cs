@@ -147,8 +147,6 @@ public sealed record OrderRouteSnapshot(
     IReadOnlyList<OrderLeg> Legs,
     IReadOnlyList<OrderLoad>? Loads = null);
 
-public sealed record TripLink(string Id, string? VehicleId, string? DriverId, string? Status = null);
-
 public static class OrderCatalogs
 {
     public static OrderCatalog From(DispatchSnapshot snapshot) =>
@@ -156,18 +154,12 @@ public static class OrderCatalogs
 
     public static OrderCatalog From(DispatchSnapshot snapshot, decimal defaultCostPerKm)
     {
-        var trips = snapshot.Trips.ToDictionary(
-            trip => trip.Id,
-            trip => new TripLink(trip.Id, trip.VehicleId, trip.DriverId, trip.Status),
-            StringComparer.Ordinal);
         var rates = snapshot.Vehicles
             .Where(vehicle => vehicle.CostPerKm is not null)
             .ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.CostPerKm!.Value, StringComparer.Ordinal);
         return new OrderCatalog(
             snapshot.Vehicles.Select(vehicle => vehicle.Id).ToHashSet(StringComparer.Ordinal),
             snapshot.Drivers.Select(driver => driver.Id).ToHashSet(StringComparer.Ordinal),
-            trips.Keys.ToHashSet(StringComparer.Ordinal),
-            trips,
             defaultCostPerKm,
             rates);
     }
@@ -258,7 +250,6 @@ public static class OrderRoute
         if (costPerKm.Error is not null)
             return RouteBuild.Fail(costPerKm.Error);
 
-        var crew = Crew(built.TripId, built.VehicleId, built.DriverId, catalog);
         OrderRouteSnapshot snapshot;
         IReadOnlyList<DistanceWrite>? distanceWrites = null;
         if (request.Stops is null)
@@ -290,8 +281,6 @@ public static class OrderRoute
         {
             UnloadingPlace = unloading,
             AgreedPrice = agreed,
-            VehicleId = crew.VehicleId,
-            DriverId = crew.DriverId,
             PricingMode = mode,
             SalePerKm = salePerKm.Value,
             SalePerLiter = salePerLiter.Value,
@@ -302,18 +291,9 @@ public static class OrderRoute
         return RouteBuild.Ok(order with { Quote = OrderPricing.Summarize(order) }, distanceWrites);
     }
 
-    public static (string? VehicleId, string? DriverId) Crew(string? tripId, string? vehicleId, string? driverId, OrderCatalog catalog)
-    {
-        if (tripId is not null && catalog.Trips is not null && catalog.Trips.TryGetValue(tripId, out var trip))
-            return (trip.VehicleId, trip.DriverId);
-        return (vehicleId, driverId);
-    }
-
     public static DispatchOrder Display(DispatchOrder order, OrderCatalog catalog)
     {
-        var crew = Crew(order.TripId, order.VehicleId, order.DriverId, catalog);
-        var shown = order with { VehicleId = crew.VehicleId, DriverId = crew.DriverId };
-        return shown.Quote is null ? shown with { Quote = OrderPricing.Summarize(shown) } : shown;
+        return order.Quote is null ? order with { Quote = OrderPricing.Summarize(order) } : order;
     }
 
     private static string NormalizeMode(string mode)
@@ -330,12 +310,9 @@ public static class OrderRoute
     {
         if (previous is not null)
             return previous.CostPerKm;
-        if (built.TripId is not null
-            && catalog.Trips is not null
-            && catalog.Trips.TryGetValue(built.TripId, out var trip)
-            && trip.VehicleId is not null
+        if (built.VehicleId is not null
             && catalog.VehicleCostPerKm is not null
-            && catalog.VehicleCostPerKm.TryGetValue(trip.VehicleId, out var vehicleRate))
+            && catalog.VehicleCostPerKm.TryGetValue(built.VehicleId, out var vehicleRate))
             return vehicleRate;
         return catalog.DefaultCostPerKm;
     }
@@ -467,27 +444,4 @@ public static class OrderRoute
     }
 
     private static string NewId() => Guid.NewGuid().ToString("n");
-}
-
-public static class OrderAssignment
-{
-    public const string TakenMessage = "Zakázka už je na jiné jízdě.";
-
-    public static string? Check(DispatchOrder? order, string? tripId, bool onlyIfFree, OrderCatalog catalog)
-    {
-        if (order is null)
-            return "Zakázka neexistuje.";
-        if (order.Status == OrderStatuses.Stornovano)
-            return "Stornovaná zakázka je jen ke čtení.";
-        if (tripId is not null && !catalog.TripIds.Contains(tripId))
-            return "Neznámá jízda.";
-        if (tripId is not null
-            && catalog.Trips is not null
-            && catalog.Trips.TryGetValue(tripId, out var link)
-            && link.Status == DispatchStatuses.Stornovano)
-            return "Stornovaná jízda už zakázky nepřijímá.";
-        if (onlyIfFree && tripId is not null && order.TripId is not null && !string.Equals(order.TripId, tripId, StringComparison.Ordinal))
-            return TakenMessage;
-        return null;
-    }
 }

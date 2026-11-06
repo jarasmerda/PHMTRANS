@@ -46,8 +46,7 @@ public sealed class OrderSyncTests
             Note = "volat před vykládkou",
             DriverId = "drv-2",
             CmrNumber = "CMR-77",
-            VehicleId = "veh-9",
-            TripId = "trip-9"
+            VehicleId = "veh-9"
         };
 
         var plan = OrderSyncPlanner.Plan(current, sent, sent, confirmRequested: false);
@@ -796,7 +795,6 @@ public sealed class OrderSyncTests
         null,
         null,
         null,
-        null,
         OrderStatuses.Nova,
         false,
         version,
@@ -849,7 +847,6 @@ public sealed class OrderSyncTests
             cmr,
             null,
             driverId,
-            null,
             status ?? OrderStatuses.Nova,
             null);
 

@@ -5,14 +5,11 @@ namespace PHMTRANS.Dispatch;
 public sealed record OrderCatalog(
     IReadOnlySet<string> VehicleIds,
     IReadOnlySet<string> DriverIds,
-    IReadOnlySet<string> TripIds,
-    IReadOnlyDictionary<string, TripLink>? Trips = null,
     decimal DefaultCostPerKm = 0m,
     IReadOnlyDictionary<string, decimal>? VehicleCostPerKm = null,
     IReadOnlyList<FuelTypeItem>? FuelTypes = null)
 {
     public static OrderCatalog Empty { get; } = new(
-        new HashSet<string>(StringComparer.Ordinal),
         new HashSet<string>(StringComparer.Ordinal),
         new HashSet<string>(StringComparer.Ordinal));
 }
@@ -215,7 +212,6 @@ public static class OrderWorkflow
         var order = context.Current with
         {
             Status = OrderStatuses.Stornovano,
-            TripId = null,
             CancelReason = Blank(reason),
             CurrentVersion = context.Current.CurrentVersion + 1,
             UpdatedAt = context.Now
@@ -244,33 +240,6 @@ public static class OrderWorkflow
             order.CurrentVersion,
             IncludeDelete: true);
         return new OrderChange.Saved(order, true, Queue(context, order, deletePlan, targetId: null));
-    }
-
-    public static OrderChange AssignTrip(string? tripId, bool onlyIfFree, OrderEditContext context)
-    {
-        if (context.Current is null)
-            return new OrderChange.Rejected("Zakázka neexistuje.");
-        if (context.Current.Status == OrderStatuses.Stornovano)
-            return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
-
-        var trip = Blank(tripId);
-        var error = OrderAssignment.Check(context.Current, trip, onlyIfFree, context.Catalog);
-        if (error is not null)
-            return new OrderChange.Rejected(error);
-
-        var crew = OrderRoute.Crew(trip, context.Current.VehicleId, context.Current.DriverId, context.Catalog);
-        var order = context.Current with
-        {
-            TripId = trip,
-            VehicleId = crew.VehicleId,
-            DriverId = crew.DriverId,
-            UpdatedAt = context.Now
-        };
-        if (OrderPohodaFields.SameDocument(context.Current, order))
-            return new OrderChange.Saved(context.Current, false, null);
-
-        // Jízda, vozidlo a řidič nejsou v Pohodě. Bez nové verze a bez fronty.
-        return new OrderChange.Saved(order, false, null);
     }
 
     private static OrderChange Finish(
@@ -337,7 +306,6 @@ public static class OrderWorkflow
             draft.CmrNumber,
             draft.VehicleId,
             draft.DriverId,
-            draft.TripId,
             status,
             locked,
             version,
@@ -496,7 +464,6 @@ public static class OrderWorkflow
             Blank(request.CmrNumber),
             Blank(request.VehicleId),
             Blank(request.DriverId),
-            Blank(request.TripId),
             status,
             Blank(request.PohodaInvoiceNumber),
             ico.Value,
@@ -533,12 +500,10 @@ public static class OrderWorkflow
 
     private static string? CheckLinks(Draft draft, OrderCatalog catalog)
     {
-        if (draft.TripId is null && draft.VehicleId is not null && !catalog.VehicleIds.Contains(draft.VehicleId))
+        if (draft.VehicleId is not null && !catalog.VehicleIds.Contains(draft.VehicleId))
             return "Neznámé vozidlo.";
-        if (draft.TripId is null && draft.DriverId is not null && !catalog.DriverIds.Contains(draft.DriverId))
+        if (draft.DriverId is not null && !catalog.DriverIds.Contains(draft.DriverId))
             return "Neznámý řidič.";
-        if (draft.TripId is not null && !catalog.TripIds.Contains(draft.TripId))
-            return "Neznámá jízda.";
         return null;
     }
 
@@ -601,7 +566,6 @@ public static class OrderWorkflow
         string? CmrNumber,
         string? VehicleId,
         string? DriverId,
-        string? TripId,
         string? Status,
         string? Invoice,
         string? CustomerIco = null,
@@ -614,6 +578,6 @@ public static class OrderWorkflow
         int? FuelTypeId = null,
         IReadOnlyList<OrderLoad>? Loads = null)
     {
-        public static Draft Fail(string error) => new(error, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+        public static Draft Fail(string error) => new(error, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 }

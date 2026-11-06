@@ -10,17 +10,6 @@
     .note { color: var(--text-secondary); font-size: 0.88rem; margin-top: 0.8rem; }
     [hidden] { display: none !important; }
     .route-to { color: var(--text-secondary); font-size: 0.82rem; }
-    #trips { min-width: 76rem; }
-    #rows input, #rows select { min-width: 7.5rem; max-width: 14rem; width: 100%; }
-    #rows input:focus, #rows select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-    #rows .stack, #rows .edit-actions { display: flex; flex-direction: column; gap: 0.35rem; }
-    #rows button { white-space: nowrap; }
-    #rows button.ghost {
-      background: var(--surface);
-      color: var(--ink);
-      border: 1px solid var(--accent);
-    }
-    #rows button.ghost:hover { background: var(--button); color: var(--on-button); }
     dialog {
       width: min(76rem, calc(100% - 2rem));
       max-height: calc(100% - 2rem);
@@ -34,10 +23,7 @@
     .dialog-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
     .dialog-head h2 { margin: 0; }
     .section-actions { display: flex; justify-content: flex-end; margin: 0.4rem 0; }
-    .trip-orders td { background: #fff; }
-    .trip-order-lines { list-style: none; margin: 0.35rem 0 0; padding: 0; }
-    .trip-order-lines li { margin: 0.2rem 0; }
-    .trip-order-lines button.linkish, button.linkish {
+    button.linkish {
       background: transparent;
       color: var(--ink);
       border: 0;
@@ -61,7 +47,7 @@
     }
     .view-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .view-tabs button[aria-current="page"] { background: var(--ink); color: #fff; }
-    #order-cards, #cards { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
+    #order-cards { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
     #orders, #version-lines, #queue { min-width: 64rem; }
     .version-links { list-style: none; margin: 0.4rem 0 0; padding: 0; }
     .version-links li { margin: 0.25rem 0; }
@@ -105,13 +91,28 @@
       font-size: 0.78rem;
     }
     #order-message, #queue-message, .route-warn, .note.warn { color: var(--alert); font-weight: 700; }
-    #trip-detail, #rates-wrap {
+    #rates-wrap, #calendar-wrap {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 1rem;
       margin-top: 1rem;
     }
+    .head-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    .calendar-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: end; margin: 0.6rem 0; }
+    #calendar { border-collapse: separate; border-spacing: 0; }
+    #calendar th, #calendar td { min-width: 6.5rem; vertical-align: top; }
+    #calendar th:first-child, #calendar td:first-child {
+      position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 10rem;
+    }
+    #calendar .weekend { background: #f3f5f9; }
+    #calendar .today { box-shadow: inset 0 3px 0 var(--accent); }
+    #calendar .busy { background: #e6eefc; }
+    #calendar .over { background: #fde8e8; }
+    #calendar .cal-order { display: block; margin: 0 0 0.2rem; font-size: 0.78rem; text-align: left; }
+    #calendar .cal-order small { display: block; font-weight: 400; color: var(--text-secondary); }
+    .load-bar { display: block; height: 0.35rem; border-radius: 1rem; background: var(--border); margin-top: 0.3rem; overflow: hidden; }
+    .load-bar i { display: block; height: 100%; background: var(--accent); }
     .loads h3 { margin: 0.4rem 0; }
     .load-row { display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(8rem, 0.8fr) auto; gap: 0.5rem 0.6rem; align-items: end; margin-bottom: 0.5rem; }
     .load-row input, .load-row select { width: 100%; min-width: 0; box-sizing: border-box; }
@@ -205,136 +206,10 @@
     </div>
   </header>
   <section class="view-tabs" aria-label="Pohledy dispečinku">
-    <button type="button" id="tab-trips" aria-current="page">Jízdy</button>
-    <button type="button" id="tab-orders" class="ghost">Zakázky</button>
+    <button type="button" id="tab-orders" aria-current="page">Zakázky</button>
     <button type="button" id="tab-queue" class="ghost">Fronta Pohody</button>
   </section>
-  <div id="trips-view">
-    <section id="storage" class="note" hidden></section>
-    <p id="message" hidden></p>
-    <form id="filter">
-      <div class="status-filter" id="trip-status-filter">
-        <span>Stav</span>
-        <button type="button" class="status-filter-toggle" aria-expanded="false" aria-controls="trip-status-panel">5 stavů</button>
-        <div id="trip-status-panel" class="status-filter-panel" hidden>
-          <label><input type="checkbox" data-status-all> Vše</label>
-          <label><input type="checkbox" data-status-value value="Nová" checked> Nová</label>
-          <label><input type="checkbox" data-status-value value="Přiřazená" checked> Přiřazená</label>
-          <label><input type="checkbox" data-status-value value="Na cestě" checked> Na cestě</label>
-          <label><input type="checkbox" data-status-value value="Vyložená" checked> Vyložená</label>
-          <label><input type="checkbox" data-status-value value="Zrušená" checked> Zrušená</label>
-          <label><input type="checkbox" data-status-value value="Stornováno"> Stornováno</label>
-        </div>
-      </div>
-      <button type="button" id="reload">Obnovit</button>
-    </form>
-    <section class="cards" id="cards" hidden>
-      <article><span>Nové</span><strong id="count-nova">0</strong></article>
-      <article><span>Přiřazené</span><strong id="count-prirazena">0</strong></article>
-      <article><span>Na cestě</span><strong id="count-naceste">0</strong></article>
-      <article><span>Vyložené</span><strong id="count-vylozena">0</strong></article>
-      <article><span>Zrušené</span><strong id="count-zrusena">0</strong></article>
-      <article><span>Stornované</span><strong id="count-stornovano">0</strong></article>
-    </section>
-    <section id="table-wrap" hidden>
-      <div class="dialog-head">
-        <h2>Jízdy</h2>
-        <button type="button" id="open-trip-create">Nová jízda</button>
-      </div>
-      <div class="table-scroll">
-        <table id="trips">
-          <thead>
-            <tr>
-              <th>Jízda</th>
-              <th>Zakázky</th>
-              <th>Termín</th>
-              <th>Zákazník</th>
-              <th>Trasa</th>
-              <th>Náklad</th>
-              <th>Vozidlo</th>
-              <th>Řidič</th>
-              <th>Stav</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
-      <p id="empty" hidden></p>
-    </section>
-    <section id="trip-detail" hidden>
-      <h2 id="trip-detail-title">Jízda</h2>
-      <p id="trip-detail-meta" class="note"></p>
-      <div class="table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Zakázka</th>
-              <th>Zákazník</th>
-              <th>Trasa</th>
-              <th>Litry</th>
-              <th>Prodej</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="trip-order-rows"></tbody>
-        </table>
-      </div>
-      <p>Součet litrů, km a prodej: <strong id="trip-totals">0 km · 0 l · 0,00 Kč</strong> <span class="route-to">Stornované zakázky se do součtu nepočítají.</span></p>
-      <form id="trip-add-order">
-        <label>Přidat zakázku
-          <select id="trip-free-orders">
-            <option value="">— zakázka bez jízdy —</option>
-          </select>
-        </label>
-        <button type="submit">Přidat na jízdu</button>
-        <button type="button" id="trip-storno" class="ghost">Stornovat</button>
-        <button type="button" id="trip-detail-close" class="ghost">Zavřít</button>
-      </form>
-    </section>
-    <dialog id="trip-create-dialog">
-      <div class="dialog-head">
-        <h2>Nová jízda</h2>
-        <button type="button" class="ghost" data-close-dialog>Zavřít</button>
-      </div>
-      <p id="trip-create-message" class="note warn" hidden></p>
-      <form id="create">
-        <fieldset id="create-orders">
-          <legend>Zakázky na jízdu</legend>
-          <p id="create-order-hint" class="note">Vyberte zakázky, jízda se předvyplní z první.</p>
-          <select id="create-order-list" multiple size="6" aria-label="Volné zakázky na jízdu"></select>
-        </fieldset>
-        <p id="create-order-empty" class="note" hidden>Žádná volná zakázka.</p>
-        <label>Zákazník <input id="customer" required maxlength="160"></label>
-        <label>Nakládka <input id="loading" required maxlength="160"></label>
-        <label>Vykládka <input id="unloading" required maxlength="160"></label>
-        <label>Náklad <input id="cargo" maxlength="80" placeholder="motorová nafta"></label>
-        <label>Termín <input id="planned" type="datetime-local" required></label>
-        <label>Vozidlo
-          <select id="vehicle">
-            <option value="">— nepřiřazeno —</option>
-          </select>
-        </label>
-        <label>Řidič
-          <select id="driver">
-            <option value="">— nepřiřazeno —</option>
-          </select>
-        </label>
-        <label>Poznámka <input id="note" maxlength="500"></label>
-        <button type="submit">Přidat jízdu</button>
-      </form>
-    </dialog>
-    <section id="rates-wrap">
-      <h2>Nákladová sazba</h2>
-      <p class="note">Výchozí sazba platí, když vozidlo nemá vlastní. Na zakázce ji lze přepsat a uloží se do verze.</p>
-      <form id="rates">
-        <label>Výchozí Kč/km <input id="default-cost" type="number" min="0" step="0.0001" required></label>
-        <div id="vehicle-rates"></div>
-        <button type="submit">Uložit sazby</button>
-      </form>
-    </section>
-  </div>
-  <div id="orders-view" hidden>
+  <div id="orders-view">
     <p id="order-sync-note" class="note"></p>
     <p id="order-message" hidden></p>
     <form id="order-filter">
@@ -366,7 +241,10 @@
     <section id="order-table-wrap" hidden>
       <div class="dialog-head">
         <h2>Zakázky</h2>
-        <button type="button" id="open-order-create">Nová zakázka</button>
+        <div class="head-actions">
+          <button type="button" class="ghost" id="open-calendar">Kalendář řidičů</button>
+          <button type="button" id="open-order-create">Nová zakázka</button>
+        </div>
       </div>
       <div class="table-scroll">
         <table id="orders">
@@ -420,6 +298,44 @@
         <form id="order-create"></form>
       </section>
     </dialog>
+    <section id="rates-wrap">
+      <h2>Nákladová sazba</h2>
+      <p class="note">Výchozí sazba platí, když vozidlo nemá vlastní. Na zakázce ji lze přepsat a uloží se do verze.</p>
+      <form id="rates">
+        <label>Výchozí Kč/km <input id="default-cost" type="number" min="0" step="0.0001" required></label>
+        <div id="vehicle-rates"></div>
+        <button type="submit">Uložit sazby</button>
+      </form>
+    </section>
+  </div>
+  <div id="calendar-view" hidden>
+    <section id="calendar-wrap">
+      <div class="dialog-head">
+        <h2>Vytíženost řidičů</h2>
+        <button type="button" class="ghost" id="calendar-back">Zpět na zakázky</button>
+      </div>
+      <p class="note">Řidič je obsazený od data nakládky do data vykládky zakázky. Stornované zakázky se nepočítají. Kliknutím na zakázku ji otevřete.</p>
+      <form class="calendar-tools" id="calendar-tools">
+        <button type="button" class="ghost" data-cal-shift="-1">← Předchozí</button>
+        <button type="button" class="ghost" data-cal-today>Tento týden</button>
+        <button type="button" class="ghost" data-cal-shift="1">Další →</button>
+        <label>Od <input type="date" id="calendar-from"></label>
+        <label>Rozsah
+          <select id="calendar-days">
+            <option value="7">1 týden</option>
+            <option value="14" selected>2 týdny</option>
+            <option value="28">4 týdny</option>
+          </select>
+        </label>
+      </form>
+      <p id="calendar-message" class="note" hidden></p>
+      <div class="table-scroll">
+        <table id="calendar">
+          <thead id="calendar-head"></thead>
+          <tbody id="calendar-rows"></tbody>
+        </table>
+      </div>
+    </section>
   </div>
   <div id="queue-view" hidden>
     <p id="queue-sync-note" class="note"></p>
@@ -452,7 +368,7 @@
     </section>
   </div>
   <script src="/multi-filter.js?v=1"></script>
-  <script src="/dispecink.js?v=13"></script>
-  <script src="/dispecink-orders.js?v=14"></script>
+  <script src="/dispecink.js?v=14"></script>
+  <script src="/dispecink-orders.js?v=15"></script>
 </body>
 </html>

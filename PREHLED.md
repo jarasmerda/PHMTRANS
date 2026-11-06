@@ -14,7 +14,7 @@ Práce na projektu je rozdělená do feedů. V aplikaci Claude jsou ve skupině 
 | --- | --- | --- |
 | **PHMTRANS** (hlavní) | celkový stav projektu a tento přehled, server a nasazení, propojení s Pohodou (mServer, adresář `dbo.AD`), databáze, zabezpečení, přihlášení a účty, veřejný web, společný vzhled | `PREHLED.md`, `CLAUDE.md`, `Program.cs`, `appsettings*.json`, `Site/`, `Auth/`, `Pohoda/PohodaMServerClient.cs`, `Pohoda/PohodaOptions.cs`, `wwwroot/erp.css`, `wwwroot/landing*`, `wwwroot/web.config` |
 | **ERP** | reporty ERP (vydané faktury, měsíční přehledy) a oprávnění na ně | `Bi/`, `Pohoda/IssuedInvoiceExport.cs`, `wwwroot/erp.html`, `wwwroot/erp.js` |
-| **DISPEČINK** | jízdy, zakázky, trasy a ceny, matice vzdáleností, fronta do Pohody | `Dispatch/`, `wwwroot/dispecink*` |
+| **DISPEČINK** | zakázky, kalendář řidičů, trasy a ceny, matice vzdáleností, fronta do Pohody | `Dispatch/`, `wwwroot/dispecink*` |
 
 Pravidla mezi feedy:
 - Soubory hlavního feedu mění ERP i DISPEČINK jen když to jejich úkol nutně potřebuje, jako samostatný malý PR a v popisu PR napíšou, že jde o sdílený soubor. Větší změny společných věcí (Pohoda, přihlášení, vzhled, server) patří do hlavního feedu.
@@ -43,7 +43,7 @@ Nový feed (třeba CRM): přidat řádek do tabulky, založit session ve složce
 | `Auth/` | Přihlášení, účty, limit pokusů. |
 | `Bi/` | Vydané faktury pro ERP. |
 | `Crm/` | CRM. |
-| `Dispatch/` | Jízdy, zakázky, trasy, ceny, verze, fronta do Pohody. |
+| `Dispatch/` | Zakázky, kalendář řidičů, trasy, ceny, verze, fronta do Pohody. |
 | `Pohoda/` | Klient mServeru, export faktur, adresář Pohody (SQL `dbo.AD`). |
 | `Site/` | Hostitelé a přesměrování, kontrola oprávnění (`ModuleGate`), bezpečnostní hlavičky. |
 | `wwwroot/` | Stránky, skripty, styly, obrázky. `web.config` je konfigurace IIS. |
@@ -114,7 +114,8 @@ Adresář Pohody `dbo.AD` čte našeptávač zákazníka a měsíční přehled 
 | Tabulky | K čemu |
 | --- | --- |
 | `Auth_User` | Účty intranetu. |
-| `Disp_Vehicle`, `Disp_Driver`, `Disp_Trip` | Vozidla, řidiči, jízdy. |
+| `Disp_Vehicle`, `Disp_Driver` | Vozidla, řidiči. |
+| `Disp_Trip` | Dřívější jízdy. Aplikace je už nepoužívá, tabulka a sloupec `Disp_Order.TripId` jen zůstaly v databázi. |
 | `Disp_VehicleCompartment` | Přepážky cisteren: vozidlo, číslo přepážky 1–10, objem v litrech. |
 | `Disp_Order`, `Disp_OrderStop`, `Disp_OrderLeg` | Zakázka, vykládky, úseky. |
 | `Disp_OrderLoad` | Nakládka zakázky po palivech: palivo a naložené litry. |
@@ -142,7 +143,7 @@ Tři reporty, přepínají se záložkami (`/ERP#faktury`, `/ERP#mesicni`, `/ERP
 
 ## Dispečink
 
-Deska má tři pohledy: Jízdy, Zakázky, Fronta Pohody. Založení jízdy i zakázky je samostatné okno. Seznamy umí víc stavů najednou a ve výchozím filtru vynechají storno.
+Deska má dvě záložky: Zakázky a Fronta Pohody. Založení zakázky je samostatné okno. Na záložce Zakázky je tlačítko **Kalendář řidičů** a pod seznamem nákladové sazby. Seznamy umí víc stavů najednou a ve výchozím filtru vynechají storno.
 
 **Cisterny a přepážky.** Vozidlo má až 10 přepážek, každá s vlastním objemem v litrech (`Disp_VehicleCompartment`). Zadávají se zatím přímo v SQL, deska je ukáže u nákladových sazeb vozidel (počet, součet a objemy). Vozidlo bez řádků má „přepážky nezadané“. Řádek s číslem mimo 1–10 nebo nulovým objemem se ignoruje. Příklad:
 
@@ -153,7 +154,7 @@ VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 
 **Body (nakládky a vykládky).** Nakládka zakázky i místo každé vykládky se vybírá ze seznamu `Disp_Point` (jen `Active = 1`). Nakládka nabízí body s `IsLoading = 1`, vykládka body s `IsUnloading = 1` (API `/api/dispatch/loading-places` a `/api/dispatch/points`). Při prvním startu se `Disp_Point` naplní z `Disp_LoadingPlace` a z míst vykládek uložených zakázek (příznak `PointsSeeded` v `Disp_Setting`). Další body se zadávají v SQL, např. `INSERT INTO dbo.Disp_Point (Name, IsLoading, IsUnloading) VALUES (N'ČS Brno', 0, 1);`. Starší hodnota mimo seznam se ukáže jako „mimo seznam“. Když je seznam prázdný, zůstane textové pole. Na zakázce se ukládá název bodu a km se hledají v matici podle něj.
 
-**Jízdy.** Stavy Nová, Přiřazená, Na cestě, Vyložená, Zrušená, Stornováno. Kód `J{rok}-{čtyři číslice}`. Vozidlo a řidič z číselníku. Na jízdě je seznam jejích zakázek. Stornovaná jízda zakázky nepřijímá.
+**Kalendář řidičů.** Tabulka řidič × den (1, 2 nebo 4 týdny, výchozí od pondělí tohoto týdne), API `GET /api/dispatch/calendar?from=RRRR-MM-DD&days=14`. Řidič je obsazený od data nakládky do data vykládky zakázky, stornované se nepočítají. U řidiče je počet obsazených dní a procento. Den s víc zakázkami najednou je červeně. Zakázky bez řidiče jsou v řádku „Bez řidiče“. Kliknutí na zakázku ji otevře. Řidič a vozidlo se vybírají přímo na zakázce.
 
 **Zakázky.** Stavy Nová, Naplánovaná, Na cestě, Doručeno, K fakturaci, Vyfakturováno, Stornováno. Kód `Z{rok}-{čtyři číslice}`. Zákazník z adresáře Pohody, na zakázce zůstane snímek názvu, IČO, DIČ a adresy. Hlavička má nakládku, data a sazby. **Nakládka po palivech** (`Disp_OrderLoad`) má řádek pro každé palivo s naloženými litry, nejvýš 10 paliv a každé jen jednou. `Disp_Order.Liters` je součet a `Disp_Order.FuelType` je první palivo. Starší zakázka bez řádků se bere jako jedno palivo z hlavičky. Vykládky tvoří úseky Nakládka → Vykládka 1 → Vykládka 2 … Každá vykládka má vlastní palivo, jinak převezme první palivo nakládky. Deska upozorní, když se u některého paliva vyloží víc, než se naložilo. Změna nakládky je obchodní změna a přidá verzi.
 
@@ -161,9 +162,9 @@ VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 
 **Matice vzdáleností.** `Disp_Distance` má normalizované `FromPlace` a `ToPlace`, A→B je totéž co B→A. Každý pár má **nákladové km** (`Km`) a **fakturované km** (`BilledKm`, může být prázdné). Každá vykládka ukazuje svůj úsek (Nakládka → Vykládka 1, Vykládka 1 → Vykládka 2 …) a obě hodnoty se doplní z matice. U km je vidět `z matice`, nebo `ručně`. Když pár chybí nebo se km ručně změní, objeví se tlačítko **Uložit do matice**, které zapíše nákladové i fakturované km i s uživatelem (`POST /api/dispatch/distances`). Chybějící nebo přepsané nákladové km se zapíšou i při uložení zakázky, fakturované km v matici tím nezmizí. Úsek zakázky si obě hodnoty pamatuje (`Disp_OrderLeg.BilledKm`).
 
-**Verze.** Každá obchodní změna přidá řádek `Disp_OrderVersion` se sazbami, vykládkami a úseky v `RouteJson`. Starší verze jde otevřít jen ke čtení. Přiřazení jízdy, vozidla a řidiče verzi ani frontu nedělá.
+**Verze.** Každá obchodní změna přidá řádek `Disp_OrderVersion` se sazbami, vykládkami a úseky v `RouteJson`. Starší verze jde otevřít jen ke čtení. Přiřazení vozidla a řidiče verzi ani frontu nedělá.
 
-**Zápis do Pohody.** `Pohoda:SyncMode`: `Off` neposílá, `DryRun` jen uloží XML, `Live` (výchozí) volá mServer. Položka je `Leg N: odkud → kam, palivo, litry`. Náklad, vozidlo, řidič a jízda v XML nejsou.
+**Zápis do Pohody.** `Pohoda:SyncMode`: `Off` neposílá, `DryRun` jen uloží XML, `Live` (výchozí) volá mServer. Položka je `Leg N: odkud → kam, palivo, litry`. Náklad, vozidlo a řidič v XML nejsou.
 
 - Neodeslaná změna přepíše otevřenou položku fronty.
 - Odeslaná neuzamčená objednávka se mění smazáním a novým založením (`ord:delete` a `ord:add`). Když smazání projde a založení ne, další pokus už jen zakládá. Doklad, který v Pohodě už není, se bere jako smazaný.
