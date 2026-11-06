@@ -96,6 +96,62 @@ public sealed class OrderFuelDistanceTests
     }
 
     [Fact]
+    public async Task An_order_can_load_several_fuels_and_checks_each_one()
+    {
+        var orders = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(new PohodaOptions { SyncMode = "DryRun" }));
+        var request = Request(
+            [new OrderStopInput("ČS Brno", 8000m, null, null, 1), new OrderStopInput("ČS Olomouc", 6000m, null, null, 2)],
+            [new OrderLegInput(180m, null, false), new OrderLegInput(40m, null, false)]) with
+        {
+            Liters = null,
+            FuelType = null,
+            Loads = [new OrderLoadInput(1, 10000m), new OrderLoadInput(2, 5000m)]
+        };
+
+        var created = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(request, CancellationToken.None, "Jana")).Order;
+
+        Assert.Equal(15000m, created.Liters);
+        Assert.Equal((1, FuelTypeCatalog.Diesel), (created.FuelTypeId, created.FuelType));
+        Assert.Equal([FuelTypeCatalog.Diesel, FuelTypeCatalog.Petrol], created.Loads!.Select(load => load.FuelType));
+        var petrol = created.Quote!.Fuels!.Single(fuel => fuel.FuelTypeId == 2);
+        Assert.Equal((5000m, 6000m), (petrol.Loaded, petrol.Delivered));
+        Assert.True(created.Quote.DeliveredExceedsLoaded);
+
+        var detail = await orders.GetAsync(created.Id, CancellationToken.None);
+        var reread = OrderRoute.Read(detail!.Versions[0] with { Loads = null }, OrderRoute.Write(created));
+        Assert.Equal(2, reread.Loads!.Count);
+
+        var moved = Assert.IsType<OrderMutation.Success>(await orders.UpdateAsync(
+            created.Id,
+            request with { Loads = [new OrderLoadInput(1, 9000m), new OrderLoadInput(2, 6000m)] },
+            CancellationToken.None,
+            "Jana")).Order;
+        Assert.Equal(created.CurrentVersion + 1, moved.CurrentVersion);
+        Assert.False(moved.Quote!.DeliveredExceedsLoaded);
+    }
+
+    [Fact]
+    public void Load_rows_need_a_known_fuel_once_and_valid_liters()
+    {
+        var types = FuelTypeCatalog.Seed;
+        Assert.NotNull(OrderLoads.Build([], types).Error);
+        Assert.NotNull(OrderLoads.Build([new OrderLoadInput(null, 10m)], types).Error);
+        Assert.NotNull(OrderLoads.Build([new OrderLoadInput(99, 10m)], types).Error);
+        Assert.NotNull(OrderLoads.Build([new OrderLoadInput(1, null)], types).Error);
+        Assert.NotNull(OrderLoads.Build([new OrderLoadInput(1, -1m)], types).Error);
+        Assert.Contains("dvakrát", OrderLoads.Build([new OrderLoadInput(1, 10m), new OrderLoadInput(1, 5m)], types).Error);
+        Assert.Null(OrderLoads.Build([new OrderLoadInput(1, 10m), new OrderLoadInput(2, 5m)], types).Error);
+    }
+
+    [Fact]
+    public void An_old_order_without_load_rows_uses_its_header_fuel()
+    {
+        var order = Blank() with { FuelType = FuelTypeCatalog.Diesel, FuelTypeId = 1, Liters = 9000m };
+        var loads = OrderLoads.Effective(order);
+        Assert.Equal((1, FuelTypeCatalog.Diesel, 9000m), (loads.Single().FuelTypeId, loads.Single().FuelType, loads.Single().Liters));
+    }
+
+    [Fact]
     public void Stop_fuel_defaults_from_the_header_and_a_row_can_override_it()
     {
         var catalog = OrderCatalog.Empty with { FuelTypes = FuelTypeCatalog.Seed };

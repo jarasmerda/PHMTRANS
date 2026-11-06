@@ -31,6 +31,105 @@ public sealed record OrderStopInput(
     DateTimeOffset? ArrivalAt,
     int? FuelTypeId = null);
 
+// Nakládka jednoho paliva. Zakázka jich může mít víc (nafta, benzín …).
+public sealed record OrderLoad(int Sequence, int? FuelTypeId, string FuelType, decimal Liters);
+
+public sealed record OrderLoadInput(int? FuelTypeId, decimal? Liters);
+
+public sealed record FuelBalance(int? FuelTypeId, string FuelType, decimal Loaded, decimal Delivered);
+
+public static class OrderLoads
+{
+    public const int MaxCount = 10;
+
+    public static IReadOnlyList<OrderLoad> Effective(DispatchOrder order) =>
+        order.Loads is { Count: > 0 }
+            ? order.Loads
+            : [new OrderLoad(1, order.FuelTypeId, order.FuelType, order.Liters)];
+
+    public static (IReadOnlyList<OrderLoad>? Loads, string? Error) Build(
+        IReadOnlyList<OrderLoadInput> inputs,
+        IReadOnlyList<FuelTypeItem>? fuelTypes)
+    {
+        if (inputs.Count == 0)
+            return (null, "Přidejte aspoň jedno palivo do nakládky.");
+        if (inputs.Count > MaxCount)
+            return (null, "Nakládka může mít nejvýše 10 paliv.");
+        if (fuelTypes is not { Count: > 0 })
+            return (null, "Číselník paliv je prázdný.");
+
+        var loads = new List<OrderLoad>(inputs.Count);
+        foreach (var input in inputs)
+        {
+            var fuel = input.FuelTypeId is null ? null : FuelTypeCatalog.Find(fuelTypes, input.FuelTypeId, null);
+            if (fuel is null)
+                return (null, "Vyberte druh paliva v nakládce.");
+            if (input.Liters is null)
+                return (null, $"Vyplňte naložené litry ({fuel.Name}).");
+            if (input.Liters is < 0m or > 1_000_000m)
+                return (null, "Naložené litry musí být od 0 do 1 000 000.");
+            if (loads.Any(load => load.FuelTypeId == fuel.Id))
+                return (null, $"Palivo {fuel.Name} je v nakládce dvakrát. Litry sečtěte do jednoho řádku.");
+            loads.Add(new OrderLoad(loads.Count + 1, fuel.Id, fuel.Name, OrderPricing.Liters(input.Liters.Value)));
+        }
+
+        return (loads, null);
+    }
+
+    // Naloženo a vyloženo po palivech. Vykládka bez paliva patří k prvnímu palivu nakládky.
+    public static IReadOnlyList<FuelBalance> Balance(DispatchOrder order)
+    {
+        var loads = Effective(order);
+        var first = loads[0];
+        var rows = new List<FuelBalance>();
+        foreach (var load in loads)
+        {
+            var index = rows.FindIndex(row => Same(row.FuelTypeId, row.FuelType, load.FuelTypeId, load.FuelType));
+            if (index < 0)
+                rows.Add(new FuelBalance(load.FuelTypeId, load.FuelType, load.Liters, 0m));
+            else
+                rows[index] = rows[index] with { Loaded = rows[index].Loaded + load.Liters };
+        }
+
+        foreach (var stop in order.Stops ?? [])
+        {
+            var id = stop.FuelTypeId ?? (string.IsNullOrWhiteSpace(stop.FuelType) ? first.FuelTypeId : null);
+            var name = string.IsNullOrWhiteSpace(stop.FuelType) ? first.FuelType : stop.FuelType!;
+            var index = rows.FindIndex(row => Same(row.FuelTypeId, row.FuelType, id, name));
+            if (index < 0)
+                rows.Add(new FuelBalance(id, name, 0m, stop.Liters));
+            else
+                rows[index] = rows[index] with { Delivered = rows[index].Delivered + stop.Liters };
+        }
+
+        return rows;
+    }
+
+    public static bool SameLoads(DispatchOrder left, DispatchOrder right)
+    {
+        var a = Effective(left);
+        var b = Effective(right);
+        if (a.Count != b.Count)
+            return false;
+        for (var index = 0; index < a.Count; index++)
+        {
+            if (a[index].FuelTypeId != b[index].FuelTypeId
+                || a[index].FuelType != b[index].FuelType
+                || a[index].Liters != b[index].Liters)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool Same(int? leftId, string leftName, int? rightId, string rightName)
+    {
+        if (leftId is not null && rightId is not null)
+            return leftId == rightId;
+        return string.Equals(leftName.Trim(), rightName.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public sealed record OrderLegInput(
     decimal? Kilometers,
     decimal? SalePrice,
@@ -43,7 +142,8 @@ public sealed record OrderRouteSnapshot(
     decimal SalePerLiter,
     decimal CostPerKm,
     IReadOnlyList<OrderStop> Stops,
-    IReadOnlyList<OrderLeg> Legs);
+    IReadOnlyList<OrderLeg> Legs,
+    IReadOnlyList<OrderLoad>? Loads = null);
 
 public sealed record TripLink(string Id, string? VehicleId, string? DriverId, string? Status = null);
 
@@ -90,7 +190,8 @@ public static class OrderRoute
             order.SalePerLiter,
             order.CostPerKm,
             order.Stops ?? [],
-            order.Legs ?? []);
+            order.Legs ?? [],
+            order.Loads is { Count: > 0 } ? order.Loads : null);
         return JsonSerializer.Serialize(snapshot, Json);
     }
 
@@ -119,7 +220,8 @@ public static class OrderRoute
             SalePerLiter = snapshot.SalePerLiter,
             CostPerKm = snapshot.CostPerKm,
             Stops = snapshot.Stops,
-            Legs = snapshot.Legs
+            Legs = snapshot.Legs,
+            Loads = snapshot.Loads is { Count: > 0 } ? snapshot.Loads : order.Loads
         };
         return routed with { Quote = OrderPricing.Summarize(routed) };
     }

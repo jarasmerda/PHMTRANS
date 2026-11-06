@@ -189,7 +189,7 @@ function tripFace(trip) {
     customer: uniqueTexts(assigned.map((order) => order.customerName)).join(", ") || trip.customer,
     loading: uniqueTexts(assigned.map((order) => order.loadingPlace)).join(", ") || trip.loadingPlace,
     unloading: ends.join(", ") || trip.unloadingPlace,
-    cargo: uniqueTexts(assigned.map((order) => order.fuelType)).join(", ") || trip.cargo || ""
+    cargo: uniqueTexts(assigned.flatMap((order) => (order.loads?.length ? order.loads.map((load) => load.fuelType) : [order.fuelType]))).join(", ") || trip.cargo || ""
   };
 }
 
