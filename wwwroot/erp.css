@@ -494,3 +494,40 @@ table.monthly tr.gap td { height: 1.4rem; padding: 0; background: #fff; border: 
   color: var(--text-secondary);
   font-size: 0.85rem;
 }
+
+/* Mobil: hlavička nesmí zabírat třetinu obrazovky.
+   Nedrží se nahoře, značka a název modulu jsou na jednom řádku, odkaz „Zpět na web“ zastupuje logo. */
+@media (max-width: 768px) {
+  body:not(.landing) > header {
+    position: static;
+    gap: 0.35rem 0.75rem;
+    padding: 0.5rem 0 0.4rem;
+    border-bottom-width: 2px;
+  }
+
+  body:not(.landing) > header > div:first-child {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+
+  body:not(.landing) > header .brand { font-size: 1rem; }
+
+  body:not(.landing) > header h1 { margin: 0; font-size: 1.15rem; }
+
+  body:not(.landing) > header:not(.login-bar) .site-back { display: none; }
+
+  .header-actions { gap: 0.3rem 0.6rem; margin-left: 0; }
+
+  .module-links { gap: 0.25rem 0.6rem; font-size: 0.8rem; }
+
+  .module-links [aria-current="page"] { padding: 0.15rem 0.55rem; }
+
+  .header-actions button { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+  .report-tabs { margin: 0.3rem auto 0.5rem; gap: 0.3rem; }
+
+  .report-tabs a { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+
+  .section-title { font-size: 1.1rem; margin: 0.1rem auto 0.5rem; }
+}
