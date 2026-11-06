@@ -4,7 +4,8 @@ public sealed class PohodaOptions
 {
     public const string SectionName = "Pohoda";
 
-    public string BaseUrl { get; set; } = "http://185.219.164.45:444";
+    /// <summary>mServer na SRV-POHODA ve vnitřní síti. Port 444 nemá být z internetu dostupný.</summary>
+    public string BaseUrl { get; set; } = "http://192.168.1.54:444";
 
     public string Username { get; set; } = "";
 

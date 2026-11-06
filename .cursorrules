@@ -23,7 +23,7 @@
 - Aplikace je dostupná na: https://phmtrans.cz a https://intranet.phmtrans.cz
 
 ## Pohoda mServer
-- Adresa: http://185.219.164.45:444/xml
+- Adresa: http://192.168.1.54:444/xml (SRV-POHODA ve vnitřní síti, z internetu nedostupný)
 - XML se posílá na /xml
 - Uživatel, heslo a IČO nejsou v gitu. Na serveru jsou v appsettings.Production.json ve vlastnostech Pohoda:Username, Pohoda:Password a Pohoda:Ico
 

@@ -46,7 +46,7 @@ Náhled bez SQL je jen Development a jen když je `Dispatch:Preview` true. Pak j
 Stejné platí pro `www.` u starých hostitelů. Cesta modulu je bez ohledu na velikost písmen: `/erp` i `/ERP`. Pod prefixem fungují i soubory a API, třeba `/Dispecink/api/dispatch/board`.
 
 Služba není z internetu přímo dostupná, port 8089 poslouchá jen na loopbacku.
-mServer: http://185.219.164.45:444 (`/xml` s přihlášením). Port 444 má být ve firewallu povolený jen pro server aplikace.
+mServer: `http://192.168.1.54:444` na stroji `SRV-POHODA` ve vnitřní síti (`/xml` s přihlášením). Server aplikace je `192.168.1.55`. Port 444 se z internetu nepřesměrovává. Adresa je IP, ne jméno: `SRV-POHODA` se může přeložit i na adresu Tailscale, přes kterou spojení neprojde.
 
 Host se bere z `Request.Host`. Hlavičky `X-Forwarded-Host`, `X-Forwarded-Proto` a `X-Forwarded-For` se přijmou jen od důvěryhodné proxy, výchozí je loopback (IIS/ARR na stejném serveru). Další proxy jdou doplnit v `ForwardedHeaders:KnownProxies`. Podrobnosti vazeb a certifikátu jsou v `docs/intranet-navrh.md`.
 
@@ -152,7 +152,7 @@ XML pro mServer je Windows-1250. Odpověď se čte podle deklarace. Když deklar
 - `Pohoda__Username`, `Pohoda__Password`, `Pohoda__Ico`
 - volitelně `Pohoda__WriteUsername` a `Pohoda__WritePassword` jen pro zápis
 
-V `appsettings.json` je `BaseUrl` `http://185.219.164.45:444`, aplikace `PHMTRANS`, timeout 180 sekund. HTTP klient nejde přes proxy. `appsettings.Production.json` je v `.gitignore`.
+V `appsettings.json` je `BaseUrl` `http://192.168.1.54:444`, aplikace `PHMTRANS`, timeout 180 sekund. HTTP klient nejde přes proxy. `appsettings.Production.json` je v `.gitignore`.
 
 Když chybí účet služby, faktury vrátí `mServer vrátil 401:`.
 
