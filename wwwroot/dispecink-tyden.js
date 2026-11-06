@@ -5,8 +5,15 @@
   const mainWindow = "phm-dispecink";
   const weekWindow = "phm-tyden";
 
-  document.querySelector("#open-week")?.addEventListener("click", () => {
-    const target = window.open(`${location.pathname}${location.search}#tyden`, weekWindow);
+  // Tlačítko v seznamu zakázek i ve formuláři zakázky (tam otevře týden data nakládky).
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("#open-week, [data-open-week]");
+    if (!button) return;
+    const date = button.dataset.openWeek
+      ? document.querySelector(`#${button.dataset.openWeek}-loading-date`)?.value || ""
+      : "";
+    const hash = /^\d{4}-\d{2}-\d{2}$/.test(date) ? `#tyden=${date}` : "#tyden";
+    const target = window.open(`${location.pathname}${location.search}${hash}`, weekWindow);
     target?.focus();
   });
 
@@ -26,7 +33,8 @@
   const storageKey = "phm-tyden-skryti";
   const grid = document.querySelector("#week-grid");
   const message = document.querySelector("#week-message");
-  let weekStart = mondayOf(todayIso());
+  const asked = location.hash.match(/^#tyden=(\d{4}-\d{2}-\d{2})/)?.[1];
+  let weekStart = mondayOf(asked || todayIso());
   let data = null;
   let hidden = readHidden();
   let loading = 0;
@@ -258,6 +266,12 @@
     render();
   });
 
+  window.addEventListener("hashchange", () => {
+    const date = location.hash.match(/^#tyden=(\d{4}-\d{2}-\d{2})/)?.[1];
+    if (!date) return;
+    weekStart = mondayOf(date);
+    load();
+  });
   window.addEventListener("focus", load);
   setInterval(() => {
     if (document.visibilityState === "visible") load();

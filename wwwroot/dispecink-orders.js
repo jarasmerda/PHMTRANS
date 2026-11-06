@@ -277,6 +277,7 @@ function formFields(prefix, order) {
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <div class="wide availability">
       <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář řidičů</button>
+      <button type="button" class="ghost" data-open-week="${prefix}">Vytíženost po hodinách ↗</button>
       <span class="note" id="${prefix}-driver-note" hidden></span>
       <div id="${prefix}-availability" class="avail-panel" hidden></div>
     </div>
@@ -308,7 +309,8 @@ function formFields(prefix, order) {
       <div id="${prefix}-totals" class="totals"></div>
       <p id="${prefix}-liter-warn" class="route-warn" hidden></p>
     </div>
-    ${prefix === "create" ? `<div class="wide"><button type="submit">Založit zakázku</button></div>` : ""}
+    ${prefix === "create" ? `<div class="wide"><button type="submit">Založit zakázku</button>
+      <p class="note">Doklady (fotky, PDF) přiložíte hned po založení: otevře se detail zakázky a sekce Doklady je nahoře.</p></div>` : ""}
   `;
 }
 
