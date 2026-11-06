@@ -23,7 +23,7 @@ public sealed class PohodaAddressBookException(string message, bool permissionDe
     public bool PermissionDenied { get; } = permissionDenied;
 }
 
-public sealed record PohodaAddressGroup(int Id, string? Ico, string? Group);
+public sealed record PohodaAddressGroup(int Id, string? Ico, string? Group, string? Name = null);
 
 public interface IPohodaAddressBook
 {
@@ -71,7 +71,7 @@ public static partial class PohodaAddressSql
 
     public static string GroupsSql(string database) =>
         $"""
-        SELECT ID, ICO, Skupina
+        SELECT ID, ICO, Skupina, Firma, Jmeno
         FROM {QualifiedTable(database)}
         WHERE ID IN @Ids OR ICO IN @Icos
         """;
@@ -136,6 +136,13 @@ public sealed class PohodaAddressGroupRow
     public int ID { get; set; }
     public string? ICO { get; set; }
     public string? Skupina { get; set; }
+    public string? Firma { get; set; }
+    public string? Jmeno { get; set; }
+
+    public string? Name =>
+        !string.IsNullOrWhiteSpace(Firma) ? Firma.Trim()
+        : !string.IsNullOrWhiteSpace(Jmeno) ? Jmeno.Trim()
+        : null;
 }
 
 public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<PohodaOptions> options) : IPohodaAddressBook
@@ -163,7 +170,7 @@ public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<
             PohodaAddressSql.GroupsSql,
             new { Ids = ids.ToArray(), Icos = icos.ToArray() },
             cancellationToken);
-        return rows.Select(row => new PohodaAddressGroup(row.ID, row.ICO?.Trim(), row.Skupina?.Trim())).ToArray();
+        return rows.Select(row => new PohodaAddressGroup(row.ID, row.ICO?.Trim(), row.Skupina?.Trim(), row.Name)).ToArray();
     }
 
     private async Task<IEnumerable<T>> QueryAsync<T>(Func<string, string> sqlFor, object parameters, CancellationToken cancellationToken)

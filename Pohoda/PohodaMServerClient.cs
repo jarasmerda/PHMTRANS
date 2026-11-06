@@ -124,6 +124,10 @@ public sealed class PohodaMServerClient(
         if (declared is not null && !IsUtf8Name(declared))
             return EncodingFor(declared).GetString(bytes);
 
+        // XML se hlásí k UTF-8 a bajty jsou platné UTF-8: hlavička HTTP s windows-1250 je v tom případě chybná.
+        if (declared is not null && IsValidUtf8(bytes))
+            return Encoding.UTF8.GetString(bytes);
+
         if (IsWindows1250Name(charset) || !IsValidUtf8(bytes))
             return Windows1250.GetString(bytes);
 

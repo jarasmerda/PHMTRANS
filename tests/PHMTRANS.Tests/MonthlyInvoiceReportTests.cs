@@ -46,6 +46,28 @@ public sealed class MonthlyInvoiceReportTests
     }
 
     [Fact]
+    public void Address_book_names_replace_names_from_invoices()
+    {
+        var invoices = new IssuedInvoice[]
+        {
+            Invoice("1", new DateOnly(2026, 1, 1), "Onyx Real Bucovice s.r.o.", 100, partnerId: 7),
+            Invoice("2", new DateOnly(2026, 1, 2), "Miroslav Matusu", 100, ico: "11223344"),
+            Invoice("3", new DateOnly(2026, 1, 3), "Bez adresare", 100, partnerId: 99)
+        };
+        var addresses = new[]
+        {
+            new PohodaAddressGroup(7, "12345678", "B", "Onyx Real Bučovice s.r.o."),
+            new PohodaAddressGroup(8, "11223344", null, "Miroslav Matušů"),
+            new PohodaAddressGroup(99, null, null, null)
+        };
+
+        var named = AddressBookNames.Apply(invoices, addresses);
+
+        Assert.Equal(["Onyx Real Bučovice s.r.o.", "Miroslav Matušů", "Bez adresare"], named.Select(invoice => invoice.Customer));
+        Assert.Equal("Bucovice", invoices[0].Customer.Split(' ')[2]);
+    }
+
+    [Fact]
     public void Invoice_export_reads_partner_id_ico_and_amount_without_vat()
     {
         const string xml = """
