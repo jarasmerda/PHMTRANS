@@ -88,7 +88,7 @@ public static class ModuleGate
                 return;
             }
 
-            if (!Allows(context.User, stored.User, access))
+            if (!Allows(context.User, stored.User, access) || !AllowsErpReport(context.User, stored.User, path))
             {
                 if (IsApi(path))
                 {
@@ -179,6 +179,20 @@ public static class ModuleGate
             RequiredAccess.User => principal.Identity?.IsAuthenticated == true,
             _ => true
         };
+    }
+
+    // API reportu ERP vyžaduje kromě modulu ERP i povolený report.
+    private static bool AllowsErpReport(ClaimsPrincipal principal, AuthUser? user, string path)
+    {
+        var report = ErpReports.ForApiPath(path);
+        if (report is null)
+            return true;
+        if (user is not null)
+            return user.CanSeeErpReport(report);
+
+        // Bez databáze rozhoduje cookie. Starší cookie reporty nenese, pak platí všechny reporty modulu ERP.
+        var reports = principal.FindAll(AuthClaimTypes.ErpReport).Select(claim => claim.Value).ToArray();
+        return reports.Length == 0 || reports.Contains(report, StringComparer.OrdinalIgnoreCase);
     }
 
     private static async Task<StoredUser> StoredUserAsync(HttpContext context)

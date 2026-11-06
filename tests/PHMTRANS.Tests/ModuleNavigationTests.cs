@@ -98,7 +98,7 @@ public sealed class ModuleNavigationPageTests
         var js = File.ReadAllText(Path.Combine(root, "erp.js"));
 
         Assert.Contains("<h1>ERP</h1>", html, StringComparison.Ordinal);
-        Assert.Contains("erp.js?v=10", html, StringComparison.Ordinal);
+        Assert.Contains("erp.js?v=11", html, StringComparison.Ordinal);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("id=\"from\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"to\"", html, StringComparison.Ordinal);

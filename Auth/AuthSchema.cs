@@ -26,6 +26,10 @@ public static class AuthSchema
             );
             CREATE UNIQUE INDEX UX_Auth_User_Username ON dbo.Auth_User (Username);
         END;
+
+        -- Povolené reporty ERP čárkami. NULL = všechny (účty z doby před výběrem reportů).
+        IF COL_LENGTH(N'dbo.Auth_User', N'ErpReports') IS NULL
+            ALTER TABLE dbo.Auth_User ADD ErpReports nvarchar(200) NULL;
         """;
 
     public static async Task EnsureAsync(string connectionString, CancellationToken cancellationToken)
