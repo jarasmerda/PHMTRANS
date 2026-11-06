@@ -15,6 +15,7 @@ public static class DispatchEndpoints
         api.MapGet("/vehicles", GetVehicles);
         api.MapGet("/drivers", GetDrivers);
         api.MapGet("/calendar", GetCalendar);
+        api.MapGet("/calendar/events", GetCalendarEvents);
         api.MapGet("/rates", GetRates);
         api.MapPut("/rates", SaveRates);
     }
@@ -44,6 +45,33 @@ public static class DispatchEndpoints
             var list = await orders.ListAsync(cancellationToken);
             var drivers = snapshot.Drivers.OrderBy(driver => driver.Name, Czech).ToArray();
             return Results.Ok(DriverCalendar.Build(drivers, snapshot.Vehicles, list, range.From, range.Days));
+        }
+        catch (DispatchStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+        catch (OrderStoreException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
+
+    private static async Task<IResult> GetCalendarEvents(
+        string? from,
+        int? days,
+        IDispatchStore store,
+        IOrderStore orders,
+        CancellationToken cancellationToken)
+    {
+        var range = DriverCalendar.ParseRange(from, days ?? 7, DateOnly.FromDateTime(DateTime.Today));
+        if (range.Error is not null)
+            return Results.BadRequest(new { message = range.Error });
+        try
+        {
+            var snapshot = await store.ReadAsync(cancellationToken);
+            var list = await orders.ListAsync(cancellationToken);
+            var drivers = snapshot.Drivers.OrderBy(driver => driver.Name, Czech).ToArray();
+            return Results.Ok(DriverCalendar.Events(drivers, snapshot.Vehicles, list, range.From, range.Days));
         }
         catch (DispatchStoreException exception)
         {

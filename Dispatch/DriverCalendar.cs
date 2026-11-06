@@ -80,6 +80,45 @@ public static class DriverCalendar
         return new CalendarDriverRow(id, name, phone, busy, percent, cells);
     }
 
+    // Hodinový kalendář: zakázky jako události s časem od–do (OrderTimes.Span).
+    public static CalendarEvents Events(
+        IReadOnlyList<DispatchDriver> drivers,
+        IReadOnlyList<DispatchVehicle> vehicles,
+        IReadOnlyList<DispatchOrder> orders,
+        DateOnly from,
+        int days)
+    {
+        var start = from.ToDateTime(TimeOnly.MinValue);
+        var end = from.AddDays(days).ToDateTime(TimeOnly.MinValue);
+        var plates = vehicles.ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.Plate, StringComparer.Ordinal);
+        var known = drivers.Select(driver => driver.Id).ToHashSet(StringComparer.Ordinal);
+        var events = orders
+            .Where(order => order.Status != OrderStatuses.Stornovano)
+            .Select(order => (Order: order, Span: OrderTimes.Span(order)))
+            .Where(item => item.Span.Start < end && item.Span.End > start)
+            .OrderBy(item => item.Span.Start)
+            .ThenBy(item => item.Order.Code, StringComparer.Ordinal)
+            .Select(item => new CalendarEvent(
+                item.Order.Id,
+                item.Order.Code,
+                item.Order.CustomerName,
+                item.Order.LoadingPlace,
+                item.Order.UnloadingPlace,
+                item.Order.Liters,
+                item.Order.Status,
+                item.Order.DriverId is not null && known.Contains(item.Order.DriverId) ? item.Order.DriverId : null,
+                item.Order.VehicleId is not null && plates.TryGetValue(item.Order.VehicleId, out var plate) ? plate : null,
+                item.Span.Start,
+                item.Span.End,
+                item.Order.LoadingTime is null || item.Order.UnloadingTime is null))
+            .ToArray();
+        return new CalendarEvents(
+            from,
+            from.AddDays(days - 1),
+            drivers.Select(driver => new CalendarDriver(driver.Id, driver.Name, driver.Phone)).ToArray(),
+            events);
+    }
+
     private static DateOnly Start(DispatchOrder order) => order.LoadingDate;
 
     private static DateOnly End(DispatchOrder order) =>
@@ -97,6 +136,29 @@ public sealed record CalendarDriverRow(
     int BusyDays,
     int Percent,
     IReadOnlyList<CalendarDay> Days);
+
+public sealed record CalendarDriver(string Id, string Name, string? Phone);
+
+// Start a End jsou místní čas bez zóny ("2026-11-06T06:00:00"). Estimated = bez zadaného času, bere se 6:00–14:00.
+public sealed record CalendarEvent(
+    string Id,
+    string Code,
+    string Customer,
+    string LoadingPlace,
+    string UnloadingPlace,
+    decimal Liters,
+    string Status,
+    string? DriverId,
+    string? Vehicle,
+    DateTime Start,
+    DateTime End,
+    bool Estimated);
+
+public sealed record CalendarEvents(
+    DateOnly From,
+    DateOnly To,
+    IReadOnlyList<CalendarDriver> Drivers,
+    IReadOnlyList<CalendarEvent> Events);
 
 public sealed record CalendarResponse(
     DateOnly From,
