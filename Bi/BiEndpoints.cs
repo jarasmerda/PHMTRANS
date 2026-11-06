@@ -47,39 +47,60 @@ public static class BiEndpoints
             PohodaMServerClient pohoda,
             IPohodaAddressBook addressBook,
             CancellationToken cancellationToken) =>
-        {
-            var selectedYear = year ?? DateTime.Today.Year;
-            if (selectedYear is < 2000 or > 2100)
-                return Results.BadRequest(new { message = "Neplatný rok." });
+            await MonthlyAsync(year, refresh, cache, pohoda, addressBook, report => report, cancellationToken));
 
-            var start = new DateOnly(selectedYear, 1, 1);
-            var end = new DateOnly(selectedYear, 12, 31);
-            try
-            {
-                var invoices = await cache.GetOrLoadAsync(
-                    start,
-                    end,
-                    refresh ?? true,
-                    token => pohoda.ListIssuedInvoicesAsync(start, end, token),
-                    cancellationToken);
-                var ids = invoices.Where(invoice => invoice.PartnerId is not null).Select(invoice => invoice.PartnerId!.Value).Distinct().ToArray();
-                var icos = invoices
-                    .Where(invoice => invoice.PartnerId is null && !string.IsNullOrWhiteSpace(invoice.Ico))
-                    .Select(invoice => invoice.Ico!.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                var groups = await addressBook.GroupsAsync(ids, icos, cancellationToken);
-                return Results.Ok(MonthlyInvoiceReportBuilder.Create(selectedYear, invoices, groups));
-            }
-            catch (PohodaException exception)
-            {
-                return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
-            }
-            catch (PohodaAddressBookException exception)
-            {
-                return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
-            }
-        });
+        // Stejný přehled jen se skupinou B. Ostatní odběratelé se v odpovědi vůbec neposílají.
+        app.MapGet("/api/bi/monthly-invoices-group-b", async (
+            int? year,
+            bool? refresh,
+            IssuedInvoiceCache cache,
+            PohodaMServerClient pohoda,
+            IPohodaAddressBook addressBook,
+            CancellationToken cancellationToken) =>
+            await MonthlyAsync(year, refresh, cache, pohoda, addressBook,
+                report => new MonthlyGroupReport(report.Year, report.GroupB), cancellationToken));
+    }
+
+    private static async Task<IResult> MonthlyAsync(
+        int? year,
+        bool? refresh,
+        IssuedInvoiceCache cache,
+        PohodaMServerClient pohoda,
+        IPohodaAddressBook addressBook,
+        Func<MonthlyInvoiceReport, object> shape,
+        CancellationToken cancellationToken)
+    {
+        var selectedYear = year ?? DateTime.Today.Year;
+        if (selectedYear is < 2000 or > 2100)
+            return Results.BadRequest(new { message = "Neplatný rok." });
+
+        var start = new DateOnly(selectedYear, 1, 1);
+        var end = new DateOnly(selectedYear, 12, 31);
+        try
+        {
+            var invoices = await cache.GetOrLoadAsync(
+                start,
+                end,
+                refresh ?? true,
+                token => pohoda.ListIssuedInvoicesAsync(start, end, token),
+                cancellationToken);
+            var ids = invoices.Where(invoice => invoice.PartnerId is not null).Select(invoice => invoice.PartnerId!.Value).Distinct().ToArray();
+            var icos = invoices
+                .Where(invoice => invoice.PartnerId is null && !string.IsNullOrWhiteSpace(invoice.Ico))
+                .Select(invoice => invoice.Ico!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var groups = await addressBook.GroupsAsync(ids, icos, cancellationToken);
+            return Results.Ok(shape(MonthlyInvoiceReportBuilder.Create(selectedYear, invoices, groups)));
+        }
+        catch (PohodaException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
+        }
+        catch (PohodaAddressBookException exception)
+        {
+            return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
+        }
     }
 
     private static IssuedInvoiceReport CreateReport(
