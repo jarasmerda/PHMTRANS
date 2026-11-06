@@ -14,6 +14,8 @@ public static class BiEndpoints
             bool? refresh,
             IssuedInvoiceCache cache,
             PohodaMServerClient pohoda,
+            IPohodaAddressBook addressBook,
+            ILoggerFactory loggers,
             CancellationToken cancellationToken) =>
         {
             var today = DateOnly.FromDateTime(DateTime.Today);
@@ -30,6 +32,7 @@ public static class BiEndpoints
                     refresh ?? true,
                     token => pohoda.ListIssuedInvoicesAsync(start, end, token),
                     cancellationToken);
+                invoices = await AddressBookNames.TryApplyAsync(invoices, addressBook, loggers.CreateLogger("PHMTRANS.Bi"), cancellationToken);
                 var selected = ValueSelection.Parse(customer, null, "");
                 var names = selected.ExplicitAll || selected.Values.Count == 0 ? null : selected.Values;
                 return Results.Ok(CreateReport(start, end, invoices, names));
@@ -84,14 +87,10 @@ public static class BiEndpoints
                 refresh ?? true,
                 token => pohoda.ListIssuedInvoicesAsync(start, end, token),
                 cancellationToken);
-            var ids = invoices.Where(invoice => invoice.PartnerId is not null).Select(invoice => invoice.PartnerId!.Value).Distinct().ToArray();
-            var icos = invoices
-                .Where(invoice => invoice.PartnerId is null && !string.IsNullOrWhiteSpace(invoice.Ico))
-                .Select(invoice => invoice.Ico!.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
+            var (ids, icos) = AddressBookNames.Keys(invoices);
             var groups = await addressBook.GroupsAsync(ids, icos, cancellationToken);
-            return Results.Ok(shape(MonthlyInvoiceReportBuilder.Create(selectedYear, invoices, groups)));
+            var named = AddressBookNames.Apply(invoices, groups);
+            return Results.Ok(shape(MonthlyInvoiceReportBuilder.Create(selectedYear, named, groups)));
         }
         catch (PohodaException exception)
         {
