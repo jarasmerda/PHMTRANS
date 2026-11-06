@@ -119,6 +119,7 @@ Adresář Pohody `dbo.AD` čte našeptávač zákazníka a měsíční přehled 
 | `Disp_Order`, `Disp_OrderStop`, `Disp_OrderLeg` | Zakázka, vykládky, úseky. |
 | `Disp_OrderVersion`, `Disp_SyncQueue` | Snímky verzí a fronta do Pohody. |
 | `Disp_FuelType` | Číselník paliva. Seed: Motorová nafta, Benzín. |
+| `Disp_LoadingPlace` | Nakládací místa (sklady, rafinerie): `Name`, `Active`. |
 | `Disp_Distance` | Matice vzdáleností. |
 | `Disp_Setting` | Výchozí náklad Kč/km. |
 | `Crm_Customer`, `Crm_Contact`, `Crm_Opportunity`, `Crm_Activity` | CRM. |
@@ -147,6 +148,8 @@ Deska má tři pohledy: Jízdy, Zakázky, Fronta Pohody. Založení jízdy i zak
 INSERT INTO dbo.Disp_VehicleCompartment (VehicleId, Number, CapacityLiters)
 VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 ```
+
+**Nakládací místa.** Nakládka zakázky se vybírá ze seznamu `Disp_LoadingPlace` (jen `Active = 1`, API `/api/dispatch/loading-places`). Místa se zadávají v SQL, např. `INSERT INTO dbo.Disp_LoadingPlace (Name) VALUES (N'Sklad Kralupy');`. Starší zakázka s nakládkou mimo seznam ji ukáže jako „mimo seznam“. Když je seznam prázdný, zůstane textové pole. Na zakázce se ukládá název, km se hledají v matici podle něj.
 
 **Jízdy.** Stavy Nová, Přiřazená, Na cestě, Vyložená, Zrušená, Stornováno. Kód `J{rok}-{čtyři číslice}`. Vozidlo a řidič z číselníku. Na jízdě je seznam jejích zakázek. Stornovaná jízda zakázky nepřijímá.
 

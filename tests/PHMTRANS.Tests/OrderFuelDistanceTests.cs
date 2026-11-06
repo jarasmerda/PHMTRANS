@@ -60,6 +60,23 @@ public sealed class OrderFuelDistanceTests
     }
 
     [Fact]
+    public async Task Loading_places_come_from_the_store_by_name()
+    {
+        var orders = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(new PohodaOptions { SyncMode = "DryRun" }));
+        var places = await orders.ListLoadingPlacesAsync(CancellationToken.None);
+        Assert.Contains(places, item => item.Name == "Sklad Kralupy");
+        Assert.Contains("Disp_LoadingPlace WHERE Active = 1", File.ReadAllText(Path.Combine(Root(), "Dispatch", "SqlOrderStore.cs")), StringComparison.Ordinal);
+    }
+
+    private static string Root()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PHMTRANS.csproj")))
+            directory = directory.Parent;
+        return directory?.FullName ?? throw new InvalidOperationException("Kořen projektu nenalezen.");
+    }
+
+    [Fact]
     public void Distance_book_remembers_the_writer_and_the_reverse_direction()
     {
         var book = new DistanceBook();

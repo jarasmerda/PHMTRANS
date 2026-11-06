@@ -404,7 +404,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
         Assert.Contains("dispecink.js?v=12", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=11", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=12", html, StringComparison.Ordinal);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("filter.css?v=1", html, StringComparison.Ordinal);
         Assert.Contains("value=\"Nová\" checked", html, StringComparison.Ordinal);
@@ -547,7 +547,7 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("dbo.Disp_Vehicle", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Driver", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Trip", script, StringComparison.Ordinal);
-        Assert.Equal(12, Count(script, "IF OBJECT_ID"));
+        Assert.Equal(13, Count(script, "IF OBJECT_ID"));
         Assert.Contains("dbo.Disp_Order", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_OrderVersion", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_SyncQueue", script, StringComparison.Ordinal);
@@ -569,6 +569,8 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF OBJECT_ID(N'dbo.Disp_VehicleCompartment', N'U') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("CHECK (Number BETWEEN 1 AND 10)", script, StringComparison.Ordinal);
         Assert.Contains("FK_Disp_VehicleCompartment_Vehicle", script, StringComparison.Ordinal);
+        Assert.Contains("IF OBJECT_ID(N'dbo.Disp_LoadingPlace', N'U') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("UX_Disp_LoadingPlace_Name", script, StringComparison.Ordinal);
         Assert.Contains("N'Motorová nafta'", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.Contains("N'Benzín'", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.Contains("UX_Disp_Distance_Pair", script, StringComparison.Ordinal);

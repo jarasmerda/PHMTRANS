@@ -79,6 +79,17 @@ public static class DispatchSchema
             CREATE UNIQUE INDEX UX_Disp_FuelType_Name ON dbo.Disp_FuelType (Name);
         END;
 
+        IF OBJECT_ID(N'dbo.Disp_LoadingPlace', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_LoadingPlace
+            (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Disp_LoadingPlace PRIMARY KEY,
+                Name nvarchar(160) NOT NULL,
+                Active bit NOT NULL CONSTRAINT DF_Disp_LoadingPlace_Active DEFAULT 1
+            );
+            CREATE UNIQUE INDEX UX_Disp_LoadingPlace_Name ON dbo.Disp_LoadingPlace (Name);
+        END;
+
         IF OBJECT_ID(N'dbo.Disp_Order', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.Disp_Order

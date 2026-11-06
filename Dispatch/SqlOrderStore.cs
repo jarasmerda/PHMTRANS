@@ -89,6 +89,16 @@ public sealed class SqlOrderStore(
             return (IReadOnlyList<FuelTypeItem>)rows.AsList();
         }, cancellationToken);
 
+    public Task<IReadOnlyList<LoadingPlaceItem>> ListLoadingPlacesAsync(CancellationToken cancellationToken) =>
+        InConnection(async (connection, _, token) =>
+        {
+            var rows = await connection.QueryAsync<LoadingPlaceItem>(Command(
+                "SELECT Id, Name FROM dbo.Disp_LoadingPlace WHERE Active = 1 ORDER BY Name",
+                null,
+                token));
+            return (IReadOnlyList<LoadingPlaceItem>)rows.AsList();
+        }, cancellationToken);
+
     public Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken) =>
         InConnection(async (connection, _, token) =>
         {
