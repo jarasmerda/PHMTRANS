@@ -697,6 +697,7 @@ function renderOrders(data) {
 function renderDetail(data) {
   orderDetail = data;
   const order = data.order;
+  if (typeof window.loadOrderDocuments === "function") window.loadOrderDocuments(order);
   document.querySelector("#order-detail").hidden = false;
   document.querySelector("#order-detail-title").textContent = `${order.code} · verze ${order.currentVersion}`;
   const syncWarning = (data.sync ?? []).find((item) => item.warning)?.warning || order.latestSyncWarning || "";

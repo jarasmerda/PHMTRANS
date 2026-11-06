@@ -23,6 +23,7 @@ public static class OrderEndpoints
         api.MapPost("/orders/{id}/cancel", CancelOrder);
         api.MapGet("/sync", ListSync);
         api.MapGet("/customers", FindCustomers);
+        app.MapOrderDocuments();
     }
 
     private static Task<IResult> ListOrders(
