@@ -11,7 +11,7 @@ GitHub: https://github.com/jarasmerda/PHMTRANS
 | Modul | Stránka | API | Data |
 | --- | --- | --- | --- |
 | Veřejný web | `landing.html` na `phmtrans.cz` | — | jen soubory |
-| ERP | `/ERP` → `erp.html` | `/api/bi/issued-invoices` | Pohoda, vydané faktury |
+| ERP | `/ERP` → `erp.html` | `/api/bi/issued-invoices`, `/api/bi/monthly-invoices` | Pohoda, vydané faktury, skupina z `dbo.AD` |
 | Dispečink | `/Dispecink` → `dispecink.html` | `/api/dispatch/…` | SQL `Disp_*`, Pohoda objednávky |
 | CRM | `/CRM` → `crm.html` | `/api/crm/…` | SQL `Crm_*` |
 | Účty | `/login.html`, `/heslo`, `/Admin` | `/api/login`, `/api/auth/…`, `/api/admin/users` | SQL `Auth_User` |
@@ -91,7 +91,7 @@ Connection string `ConnectionStrings:Dispatch` je na serveru proměnná `Connect
 
 Bez connection stringu služba nastartuje a `/health` je v pořádku, přihlášení, dispečink a CRM vrátí, že připojení není nastavené. Bez SQL lokálně aplikace nejde vyzkoušet, testy používají úložiště v paměti.
 
-Adresář Pohody `dbo.AD` čte našeptávač zákazníka z `StwPh_26950430_2026` (`Pohoda:AddressBookDatabase`) trojdílným jménem, jen `SELECT`.
+Adresář Pohody `dbo.AD` čte našeptávač zákazníka a měsíční přehled faktur (sloupec `Skupina`) z `StwPh_26950430_2026` (`Pohoda:AddressBookDatabase`) trojdílným jménem, jen `SELECT`.
 
 | Tabulky | K čemu |
 | --- | --- |
@@ -112,7 +112,10 @@ XML je Windows-1250. Odpověď se čte podle deklarace, a když deklarace řík�
 
 ## ERP
 
-Jedna stránka: vydané faktury za období s filtrem odběratele. Faktury jsou `issuedInvoice`, částky v domácí měně. Stavy: Uhrazeno, Částečně, Po splatnosti, Neuhrazeno.
+Dva reporty, přepínají se záložkami (`/ERP#faktury`, `/ERP#mesicni`). Faktury jsou `issuedInvoice`, částky v domácí měně.
+
+- **Vydané faktury:** doklady za období s filtrem odběratele, částky s DPH. Stavy: Uhrazeno, Částečně, Po splatnosti, Neuhrazeno.
+- **Vydané faktury – měsíční přehled:** za zvolený rok tabulka odběratel × měsíc s mezisoučty 1Q–4Q a celkem, částky **bez DPH** podle data vystavení. Odběratel se páruje s adresářem podle `partnerIdentity/id` z faktury (ID v `dbo.AD`), když chybí, tak podle IČO. Odběratelé s `dbo.AD.Skupina = 'B'` jsou ve druhé tabulce, ostatní v první. Řádky jsou seřazené od největšího obratu, zobrazí se jen odběratelé s fakturou v daném roce.
 
 ## Dispečink
 

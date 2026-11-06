@@ -39,6 +39,47 @@ public static class BiEndpoints
                 return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
             }
         });
+
+        app.MapGet("/api/bi/monthly-invoices", async (
+            int? year,
+            bool? refresh,
+            IssuedInvoiceCache cache,
+            PohodaMServerClient pohoda,
+            IPohodaAddressBook addressBook,
+            CancellationToken cancellationToken) =>
+        {
+            var selectedYear = year ?? DateTime.Today.Year;
+            if (selectedYear is < 2000 or > 2100)
+                return Results.BadRequest(new { message = "Neplatný rok." });
+
+            var start = new DateOnly(selectedYear, 1, 1);
+            var end = new DateOnly(selectedYear, 12, 31);
+            try
+            {
+                var invoices = await cache.GetOrLoadAsync(
+                    start,
+                    end,
+                    refresh ?? true,
+                    token => pohoda.ListIssuedInvoicesAsync(start, end, token),
+                    cancellationToken);
+                var ids = invoices.Where(invoice => invoice.PartnerId is not null).Select(invoice => invoice.PartnerId!.Value).Distinct().ToArray();
+                var icos = invoices
+                    .Where(invoice => invoice.PartnerId is null && !string.IsNullOrWhiteSpace(invoice.Ico))
+                    .Select(invoice => invoice.Ico!.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                var groups = await addressBook.GroupsAsync(ids, icos, cancellationToken);
+                return Results.Ok(MonthlyInvoiceReportBuilder.Create(selectedYear, invoices, groups));
+            }
+            catch (PohodaException exception)
+            {
+                return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
+            }
+            catch (PohodaAddressBookException exception)
+            {
+                return Results.Json(new { message = exception.Message }, statusCode: StatusCodes.Status502BadGateway);
+            }
+        });
     }
 
     private static IssuedInvoiceReport CreateReport(
