@@ -8,16 +8,21 @@ GitHub: https://github.com/jarasmerda/PHMTRANS
 
 ## Feedy (sessions Claude Code)
 
-Práce na projektu je rozdělená do feedů podle modulů. Každý feed si sám načte `CLAUDE.md` (pravidla) a odtud tento soubor (popis projektu). Feed pracuje ve vývojovém klonu `C:\Projects\PHMTRANS`, každý ve vlastní větvi a pracovní kopii (worktree), změny jdou do `main` přes pull request.
+Práce na projektu je rozdělená do feedů. V aplikaci Claude jsou ve skupině **PHMTRANS** v postranním panelu. Každý feed si sám načte `CLAUDE.md` (pravidla) a odtud tento soubor (popis projektu). Všechny pracují ve vývojovém klonu `C:\Projects\PHMTRANS`, každý ve vlastní větvi a pracovní kopii (worktree). Změny jdou do `main` přes pull request.
 
 | Feed | Řeší | Hlavní soubory |
 | --- | --- | --- |
-| **ERP** | reporty ERP (vydané faktury, měsíční přehledy), čtení z Pohody, oprávnění na reporty | `Bi/`, `Pohoda/`, `wwwroot/erp.*` |
-| **Dispečink** | jízdy, zakázky, trasy a ceny, matice vzdáleností, fronta do Pohody | `Dispatch/`, `wwwroot/dispecink*` |
+| **PHMTRANS** (hlavní) | celkový stav projektu a tento přehled, server a nasazení, propojení s Pohodou (mServer, adresář `dbo.AD`), databáze, zabezpečení, přihlášení a účty, veřejný web, společný vzhled | `PREHLED.md`, `CLAUDE.md`, `Program.cs`, `appsettings*.json`, `Site/`, `Auth/`, `Pohoda/PohodaMServerClient.cs`, `Pohoda/PohodaOptions.cs`, `wwwroot/erp.css`, `wwwroot/landing*`, `wwwroot/web.config` |
+| **ERP** | reporty ERP (vydané faktury, měsíční přehledy) a oprávnění na ně | `Bi/`, `Pohoda/IssuedInvoiceExport.cs`, `wwwroot/erp.html`, `wwwroot/erp.js` |
+| **DISPEČINK** | jízdy, zakázky, trasy a ceny, matice vzdáleností, fronta do Pohody | `Dispatch/`, `wwwroot/dispecink*` |
 
-Sdílené soubory (`wwwroot/erp.css`, `Site/`, `Auth/`, `Program.cs`, `PREHLED.md`, `CLAUDE.md`) mění kterýkoli feed. Před prací `git pull origin main`, změna jako samostatný malý PR, v popisu PR napsat, že jde o sdílený soubor. `erp.css` nese verzi `?v=` ve všech stránkách: kdo ji zvedá, zvedne ji všude najednou (stránky i testy).
+Pravidla mezi feedy:
+- Soubory hlavního feedu mění ERP i DISPEČINK jen když to jejich úkol nutně potřebuje, jako samostatný malý PR a v popisu PR napíšou, že jde o sdílený soubor. Větší změny společných věcí (Pohoda, přihlášení, vzhled, server) patří do hlavního feedu.
+- Když modulový feed změní nastavení, nasazení nebo propojení s Pohodou, upraví i příslušnou část tohoto přehledu ve stejném PR.
+- `erp.css` nese verzi `?v=` ve všech stránkách: kdo ji zvedá, zvedne ji všude najednou (stránky i testy).
+- Před prací vždy `git pull origin main`, feedy pracují souběžně.
 
-Nový feed (třeba CRM): přidat řádek do tabulky, založit session ve složce `C:\Projects\PHMTRANS` s vlastní pracovní kopií a do prvního zadání napsat, který modul řeší.
+Nový feed (třeba CRM): přidat řádek do tabulky, založit session ve složce `C:\Projects\PHMTRANS` s vlastní pracovní kopií, zařadit ji do skupiny PHMTRANS a do prvního zadání napsat, který modul řeší.
 
 ## Moduly
 

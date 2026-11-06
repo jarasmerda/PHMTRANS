@@ -3,7 +3,7 @@
 Tento soubor si načte každý feed (session) Claude Code automaticky. Je krátký schválně, podrobnosti jsou v `PREHLED.md`.
 
 ## Než začneš
-1. Přečti `PREHLED.md`, hlavně část **Feedy** a sekci svého modulu.
+1. Přečti `PREHLED.md`, hlavně část **Feedy** (feedy PHMTRANS, ERP, DISPEČINK a kdo řeší co) a sekci svého modulu.
 2. `git pull origin main`. Feedy pracují souběžně, `main` se mění.
 
 ## Jak pracovat
