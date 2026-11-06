@@ -111,6 +111,20 @@
     #calendar .over { background: #fde8e8; }
     #calendar .cal-order { display: block; margin: 0 0 0.2rem; font-size: 0.78rem; text-align: left; }
     #calendar .cal-order small { display: block; font-weight: 400; color: var(--text-secondary); }
+    .availability { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; min-width: 0; }
+    .avail-panel { flex-basis: 100%; min-width: 0; }
+    .avail-scroll { overflow-x: auto; max-width: 100%; }
+    table.avail { border-collapse: separate; border-spacing: 0; font-size: 0.8rem; }
+    table.avail th, table.avail td { min-width: 3.4rem; padding: 0.3rem 0.35rem; vertical-align: top; text-align: center; }
+    table.avail th:first-child, table.avail td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; text-align: left; min-width: 7.5rem; }
+    table.avail .pick { box-shadow: inset 0 0 0 1px var(--accent); }
+    table.avail th.pick { background: var(--accent); color: #fff; }
+    table.avail .free { background: #e7f6ec; }
+    table.avail .busy { background: #e6eefc; }
+    table.avail .over { background: #fde8e8; }
+    table.avail tr.chosen td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+    table.avail span, table.avail small { display: block; }
+    table.avail span { white-space: nowrap; }
     .load-bar { display: block; height: 0.35rem; border-radius: 1rem; background: var(--border); margin-top: 0.3rem; overflow: hidden; }
     .load-bar i { display: block; height: 100%; background: var(--accent); }
     .doc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
@@ -387,7 +401,7 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=17"></script>
+  <script src="/dispecink-orders.js?v=18"></script>
   <script src="/dispecink-doklady.js?v=1"></script>
 </body>
 </html>

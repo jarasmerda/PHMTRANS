@@ -59,18 +59,61 @@ function orderOptions(items, selected, emptyLabel, labelOf) {
   return head + extra + body;
 }
 
-// Dostupnost řidičů ve výběru Řidič podle data nakládky a vykládky.
+// Dostupnost řidičů podle data nakládky a vykládky: výběr Řidič a kalendář ve formuláři.
 const availabilityTimers = {};
 const availabilityGeneration = {};
 const availabilityBusy = {};
+const availabilityData = {};
+const availabilityBefore = 3;
+const availabilityAfter = 7;
+const availabilityDay = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", timeZone: "UTC" });
+
+function isoShift(iso, days) {
+  const date = new Date(`${iso}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 function availabilityRange(prefix) {
   const from = document.querySelector(`#${prefix}-loading-date`)?.value || "";
   let to = document.querySelector(`#${prefix}-unloading-date`)?.value || from;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) to = from;
-  const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
-  return { from, days: Math.min(Math.max(days, 1), 62) };
+  const days = Math.min(Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1, 62 - availabilityBefore - availabilityAfter);
+  return { from, to: isoShift(from, days - 1), days };
+}
+
+function renderAvailabilityPanel(prefix) {
+  const panel = document.querySelector(`#${prefix}-availability`);
+  if (!panel || panel.hidden) return;
+  const info = availabilityData[prefix];
+  if (!info) {
+    panel.innerHTML = `<p class="note">Kalendář se ukáže po zadání data nakládky.</p>`;
+    return;
+  }
+  const { range, data, ownId } = info;
+  const dates = data.dates ?? [];
+  const inRange = (date) => date >= range.from && date <= range.to;
+  const selected = document.querySelector(`#${prefix}-driver`)?.value || "";
+  const head = `<tr><th>Řidič</th>${dates.map((date) =>
+    `<th class="${inRange(date) ? "pick" : ""}">${orderText(availabilityDay.format(new Date(`${date}T00:00:00Z`)))}</th>`).join("")}</tr>`;
+  const rows = (data.drivers ?? []).filter((row) => row.driverId).map((row) => {
+    const cells = (row.days ?? []).map((day) => {
+      const orders = day.orders ?? [];
+      const others = orders.filter((order) => order.id !== ownId);
+      const pick = inRange(day.date);
+      const state = others.length ? (pick ? "over" : "busy") : (pick ? "free" : "");
+      const body = orders.map((order) =>
+        `<span title="${orderText(order.customer)}">${orderText(order.id === ownId ? "tato" : order.code)}</span>`).join("");
+      return `<td class="${pick ? "pick " : ""}${state}">${body}</td>`;
+    }).join("");
+    const busy = availabilityBusy[prefix]?.has(row.driverId);
+    return `<tr${row.driverId === selected ? ` class="chosen"` : ""}>
+      <td><button type="button" class="linkish" data-pick-driver="${orderText(row.driverId)}" data-prefix="${prefix}">${orderText(row.name)}</button>
+      <small class="note">${busy ? "obsazený" : "volný"}</small></td>${cells}</tr>`;
+  }).join("") || `<tr><td>V dispečinku zatím nejsou řidiči.</td></tr>`;
+  panel.innerHTML = `<p class="note">Orámované sloupce jsou dny této zakázky: zeleně volno, červeně jiná zakázka. Klepnutím na jméno řidiče ho vyberete.</p>
+    <div class="avail-scroll"><table class="avail"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function scheduleAvailability(prefix) {
@@ -83,8 +126,9 @@ async function refreshAvailability(prefix) {
   const generation = (availabilityGeneration[prefix] || 0) + 1;
   availabilityGeneration[prefix] = generation;
   const range = availabilityRange(prefix);
+  const span = range ? range.days + availabilityBefore + availabilityAfter : 0;
   const result = range
-    ? await orderFetch(`/api/dispatch/calendar?from=${range.from}&days=${range.days}`)
+    ? await orderFetch(`/api/dispatch/calendar?from=${isoShift(range.from, -availabilityBefore)}&days=${span}`)
     : { ok: false };
   if (availabilityGeneration[prefix] !== generation) return;
   const ownId = prefix === "edit" ? orderDetail?.order?.id : null;
@@ -92,12 +136,15 @@ async function refreshAvailability(prefix) {
   for (const row of (result.ok ? result.data?.drivers : null) ?? []) {
     if (!row.driverId) continue;
     const codes = new Set();
-    for (const day of row.days ?? [])
+    for (const day of row.days ?? []) {
+      if (day.date < range.from || day.date > range.to) continue;
       for (const order of day.orders ?? [])
         if (order.id !== ownId) codes.add(order.code);
+    }
     if (codes.size) busy.set(row.driverId, [...codes]);
   }
   availabilityBusy[prefix] = result.ok ? busy : null;
+  availabilityData[prefix] = result.ok ? { range, data: result.data, ownId } : null;
   applyAvailability(prefix);
 }
 
@@ -110,6 +157,7 @@ function applyAvailability(prefix) {
   if (!busy) {
     select.innerHTML = orderOptions(orderCatalog.drivers, selected, "— nepřiřazeno —", (item) => item.name);
     note.hidden = true;
+    renderAvailabilityPanel(prefix);
     return;
   }
   const free = orderCatalog.drivers.filter((item) => !busy.has(item.id));
@@ -122,7 +170,28 @@ function applyAvailability(prefix) {
   note.textContent = clash
     ? `Pozor, řidič má v těchto dnech i zakázku ${clash.join(", ")}.`
     : `Volní řidiči v těchto dnech: ${free.length} z ${orderCatalog.drivers.length}.`;
+  renderAvailabilityPanel(prefix);
 }
+
+document.addEventListener("click", (event) => {
+  const toggle = event.target.closest("[data-toggle-availability]");
+  if (toggle) {
+    const prefix = toggle.dataset.toggleAvailability;
+    const panel = document.querySelector(`#${prefix}-availability`);
+    if (!panel) return;
+    panel.hidden = !panel.hidden;
+    toggle.textContent = panel.hidden ? "Kalendář řidičů" : "Skrýt kalendář";
+    renderAvailabilityPanel(prefix);
+    return;
+  }
+  const pick = event.target.closest("[data-pick-driver]");
+  if (pick) {
+    const select = document.querySelector(`#${pick.dataset.prefix}-driver`);
+    if (!select || select.disabled) return;
+    select.value = pick.dataset.pickDriver;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+});
 
 function orderStatusOptions(selected) {
   if (selected === "Stornováno")
@@ -198,9 +267,13 @@ function formFields(prefix, order) {
     <label>Datum nakládky <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}"></label>
     <label>Datum vykládky <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}"></label>
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
+    <div class="wide availability">
+      <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář řidičů</button>
+      <span class="note" id="${prefix}-driver-note" hidden></span>
+      <div id="${prefix}-availability" class="avail-panel" hidden></div>
+    </div>
     <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
-    <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select>
-      <span class="note" id="${prefix}-driver-note" hidden></span></label>
+    <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
     <label>Režim prodeje
       <select id="${prefix}-mode">
         <option value="Km"${mode === "Km" ? " selected" : ""}>Za kilometr</option>
