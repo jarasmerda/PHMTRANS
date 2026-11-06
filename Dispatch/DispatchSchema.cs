@@ -90,6 +90,19 @@ public static class DispatchSchema
             CREATE UNIQUE INDEX UX_Disp_LoadingPlace_Name ON dbo.Disp_LoadingPlace (Name);
         END;
 
+        IF OBJECT_ID(N'dbo.Disp_Point', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_Point
+            (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Disp_Point PRIMARY KEY,
+                Name nvarchar(160) NOT NULL,
+                IsLoading bit NOT NULL CONSTRAINT DF_Disp_Point_IsLoading DEFAULT 0,
+                IsUnloading bit NOT NULL CONSTRAINT DF_Disp_Point_IsUnloading DEFAULT 1,
+                Active bit NOT NULL CONSTRAINT DF_Disp_Point_Active DEFAULT 1
+            );
+            CREATE UNIQUE INDEX UX_Disp_Point_Name ON dbo.Disp_Point (Name);
+        END;
+
         IF OBJECT_ID(N'dbo.Disp_Order', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.Disp_Order
@@ -290,6 +303,10 @@ public static class DispatchSchema
         """;
 
     public const string Columns = """
+        IF COL_LENGTH(N'dbo.Disp_Distance', N'BilledKm') IS NULL
+            ALTER TABLE dbo.Disp_Distance ADD BilledKm decimal(18,3) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderLeg', N'BilledKm') IS NULL
+            ALTER TABLE dbo.Disp_OrderLeg ADD BilledKm decimal(18,3) NULL;
         IF COL_LENGTH(N'dbo.Disp_Trip', N'VehicleId') IS NULL
             ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL;
 
@@ -388,6 +405,23 @@ public static class DispatchSchema
     // Textový OrderCode jen doplní chybějící TripId. Řádky, které už jízdu mají, se nemění.
     // Stará zakázka bez vykládek dostane jednu zastávku a jeden úsek s původní prodejní cenou.
     public const string Data = """
+        -- Body (nakládky a vykládky) se jednou naplní z nakládacích míst a z vykládek zakázek.
+        IF NOT EXISTS (SELECT 1 FROM dbo.Disp_Setting WHERE [Key] = N'PointsSeeded')
+        BEGIN
+            INSERT INTO dbo.Disp_Point (Name, IsLoading, IsUnloading, Active)
+            SELECT lp.Name, 1, 0, lp.Active
+            FROM dbo.Disp_LoadingPlace lp
+            WHERE NOT EXISTS (SELECT 1 FROM dbo.Disp_Point p WHERE p.Name = lp.Name);
+
+            INSERT INTO dbo.Disp_Point (Name, IsLoading, IsUnloading, Active)
+            SELECT DISTINCT LTRIM(RTRIM(s.Place)), 0, 1, 1
+            FROM dbo.Disp_OrderStop s
+            WHERE LEN(LTRIM(RTRIM(s.Place))) > 0
+              AND NOT EXISTS (SELECT 1 FROM dbo.Disp_Point p WHERE p.Name = LTRIM(RTRIM(s.Place)));
+
+            INSERT INTO dbo.Disp_Setting ([Key], Value) VALUES (N'PointsSeeded', N'1');
+        END;
+
         SET XACT_ABORT ON;
         BEGIN TRANSACTION;
 

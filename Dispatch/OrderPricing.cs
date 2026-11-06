@@ -36,6 +36,7 @@ public static class OrderPricing
         var legs = order.Legs ?? [];
         var stops = order.Stops ?? [];
         var totalKm = Kilometers(legs.Sum(leg => leg.Kilometers ?? 0m));
+        var billedKm = Kilometers(legs.Sum(leg => leg.BilledKilometers ?? leg.Kilometers ?? 0m));
         var delivered = stops.Count > 0
             ? Liters(stops.Sum(stop => stop.Liters))
             : Liters(legs.Sum(leg => leg.Liters));
@@ -62,7 +63,8 @@ public static class OrderPricing
             marginPerKm,
             marginPercent,
             delivered > order.Liters || fuels.Any(fuel => fuel.Delivered > fuel.Loaded),
-            fuels);
+            fuels,
+            billedKm);
     }
 }
 
@@ -78,4 +80,5 @@ public sealed record OrderQuote(
     decimal MarginPerKm,
     decimal MarginPercent,
     bool DeliveredExceedsLoaded,
-    IReadOnlyList<FuelBalance>? Fuels = null);
+    IReadOnlyList<FuelBalance>? Fuels = null,
+    decimal BilledKm = 0m);

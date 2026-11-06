@@ -120,8 +120,9 @@ Adresář Pohody `dbo.AD` čte našeptávač zákazníka a měsíční přehled 
 | `Disp_OrderLoad` | Nakládka zakázky po palivech: palivo a naložené litry. |
 | `Disp_OrderVersion`, `Disp_SyncQueue` | Snímky verzí a fronta do Pohody. |
 | `Disp_FuelType` | Číselník paliva. Seed: Motorová nafta, Benzín. |
-| `Disp_LoadingPlace` | Nakládací místa (sklady, rafinerie): `Name`, `Active`. |
-| `Disp_Distance` | Matice vzdáleností. |
+| `Disp_Point` | Body trasy: `Name`, `IsLoading` (nakládka), `IsUnloading` (vykládka), `Active`. |
+| `Disp_LoadingPlace` | Dřívější seznam nakládek, jen zdroj pro první naplnění `Disp_Point`. |
+| `Disp_Distance` | Matice vzdáleností: nákladové `Km` a fakturované `BilledKm` (může být prázdné). |
 | `Disp_Setting` | Výchozí náklad Kč/km. |
 | `Crm_Customer`, `Crm_Contact`, `Crm_Opportunity`, `Crm_Activity` | CRM. |
 
@@ -150,15 +151,15 @@ INSERT INTO dbo.Disp_VehicleCompartment (VehicleId, Number, CapacityLiters)
 VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 ```
 
-**Nakládací místa.** Nakládka zakázky se vybírá ze seznamu `Disp_LoadingPlace` (jen `Active = 1`, API `/api/dispatch/loading-places`). Místa se zadávají v SQL, např. `INSERT INTO dbo.Disp_LoadingPlace (Name) VALUES (N'Sklad Kralupy');`. Starší zakázka s nakládkou mimo seznam ji ukáže jako „mimo seznam“. Když je seznam prázdný, zůstane textové pole. Na zakázce se ukládá název, km se hledají v matici podle něj.
+**Body (nakládky a vykládky).** Nakládka zakázky i místo každé vykládky se vybírá ze seznamu `Disp_Point` (jen `Active = 1`). Nakládka nabízí body s `IsLoading = 1`, vykládka body s `IsUnloading = 1` (API `/api/dispatch/loading-places` a `/api/dispatch/points`). Při prvním startu se `Disp_Point` naplní z `Disp_LoadingPlace` a z míst vykládek uložených zakázek (příznak `PointsSeeded` v `Disp_Setting`). Další body se zadávají v SQL, např. `INSERT INTO dbo.Disp_Point (Name, IsLoading, IsUnloading) VALUES (N'ČS Brno', 0, 1);`. Starší hodnota mimo seznam se ukáže jako „mimo seznam“. Když je seznam prázdný, zůstane textové pole. Na zakázce se ukládá název bodu a km se hledají v matici podle něj.
 
 **Jízdy.** Stavy Nová, Přiřazená, Na cestě, Vyložená, Zrušená, Stornováno. Kód `J{rok}-{čtyři číslice}`. Vozidlo a řidič z číselníku. Na jízdě je seznam jejích zakázek. Stornovaná jízda zakázky nepřijímá.
 
 **Zakázky.** Stavy Nová, Naplánovaná, Na cestě, Doručeno, K fakturaci, Vyfakturováno, Stornováno. Kód `Z{rok}-{čtyři číslice}`. Zákazník z adresáře Pohody, na zakázce zůstane snímek názvu, IČO, DIČ a adresy. Hlavička má nakládku, data a sazby. **Nakládka po palivech** (`Disp_OrderLoad`) má řádek pro každé palivo s naloženými litry, nejvýš 10 paliv a každé jen jednou. `Disp_Order.Liters` je součet a `Disp_Order.FuelType` je první palivo. Starší zakázka bez řádků se bere jako jedno palivo z hlavičky. Vykládky tvoří úseky Nakládka → Vykládka 1 → Vykládka 2 … Každá vykládka má vlastní palivo, jinak převezme první palivo nakládky. Deska upozorní, když se u některého paliva vyloží víc, než se naložilo. Změna nakládky je obchodní změna a přidá verzi.
 
-**Ceny.** Prodej za kilometr, nebo za litr. Náklad úseku je km × Kč/km. Prodej je km × sazba, litry × sazba, nebo ruční cena úseku, plus příplatky. Deska ukazuje km, naloženo, vyloženo, náklad, prodej a marži v Kč, Kč/km a procentech. Vyložené litry nad naložené (celkem nebo u jednoho paliva) se jen upozorní.
+**Ceny.** Prodej za kilometr, nebo za litr. Náklad úseku je nákladové km × Kč/km. Prodej za km počítá s fakturovanými km, a když jsou prázdné, s nákladovými. Jinak litry × sazba, nebo ruční cena úseku, plus příplatky. Deska ukazuje km, naloženo, vyloženo, náklad, prodej a marži v Kč, Kč/km a procentech. Vyložené litry nad naložené (celkem nebo u jednoho paliva) se jen upozorní.
 
-**Matice vzdáleností.** `Disp_Distance` má normalizované `FromPlace` a `ToPlace`, A→B je totéž co B→A. Každá vykládka ukazuje svůj úsek (Nakládka → Vykládka 1, Vykládka 1 → Vykládka 2 …) a km se doplní z matice. Když pár v matici chybí, řádek napíše „není v matici, zadejte km“. Po zadání km se objeví tlačítko **Uložit do matice**, které pár hned zapíše do `Disp_Distance` i s uživatelem (`POST /api/dispatch/distances`). Chybějící nebo přepsané km se zapíšou i při uložení zakázky. Km slouží pro nákladovou cenu úseku.
+**Matice vzdáleností.** `Disp_Distance` má normalizované `FromPlace` a `ToPlace`, A→B je totéž co B→A. Každý pár má **nákladové km** (`Km`) a **fakturované km** (`BilledKm`, může být prázdné). Každá vykládka ukazuje svůj úsek (Nakládka → Vykládka 1, Vykládka 1 → Vykládka 2 …) a obě hodnoty se doplní z matice. U km je vidět `z matice`, nebo `ručně`. Když pár chybí nebo se km ručně změní, objeví se tlačítko **Uložit do matice**, které zapíše nákladové i fakturované km i s uživatelem (`POST /api/dispatch/distances`). Chybějící nebo přepsané nákladové km se zapíšou i při uložení zakázky, fakturované km v matici tím nezmizí. Úsek zakázky si obě hodnoty pamatuje (`Disp_OrderLeg.BilledKm`).
 
 **Verze.** Každá obchodní změna přidá řádek `Disp_OrderVersion` se sazbami, vykládkami a úseky v `RouteJson`. Starší verze jde otevřít jen ke čtení. Přiřazení jízdy, vozidla a řidiče verzi ani frontu nedělá.
 

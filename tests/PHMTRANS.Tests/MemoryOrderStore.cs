@@ -59,6 +59,15 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
     public Task<IReadOnlyList<LoadingPlaceItem>> ListLoadingPlacesAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<LoadingPlaceItem>>([new(1, "Sklad Kralupy"), new(2, "Sklad Mělník")]);
 
+    public Task<IReadOnlyList<PointItem>> ListPointsAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<PointItem>>(
+        [
+            new(1, "Sklad Kralupy", true, false),
+            new(2, "Sklad Mělník", true, false),
+            new(3, "ČS Brno", false, true),
+            new(4, "ČS Olomouc", false, true)
+        ]);
+
     public Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken) =>
         Task.FromResult(_distances.Lookup(pairs));
 

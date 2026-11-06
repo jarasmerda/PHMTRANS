@@ -93,16 +93,26 @@ public sealed class SqlOrderStore(
         InConnection(async (connection, _, token) =>
         {
             var rows = await connection.QueryAsync<LoadingPlaceItem>(Command(
-                "SELECT Id, Name FROM dbo.Disp_LoadingPlace WHERE Active = 1 ORDER BY Name",
+                "SELECT Id, Name FROM dbo.Disp_Point WHERE Active = 1 AND IsLoading = 1 ORDER BY Name",
                 null,
                 token));
             return (IReadOnlyList<LoadingPlaceItem>)rows.AsList();
         }, cancellationToken);
 
+    public Task<IReadOnlyList<PointItem>> ListPointsAsync(CancellationToken cancellationToken) =>
+        InConnection(async (connection, _, token) =>
+        {
+            var rows = await connection.QueryAsync<PointItem>(Command(
+                "SELECT Id, Name, IsLoading, IsUnloading FROM dbo.Disp_Point WHERE Active = 1 ORDER BY Name",
+                null,
+                token));
+            return (IReadOnlyList<PointItem>)rows.AsList();
+        }, cancellationToken);
+
     public Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken) =>
         InConnection(async (connection, _, token) =>
         {
-            var map = await LoadDistancesAsync(connection, null, token);
+            var map = await LoadDistanceRowsAsync(connection, null, token);
             return Lookup(map, pairs);
         }, cancellationToken);
 
@@ -561,25 +571,32 @@ public sealed class SqlOrderStore(
     private static async Task<Dictionary<string, decimal>> LoadDistancesAsync(
         SqlConnection connection,
         SqlTransaction? transaction,
+        CancellationToken cancellationToken) =>
+        (await LoadDistanceRowsAsync(connection, transaction, cancellationToken))
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Km, StringComparer.Ordinal);
+
+    private static async Task<Dictionary<string, DistanceKm>> LoadDistanceRowsAsync(
+        SqlConnection connection,
+        SqlTransaction? transaction,
         CancellationToken cancellationToken)
     {
         var rows = await connection.QueryAsync<DistanceSqlRow>(Command(
-            "SELECT FromPlace, ToPlace, Km FROM dbo.Disp_Distance",
+            "SELECT FromPlace, ToPlace, Km, BilledKm FROM dbo.Disp_Distance",
             transaction,
             cancellationToken));
-        var map = new Dictionary<string, decimal>(StringComparer.Ordinal);
+        var map = new Dictionary<string, DistanceKm>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
             var pair = PlacePair.Canonical(row.FromPlace, row.ToPlace);
             if (pair is null)
                 continue;
-            map[PlacePair.Key(pair.Value.From, pair.Value.To)] = row.Km;
+            map[PlacePair.Key(pair.Value.From, pair.Value.To)] = new DistanceKm(row.Km, row.BilledKm);
         }
 
         return map;
     }
 
-    private static IReadOnlyList<DistanceHit> Lookup(IReadOnlyDictionary<string, decimal> map, IReadOnlyList<DistanceQuery>? pairs)
+    private static IReadOnlyList<DistanceHit> Lookup(IReadOnlyDictionary<string, DistanceKm> map, IReadOnlyList<DistanceQuery>? pairs)
     {
         if (pairs is null || pairs.Count == 0)
             return [];
@@ -590,10 +607,10 @@ public sealed class SqlOrderStore(
             var from = pair.From?.Trim() ?? "";
             var to = pair.To?.Trim() ?? "";
             var canonical = PlacePair.Canonical(from, to);
-            decimal? km = null;
-            if (canonical is not null && map.TryGetValue(PlacePair.Key(canonical.Value.From, canonical.Value.To), out var found))
-                km = found;
-            hits.Add(new DistanceHit(from, to, km));
+            DistanceKm? found = null;
+            if (canonical is not null && map.TryGetValue(PlacePair.Key(canonical.Value.From, canonical.Value.To), out var hit))
+                found = hit;
+            hits.Add(new DistanceHit(from, to, found?.Km, found?.BilledKm));
         }
 
         return hits;
@@ -617,23 +634,26 @@ public sealed class SqlOrderStore(
             var updated = await connection.ExecuteAsync(Command(
                 """
                 UPDATE dbo.Disp_Distance
-                SET Km = @Km, UpdatedAt = @UpdatedAt, UpdatedBy = @UpdatedBy
+                SET Km = @Km,
+                    BilledKm = CASE WHEN @SetBilled = 1 THEN @BilledKm ELSE COALESCE(@BilledKm, BilledKm) END,
+                    UpdatedAt = @UpdatedAt,
+                    UpdatedBy = @UpdatedBy
                 WHERE FromPlace = @FromPlace AND ToPlace = @ToPlace
                 """,
                 transaction,
                 cancellationToken,
-                new { FromPlace = pair.Value.From, ToPlace = pair.Value.To, Km = write.Km, UpdatedAt = updatedAt, UpdatedBy = actor }));
+                new { FromPlace = pair.Value.From, ToPlace = pair.Value.To, Km = write.Km, BilledKm = write.BilledKm, SetBilled = write.SetBilled, UpdatedAt = updatedAt, UpdatedBy = actor }));
             if (updated > 0)
                 continue;
 
             await connection.ExecuteAsync(Command(
                 """
-                INSERT INTO dbo.Disp_Distance (FromPlace, ToPlace, Km, UpdatedAt, UpdatedBy)
-                VALUES (@FromPlace, @ToPlace, @Km, @UpdatedAt, @UpdatedBy)
+                INSERT INTO dbo.Disp_Distance (FromPlace, ToPlace, Km, BilledKm, UpdatedAt, UpdatedBy)
+                VALUES (@FromPlace, @ToPlace, @Km, @BilledKm, @UpdatedAt, @UpdatedBy)
                 """,
                 transaction,
                 cancellationToken,
-                new { FromPlace = pair.Value.From, ToPlace = pair.Value.To, Km = write.Km, UpdatedAt = updatedAt, UpdatedBy = actor }));
+                new { FromPlace = pair.Value.From, ToPlace = pair.Value.To, Km = write.Km, BilledKm = write.BilledKm, UpdatedAt = updatedAt, UpdatedBy = actor }));
         }
     }
 
@@ -952,9 +972,9 @@ public sealed class SqlOrderStore(
             await connection.ExecuteAsync(Command(
                 """
                 INSERT INTO dbo.Disp_OrderLeg
-                    (Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource)
+                    (Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource, BilledKm)
                 VALUES
-                    (@Id, @OrderId, @Sequence, @FromPlace, @ToPlace, @Liters, @Kilometers, @SalePrice, @SaleOverridden, @CostPrice, @KmSource)
+                    (@Id, @OrderId, @Sequence, @FromPlace, @ToPlace, @Liters, @Kilometers, @SalePrice, @SaleOverridden, @CostPrice, @KmSource, @BilledKm)
                 """,
                 transaction,
                 cancellationToken,
@@ -970,7 +990,8 @@ public sealed class SqlOrderStore(
                     leg.SalePrice,
                     leg.SaleOverridden,
                     leg.CostPrice,
-                    leg.KmSource
+                    leg.KmSource,
+                    BilledKm = leg.BilledKilometers
                 }));
         }
     }
@@ -997,7 +1018,7 @@ public sealed class SqlOrderStore(
             new { Ids = ids }))).AsList();
         var legs = (await connection.QueryAsync<RouteLegRow>(Command(
             """
-            SELECT Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource
+            SELECT Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource, BilledKm
             FROM dbo.Disp_OrderLeg
             WHERE OrderId IN @Ids
             ORDER BY Sequence
@@ -1045,16 +1066,16 @@ public sealed class SqlOrderStore(
             transaction,
             cancellationToken,
             new { order.Id }))).AsList();
-        var legs = (await connection.QueryAsync<OrderLeg>(Command(
+        var legs = (await connection.QueryAsync<RouteLegRow>(Command(
             """
-            SELECT Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource
+            SELECT Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource, BilledKm
             FROM dbo.Disp_OrderLeg
             WHERE OrderId = @Id
             ORDER BY Sequence
             """,
             transaction,
             cancellationToken,
-            new { order.Id }))).AsList();
+            new { order.Id }))).Select(leg => leg.ToLeg()).ToArray();
         var loads = (await connection.QueryAsync<RouteLoadRow>(Command(
             """
             SELECT OrderId, Sequence, FuelTypeId, FuelType, Liters
@@ -1202,8 +1223,9 @@ public sealed class SqlOrderStore(
         public bool SaleOverridden { get; set; }
         public decimal CostPrice { get; set; }
         public string? KmSource { get; set; }
+        public decimal? BilledKm { get; set; }
 
-        public OrderLeg ToLeg() => new(Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource);
+        public OrderLeg ToLeg() => new(Id, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource, BilledKm);
     }
 
     private sealed class OrderRow
@@ -1266,6 +1288,7 @@ public sealed class SqlOrderStore(
         public string FromPlace { get; set; } = "";
         public string ToPlace { get; set; } = "";
         public decimal Km { get; set; }
+        public decimal? BilledKm { get; set; }
     }
 
     private sealed class VehicleCostRow

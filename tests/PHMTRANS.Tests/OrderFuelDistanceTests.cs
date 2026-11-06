@@ -38,7 +38,9 @@ public sealed class OrderFuelDistanceTests
     {
         var ok = DistanceSave.Validate(new DistanceSaveRequest(" Sklad Kralupy ", "ČS Brno", 180.12345m));
         Assert.Null(ok.Error);
-        Assert.Equal(new DistanceWrite("Sklad Kralupy", "ČS Brno", 180.123m), ok.Write);
+        Assert.Equal(new DistanceWrite("Sklad Kralupy", "ČS Brno", 180.123m, null, SetBilled: true), ok.Write);
+        Assert.Equal(200m, DistanceSave.Validate(new DistanceSaveRequest("A", "B", 180m, 200m)).Write!.BilledKm);
+        Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("A", "B", 180m, -1m)).Error);
 
         Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("", "ČS Brno", 10m)).Error);
         Assert.NotNull(DistanceSave.Validate(new DistanceSaveRequest("ČS Brno", " čs  brno ", 10m)).Error);
@@ -65,7 +67,9 @@ public sealed class OrderFuelDistanceTests
         var orders = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(new PohodaOptions { SyncMode = "DryRun" }));
         var places = await orders.ListLoadingPlacesAsync(CancellationToken.None);
         Assert.Contains(places, item => item.Name == "Sklad Kralupy");
-        Assert.Contains("Disp_LoadingPlace WHERE Active = 1", File.ReadAllText(Path.Combine(Root(), "Dispatch", "SqlOrderStore.cs")), StringComparison.Ordinal);
+        var points = await orders.ListPointsAsync(CancellationToken.None);
+        Assert.Contains(points, item => item.Name == "ČS Brno" && item.IsUnloading && !item.IsLoading);
+        Assert.Contains("Disp_Point WHERE Active = 1 AND IsLoading = 1", File.ReadAllText(Path.Combine(Root(), "Dispatch", "SqlOrderStore.cs")), StringComparison.Ordinal);
     }
 
     private static string Root()
@@ -128,6 +132,43 @@ public sealed class OrderFuelDistanceTests
             "Jana")).Order;
         Assert.Equal(created.CurrentVersion + 1, moved.CurrentVersion);
         Assert.False(moved.Quote!.DeliveredExceedsLoaded);
+    }
+
+    [Fact]
+    public void Billed_kilometers_set_the_sale_and_cost_stays_on_cost_kilometers()
+    {
+        var catalog = OrderCatalog.Empty with { FuelTypes = FuelTypeCatalog.Seed };
+        var request = Request(
+            [new OrderStopInput("ČS Brno", 8000m, null, null), new OrderStopInput("ČS Olomouc", 4000m, null, null)],
+            [new OrderLegInput(180m, null, false, null, 200m), new OrderLegInput(40m, null, false)]);
+        var routed = OrderRoute.Materialize(
+            Blank() with { FuelType = FuelTypeCatalog.Diesel, FuelTypeId = 1 },
+            request,
+            catalog,
+            distances: new Dictionary<string, decimal>(StringComparer.Ordinal)).Order!;
+
+        Assert.Equal(200m, routed.Legs![0].BilledKilometers);
+        Assert.Equal(200m * 46m, routed.Legs[0].SalePrice);
+        Assert.Equal(180m * 28m, routed.Legs[0].CostPrice);
+        Assert.Null(routed.Legs[1].BilledKilometers);
+        Assert.Equal(40m * 46m, routed.Legs[1].SalePrice);
+        Assert.Equal(240m, routed.Quote!.BilledKm);
+        Assert.Equal(220m, routed.Quote.TotalKm);
+    }
+
+    [Fact]
+    public void Matrix_keeps_billed_km_unless_it_is_saved_on_purpose()
+    {
+        var book = new DistanceBook();
+        var at = DateTimeOffset.Parse("2026-11-06T08:00:00+01:00");
+        book.Apply([new DistanceWrite("Sklad Kralupy", "ČS Brno", 180m, 200m, SetBilled: true)], at, "Jana");
+        book.Apply([new DistanceWrite("Sklad Kralupy", "ČS Brno", 185m)], at, "Jana");
+        Assert.Equal((185m, 200m), (book.Find("ČS Brno", "Sklad Kralupy")!.Km, book.Find("ČS Brno", "Sklad Kralupy")!.BilledKm));
+
+        book.Apply([new DistanceWrite("Sklad Kralupy", "ČS Brno", 185m, null, SetBilled: true)], at, "Jana");
+        Assert.Null(book.Find("ČS Brno", "Sklad Kralupy")!.BilledKm);
+        var hit = book.Lookup([new DistanceQuery("sklad kralupy", "čs brno")]).Single();
+        Assert.Equal((185m, (decimal?)null), (hit.Km, hit.BilledKm));
     }
 
     [Fact]

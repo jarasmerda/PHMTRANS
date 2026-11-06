@@ -22,7 +22,8 @@ public sealed record OrderLeg(
     decimal SalePrice,
     bool SaleOverridden,
     decimal CostPrice,
-    string? KmSource = null);
+    string? KmSource = null,
+    decimal? BilledKilometers = null);
 
 public sealed record OrderStopInput(
     string? Place,
@@ -134,7 +135,8 @@ public sealed record OrderLegInput(
     decimal? Kilometers,
     decimal? SalePrice,
     bool? SaleOverridden,
-    string? KmSource = null);
+    string? KmSource = null,
+    decimal? BilledKilometers = null);
 
 public sealed record OrderRouteSnapshot(
     string PricingMode,
@@ -404,8 +406,16 @@ public static class OrderRoute
             var decision = distances is null
                 ? new DistanceDecision(kilometers, null, false)
                 : DistanceChoice.Resolve(kilometers, legInput?.KmSource, known);
+            decimal? billed = null;
+            if (legInput?.BilledKilometers is not null)
+            {
+                if (legInput.BilledKilometers is < 0m or > 100_000m)
+                    return (null, "Fakturované km úseku musí být od 0 do 100 000.", null);
+                billed = OrderPricing.Kilometers(legInput.BilledKilometers.Value);
+            }
+
             if (decision.Upsert && pair is not null && decision.Kilometers is not null)
-                writes.Add(new DistanceWrite(pair.Value.From, pair.Value.To, decision.Kilometers.Value));
+                writes.Add(new DistanceWrite(pair.Value.From, pair.Value.To, decision.Kilometers.Value, billed));
             kilometers = decision.Kilometers;
 
             var overridden = legInput?.SaleOverridden == true;
@@ -430,10 +440,11 @@ public static class OrderRoute
                 place,
                 liters,
                 kilometers,
-                OrderPricing.Sale(kilometers, liters, overridden, overridePrice, mode, salePerKm, salePerLiter),
+                OrderPricing.Sale(billed ?? kilometers, liters, overridden, overridePrice, mode, salePerKm, salePerLiter),
                 overridden,
                 OrderPricing.Cost(kilometers, costPerKm),
-                decision.Source));
+                decision.Source,
+                billed));
         }
 
         return (new OrderRouteSnapshot(mode, salePerKm, salePerLiter, costPerKm, builtStops, builtLegs), null, writes);
