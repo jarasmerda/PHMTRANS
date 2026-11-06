@@ -59,6 +59,71 @@ function orderOptions(items, selected, emptyLabel, labelOf) {
   return head + extra + body;
 }
 
+// Dostupnost řidičů ve výběru Řidič podle data nakládky a vykládky.
+const availabilityTimers = {};
+const availabilityGeneration = {};
+const availabilityBusy = {};
+
+function availabilityRange(prefix) {
+  const from = document.querySelector(`#${prefix}-loading-date`)?.value || "";
+  let to = document.querySelector(`#${prefix}-unloading-date`)?.value || from;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) to = from;
+  const days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+  return { from, days: Math.min(Math.max(days, 1), 62) };
+}
+
+function scheduleAvailability(prefix) {
+  clearTimeout(availabilityTimers[prefix]);
+  availabilityTimers[prefix] = setTimeout(() => refreshAvailability(prefix), 250);
+}
+
+async function refreshAvailability(prefix) {
+  if (!document.querySelector(`#${prefix}-driver`)) return;
+  const generation = (availabilityGeneration[prefix] || 0) + 1;
+  availabilityGeneration[prefix] = generation;
+  const range = availabilityRange(prefix);
+  const result = range
+    ? await orderFetch(`/api/dispatch/calendar?from=${range.from}&days=${range.days}`)
+    : { ok: false };
+  if (availabilityGeneration[prefix] !== generation) return;
+  const ownId = prefix === "edit" ? orderDetail?.order?.id : null;
+  const busy = new Map();
+  for (const row of (result.ok ? result.data?.drivers : null) ?? []) {
+    if (!row.driverId) continue;
+    const codes = new Set();
+    for (const day of row.days ?? [])
+      for (const order of day.orders ?? [])
+        if (order.id !== ownId) codes.add(order.code);
+    if (codes.size) busy.set(row.driverId, [...codes]);
+  }
+  availabilityBusy[prefix] = result.ok ? busy : null;
+  applyAvailability(prefix);
+}
+
+function applyAvailability(prefix) {
+  const select = document.querySelector(`#${prefix}-driver`);
+  const note = document.querySelector(`#${prefix}-driver-note`);
+  if (!select || !note) return;
+  const busy = availabilityBusy[prefix];
+  const selected = select.value;
+  if (!busy) {
+    select.innerHTML = orderOptions(orderCatalog.drivers, selected, "— nepřiřazeno —", (item) => item.name);
+    note.hidden = true;
+    return;
+  }
+  const free = orderCatalog.drivers.filter((item) => !busy.has(item.id));
+  const taken = orderCatalog.drivers.filter((item) => busy.has(item.id));
+  select.innerHTML = orderOptions([...free, ...taken], selected, "— nepřiřazeno —", (item) =>
+    busy.has(item.id) ? `${item.name} – obsazený (${busy.get(item.id).join(", ")})` : `${item.name} – volný`);
+  const clash = busy.get(select.value);
+  note.hidden = false;
+  note.classList.toggle("warn", !!clash);
+  note.textContent = clash
+    ? `Pozor, řidič má v těchto dnech i zakázku ${clash.join(", ")}.`
+    : `Volní řidiči v těchto dnech: ${free.length} z ${orderCatalog.drivers.length}.`;
+}
+
 function orderStatusOptions(selected) {
   if (selected === "Stornováno")
     return `<option selected>Stornováno</option>`;
@@ -134,7 +199,8 @@ function formFields(prefix, order) {
     <label>Datum vykládky <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}"></label>
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
-    <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
+    <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select>
+      <span class="note" id="${prefix}-driver-note" hidden></span></label>
     <label>Režim prodeje
       <select id="${prefix}-mode">
         <option value="Km"${mode === "Km" ? " selected" : ""}>Za kilometr</option>
@@ -723,6 +789,7 @@ function renderDetail(data) {
   stampPairs("edit");
   refreshRoute("edit");
   labelKnownKm("edit");
+  if (!cancelled) refreshAvailability("edit");
   document.querySelector("#version-page").hidden = true;
   showOrderChrome();
   renderVersionLinks(data);
@@ -1161,6 +1228,10 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
 });
 
 document.querySelector("#orders-view").addEventListener("change", (event) => {
+  if (event.target.matches("[id$='-loading-date'], [id$='-unloading-date']"))
+    scheduleAvailability(event.target.id.startsWith("edit-") ? "edit" : "create");
+  if (event.target.matches("select[id$='-driver']"))
+    applyAvailability(event.target.id.startsWith("edit-") ? "edit" : "create");
   if (event.target.matches("select[id$='-loading']")) {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
     refreshRoute(prefix);
@@ -1297,6 +1368,7 @@ document.querySelector("#open-order-create")?.addEventListener("click", () => {
   const local = document.querySelector("#order-create-message");
   if (local) local.hidden = true;
   document.querySelector("#order-create-dialog")?.showModal();
+  refreshAvailability("create");
 });
 
 loadCatalog().then(() => {
