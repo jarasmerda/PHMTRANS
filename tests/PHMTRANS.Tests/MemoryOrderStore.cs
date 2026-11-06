@@ -59,6 +59,14 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
     public Task<IReadOnlyList<DistanceHit>> LookupDistancesAsync(IReadOnlyList<DistanceQuery> pairs, CancellationToken cancellationToken) =>
         Task.FromResult(_distances.Lookup(pairs));
 
+    public Task SaveDistanceAsync(DistanceWrite write, string? updatedBy, CancellationToken cancellationToken)
+    {
+        _distances.Apply([write], DateTimeOffset.Now, updatedBy);
+        return Task.CompletedTask;
+    }
+
+    public DistanceEntry? FindDistance(string from, string to) => _distances.Find(from, to);
+
     public Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken) =>
         Change(id, (context, _) => OrderWorkflow.Confirm(context), cancellationToken);
 

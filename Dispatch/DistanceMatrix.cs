@@ -51,6 +51,29 @@ public sealed record DistanceHit(string From, string To, decimal? Km);
 
 public sealed record DistanceWrite(string FromPlace, string ToPlace, decimal Km);
 
+public sealed record DistanceSaveRequest(string? From, string? To, decimal? Km);
+
+public static class DistanceSave
+{
+    // Ruční uložení jednoho páru do matice. Vrací zápis, nebo chybu pro uživatele.
+    public static (DistanceWrite? Write, string? Error) Validate(DistanceSaveRequest? request)
+    {
+        var from = request?.From?.Trim() ?? "";
+        var to = request?.To?.Trim() ?? "";
+        if (from.Length == 0 || to.Length == 0)
+            return (null, "Vyplňte místo odkud i kam.");
+        if (from.Length > PlacePair.MaxLength || to.Length > PlacePair.MaxLength)
+            return (null, "Místo může mít nejvýše 160 znaků.");
+        if (PlacePair.Normalize(from) == PlacePair.Normalize(to))
+            return (null, "Odkud a kam je stejné místo.");
+        if (request?.Km is null)
+            return (null, "Vyplňte kilometry.");
+        if (request.Km is <= 0m or > 100_000m)
+            return (null, "Kilometry musí být větší než 0 a nejvýše 100 000.");
+        return (new DistanceWrite(from, to, OrderPricing.Kilometers(request.Km.Value)), null);
+    }
+}
+
 public readonly record struct DistanceDecision(decimal? Kilometers, string? Source, bool Upsert);
 
 public static class DistanceChoice

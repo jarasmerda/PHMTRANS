@@ -12,6 +12,7 @@ public static class OrderEndpoints
         api.MapGet("/orders/{id}", GetOrder);
         api.MapGet("/fuel-types", ListFuelTypes);
         api.MapPost("/distances/lookup", LookupDistances);
+        api.MapPost("/distances", SaveDistance);
         api.MapPost("/orders", CreateOrder);
         api.MapPut("/orders/{id}", UpdateOrder);
         api.MapPost("/orders/{id}/confirm", ConfirmOrder);
@@ -78,6 +79,20 @@ public static class OrderEndpoints
             if (pairs.Count > 40)
                 return Results.BadRequest(new { message = "Najednou lze ověřit nejvýše 40 úseků." });
             return Results.Ok(new { pairs = await store.LookupDistancesAsync(pairs, cancellationToken) });
+        });
+
+    private static Task<IResult> SaveDistance(
+        DistanceSaveRequest? request,
+        IOrderStore store,
+        HttpContext httpContext,
+        CancellationToken cancellationToken) =>
+        Execute(async () =>
+        {
+            var (write, error) = DistanceSave.Validate(request);
+            if (error is not null)
+                return Results.BadRequest(new { message = error });
+            await store.SaveDistanceAsync(write!, Actor(httpContext), cancellationToken);
+            return Results.Ok(new { from = write!.FromPlace, to = write.ToPlace, km = write.Km });
         });
 
     private static Task<IResult> CreateOrder(
