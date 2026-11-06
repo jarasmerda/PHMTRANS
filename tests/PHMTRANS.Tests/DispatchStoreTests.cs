@@ -404,7 +404,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
         Assert.Contains("dispecink.js?v=13", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=13", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=14", html, StringComparison.Ordinal);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("filter.css?v=1", html, StringComparison.Ordinal);
         Assert.Contains("value=\"Nová\" checked", html, StringComparison.Ordinal);
@@ -494,7 +494,7 @@ public sealed class DispatchPageTests
         Assert.Contains("Dohodnutá cena", orders, StringComparison.Ordinal);
         Assert.Contains("version.stops", orders, StringComparison.Ordinal);
         Assert.Contains("version.legs", orders, StringComparison.Ordinal);
-        Assert.Contains("<th>Km</th>", orders, StringComparison.Ordinal);
+        Assert.Contains("<th>Nákladové km</th><th>Fakturované km</th>", orders, StringComparison.Ordinal);
         Assert.Contains("<span class=\"pill\">neodesláno</span>", orders, StringComparison.Ordinal);
         Assert.DoesNotContain("id=\"version-rows\"", orders, StringComparison.Ordinal);
     }
@@ -547,7 +547,7 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("dbo.Disp_Vehicle", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Driver", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Trip", script, StringComparison.Ordinal);
-        Assert.Equal(14, Count(script, "IF OBJECT_ID"));
+        Assert.Equal(15, Count(script, "IF OBJECT_ID"));
         Assert.Contains("dbo.Disp_Order", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_OrderVersion", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_SyncQueue", script, StringComparison.Ordinal);
@@ -555,7 +555,7 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(36, Count(script, "ALTER TABLE"));
+        Assert.Equal(38, Count(script, "ALTER TABLE"));
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Order', N'CancelReason') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Order', N'CustomerIco') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_OrderVersion', N'CustomerStreet') IS NULL", script, StringComparison.Ordinal);
@@ -573,6 +573,10 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("UX_Disp_LoadingPlace_Name", script, StringComparison.Ordinal);
         Assert.Contains("IF OBJECT_ID(N'dbo.Disp_OrderLoad', N'U') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("FK_Disp_OrderLoad_Order", script, StringComparison.Ordinal);
+        Assert.Contains("IF OBJECT_ID(N'dbo.Disp_Point', N'U') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE dbo.Disp_Distance ADD BilledKm decimal(18,3) NULL", script, StringComparison.Ordinal);
+        Assert.Contains("ALTER TABLE dbo.Disp_OrderLeg ADD BilledKm decimal(18,3) NULL", script, StringComparison.Ordinal);
+        Assert.Contains("N'PointsSeeded'", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.Contains("N'Motorová nafta'", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.Contains("N'Benzín'", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.Contains("UX_Disp_Distance_Pair", script, StringComparison.Ordinal);

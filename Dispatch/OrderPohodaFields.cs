@@ -103,6 +103,7 @@ public static class OrderPohodaFields
         for (var index = 0; index < leftLegs.Count; index++)
         {
             if (leftLegs[index].Kilometers != rightLegs[index].Kilometers
+                || leftLegs[index].BilledKilometers != rightLegs[index].BilledKilometers
                 || leftLegs[index].SaleOverridden != rightLegs[index].SaleOverridden
                 || leftLegs[index].CostPrice != rightLegs[index].CostPrice)
                 return false;

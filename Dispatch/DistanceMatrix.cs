@@ -47,11 +47,14 @@ public static class PlacePair
 
 public sealed record DistanceQuery(string? From, string? To);
 
-public sealed record DistanceHit(string From, string To, decimal? Km);
+public sealed record DistanceHit(string From, string To, decimal? Km, decimal? BilledKm = null);
 
-public sealed record DistanceWrite(string FromPlace, string ToPlace, decimal Km);
+// BilledKm se zapíše jen při SetBilled; jinak zůstane hodnota v matici beze změny.
+public sealed record DistanceWrite(string FromPlace, string ToPlace, decimal Km, decimal? BilledKm = null, bool SetBilled = false);
 
-public sealed record DistanceSaveRequest(string? From, string? To, decimal? Km);
+public sealed record DistanceKm(decimal Km, decimal? BilledKm);
+
+public sealed record DistanceSaveRequest(string? From, string? To, decimal? Km, decimal? BilledKm = null);
 
 public static class DistanceSave
 {
@@ -70,7 +73,10 @@ public static class DistanceSave
             return (null, "Vyplňte kilometry.");
         if (request.Km is <= 0m or > 100_000m)
             return (null, "Kilometry musí být větší než 0 a nejvýše 100 000.");
-        return (new DistanceWrite(from, to, OrderPricing.Kilometers(request.Km.Value)), null);
+        if (request.BilledKm is < 0m or > 100_000m)
+            return (null, "Fakturované km musí být od 0 do 100 000.");
+        var billed = request.BilledKm is null ? (decimal?)null : OrderPricing.Kilometers(request.BilledKm.Value);
+        return (new DistanceWrite(from, to, OrderPricing.Kilometers(request.Km.Value), billed, SetBilled: true), null);
     }
 }
 
@@ -94,7 +100,7 @@ public static class DistanceChoice
     }
 }
 
-public sealed record DistanceEntry(string FromPlace, string ToPlace, decimal Km, DateTimeOffset UpdatedAt, string? UpdatedBy);
+public sealed record DistanceEntry(string FromPlace, string ToPlace, decimal Km, DateTimeOffset UpdatedAt, string? UpdatedBy, decimal? BilledKm = null);
 
 public sealed class DistanceBook
 {
@@ -130,10 +136,10 @@ public sealed class DistanceBook
                 var from = pair.From?.Trim() ?? "";
                 var to = pair.To?.Trim() ?? "";
                 var canonical = PlacePair.Canonical(from, to);
-                decimal? km = null;
-                if (canonical is not null && _rows.TryGetValue(PlacePair.Key(canonical.Value.From, canonical.Value.To), out var found))
-                    km = found.Km;
-                hits.Add(new DistanceHit(from, to, km));
+                DistanceEntry? found = null;
+                if (canonical is not null)
+                    _rows.TryGetValue(PlacePair.Key(canonical.Value.From, canonical.Value.To), out found);
+                hits.Add(new DistanceHit(from, to, found?.Km, found?.BilledKm));
             }
 
             return hits;
@@ -152,12 +158,15 @@ public sealed class DistanceBook
                 var canonical = PlacePair.Canonical(write.FromPlace, write.ToPlace);
                 if (canonical is null)
                     continue;
-                _rows[PlacePair.Key(canonical.Value.From, canonical.Value.To)] = new DistanceEntry(
+                var key = PlacePair.Key(canonical.Value.From, canonical.Value.To);
+                _rows.TryGetValue(key, out var previous);
+                _rows[key] = new DistanceEntry(
                     canonical.Value.From,
                     canonical.Value.To,
                     write.Km,
                     updatedAt,
-                    string.IsNullOrWhiteSpace(updatedBy) ? null : updatedBy.Trim());
+                    string.IsNullOrWhiteSpace(updatedBy) ? null : updatedBy.Trim(),
+                    write.SetBilled ? write.BilledKm : write.BilledKm ?? previous?.BilledKm);
             }
         }
     }

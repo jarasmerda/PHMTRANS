@@ -7,7 +7,7 @@ const orderTime = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeSty
 const orderStatuses = ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno"];
 const orderMessage = document.querySelector("#order-message");
 const queueMessage = document.querySelector("#queue-message");
-let orderCatalog = { vehicles: [], drivers: [], trips: [], fuelTypes: [], loadingPlaces: [] };
+let orderCatalog = { vehicles: [], drivers: [], trips: [], fuelTypes: [], loadingPlaces: [], points: [] };
 const distanceCache = new Map();
 const distanceTimers = {};
 const distanceGeneration = {};
@@ -248,6 +248,26 @@ function stopFuelId(stop, headerFuelId, headerFuelName) {
   return headerFuelId || named?.id || items[0]?.id || "";
 }
 
+function stopPlaceField(current) {
+  const points = (orderCatalog.points || []).filter((item) => item.isUnloading);
+  if (!points.length)
+    return `<label>Místo <input data-stop-place maxlength="160" value="${orderText(current)}"></label>`;
+  const known = points.some((item) => item.name === current);
+  const legacy = current && !known
+    ? `<option value="${orderText(current)}" selected>${orderText(current)} (mimo seznam)</option>`
+    : "";
+  const body = points.map((item) =>
+    `<option value="${orderText(item.name)}"${item.name === current ? " selected" : ""}>${orderText(item.name)}</option>`).join("");
+  return `<label>Místo <select data-stop-place>
+      <option value=""${current ? "" : " selected"}>— vyberte místo —</option>${legacy}${body}
+    </select></label>`;
+}
+
+function distanceEntry(ok, hit) {
+  if (!ok || !hit || hit.km === null || hit.km === undefined) return null;
+  return { km: Number(hit.km), billed: hit.billedKm === null || hit.billedKm === undefined ? null : Number(hit.billedKm) };
+}
+
 function stopRow(prefix, stop, leg, headerFuelId, headerFuelName) {
   const arrival = stop?.arrivalAt ? toOrderLocal(stop.arrivalAt) : "";
   const headerDefault = stopFuelId(null, headerFuelId, headerFuelName);
@@ -256,11 +276,12 @@ function stopRow(prefix, stop, leg, headerFuelId, headerFuelName) {
   const source = leg?.kmSource === "Matrix" || leg?.kmSource === "Manual" ? leg.kmSource : "";
   return `<div class="stop-row" data-stop-row data-km-source="${orderText(source)}">
       <p class="stop-pair" data-stop-pair></p>
-      <label>Místo <input data-stop-place maxlength="160" value="${orderText(stop?.place || "")}"></label>
+      ${stopPlaceField(stop?.place || "")}
       <label>Palivo <select data-stop-fuel data-fuel-linked="${linked}">${fuelOptions(fuelId, stop?.fuelType || headerFuelName, false)}</select></label>
       <label>Litry <input data-stop-liters type="number" min="0" step="0.001" value="${orderText(stop?.liters ?? "")}"></label>
       <div class="stop-km">
-        <label>Km <input data-leg-km type="number" min="0" step="0.001" value="${orderText(leg?.kilometers ?? "")}"></label>
+        <label>Nákladové km <input data-leg-km type="number" min="0" step="0.001" value="${orderText(leg?.kilometers ?? "")}"></label>
+        <label>Fakturované km <input data-leg-billed type="number" min="0" step="0.001" placeholder="= nákladové" value="${orderText(leg?.billedKilometers ?? "")}"></label>
         <span class="km-source" data-km-label></span>
         <button type="button" class="km-save" data-km-save hidden>Uložit do matice</button>
       </div>
@@ -321,7 +342,7 @@ function paintKmSource(row) {
   const save = row.querySelector("[data-km-save]");
   if (save) {
     const pair = row.dataset.kmFrom && row.dataset.kmTo;
-    save.hidden = !(pair && source === "Manual" && Number(km) > 0);
+    save.hidden = !(pair && Number(km) > 0 && (source === "Manual" || row.dataset.billedDirty === "1"));
     save.disabled = false;
   }
 }
@@ -347,33 +368,40 @@ async function saveKmToMatrix(prefix, row) {
   const from = row.dataset.kmFrom || "";
   const to = row.dataset.kmTo || "";
   if (!from || !to || !(km > 0)) return;
+  const billedText = row.querySelector("[data-leg-billed]")?.value.trim() ?? "";
+  const billedKm = billedText === "" ? null : Number(billedText);
   if (button) button.disabled = true;
   const result = await orderFetch("/api/dispatch/distances", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to, km })
+    body: JSON.stringify({ from, to, km, billedKm })
   });
   if (!result.ok) {
     if (button) button.disabled = false;
     orderShow(orderMessage, result.data?.message || "Kilometry se nepodařilo uložit do matice.");
     return;
   }
-  distanceCache.set(canonicalKey(from, to), Number(result.data?.km ?? km));
+  distanceCache.set(canonicalKey(from, to), { km: Number(result.data?.km ?? km), billed: billedKm });
   row.dataset.kmSource = "Matrix";
+  row.dataset.billedDirty = "";
   orderShow(orderMessage, "");
   paintKmSource(row);
   refreshRoute(prefix);
 }
 
-function applyLookedUpKm(row, km) {
+function applyLookedUpKm(row, entry) {
   const input = row.querySelector("[data-leg-km]");
+  const billed = row.querySelector("[data-leg-billed]");
   if (!input) return;
   applyingMatrixKm = true;
-  if (km === null || km === undefined) {
+  row.dataset.billedDirty = "";
+  if (!entry) {
     input.value = "";
+    if (billed) billed.value = "";
     row.dataset.kmSource = "";
   } else {
-    input.value = String(km);
+    input.value = String(entry.km);
+    if (billed) billed.value = entry.billed === null || entry.billed === undefined ? "" : String(entry.billed);
     row.dataset.kmSource = "Matrix";
   }
   applyingMatrixKm = false;
@@ -418,10 +446,9 @@ async function fillDistances(prefix) {
     if (distanceGeneration[prefix] !== generation) return;
     const hits = Array.isArray(result.data?.pairs) ? result.data.pairs : [];
     pending.forEach((item, index) => {
-      const hit = hits[index];
-      const km = result.ok && hit && hit.km !== null && hit.km !== undefined ? hit.km : null;
-      distanceCache.set(item.key, km);
-      if (item.row.dataset.kmPair === item.key) applyLookedUpKm(item.row, km);
+      const entry = distanceEntry(result.ok, hits[index]);
+      distanceCache.set(item.key, entry);
+      if (item.row.dataset.kmPair === item.key) applyLookedUpKm(item.row, entry);
     });
   }
   if (distanceGeneration[prefix] !== generation) return;
@@ -440,9 +467,7 @@ async function labelKnownKm(prefix) {
     });
     const hits = Array.isArray(result.data?.pairs) ? result.data.pairs : [];
     pending.forEach((item, index) => {
-      const hit = hits[index];
-      const km = result.ok && hit && hit.km !== null && hit.km !== undefined ? hit.km : null;
-      distanceCache.set(item.key, km);
+      distanceCache.set(item.key, distanceEntry(result.ok, hits[index]));
     });
   }
   for (const item of items) {
@@ -450,11 +475,11 @@ async function labelKnownKm(prefix) {
     const known = distanceCache.has(item.key) ? distanceCache.get(item.key) : undefined;
     const current = item.row.querySelector("[data-leg-km]").value.trim();
     if (current === "") {
-      if (known !== null && known !== undefined) applyLookedUpKm(item.row, known);
+      if (known) applyLookedUpKm(item.row, known);
       else paintKmSource(item.row);
       continue;
     }
-    item.row.dataset.kmSource = known !== null && known !== undefined && Number(known) === Number(current) ? "Matrix" : "Manual";
+    item.row.dataset.kmSource = known && Number(known.km) === Number(current) ? "Matrix" : "Manual";
     paintKmSource(item.row);
   }
   refreshRoute(prefix);
@@ -478,6 +503,8 @@ function routeState(prefix) {
     const liters = Number(row.querySelector("[data-stop-liters]").value);
     const kmText = row.querySelector("[data-leg-km]").value.trim();
     const kilometers = kmText === "" ? null : Number(kmText);
+    const billedText = row.querySelector("[data-leg-billed]")?.value.trim() ?? "";
+    const billedKilometers = billedText === "" || !Number.isFinite(Number(billedText)) ? null : Number(billedText);
     const fuelValue = Number(row.querySelector("[data-stop-fuel]")?.value);
     const overridden = row.querySelector("[data-leg-override]").checked;
     const overridePrice = Number(row.querySelector("[data-leg-sale]").value || 0);
@@ -488,7 +515,7 @@ function routeState(prefix) {
       ? roundMoney(overridePrice)
       : mode === "Liters"
         ? roundMoney(safeLiters * (Number.isFinite(salePerLiter) ? salePerLiter : 0))
-        : roundMoney(safeKm * (Number.isFinite(salePerKm) ? salePerKm : 0));
+        : roundMoney((billedKilometers ?? safeKm) * (Number.isFinite(salePerKm) ? salePerKm : 0));
     const cost = roundMoney(safeKm * (Number.isFinite(costPerKm) ? costPerKm : 0));
     stops.push({
       place,
@@ -503,6 +530,7 @@ function routeState(prefix) {
       from,
       to: place,
       kilometers,
+      billedKilometers,
       salePrice: sale,
       saleOverridden: overridden,
       cost,
@@ -523,6 +551,7 @@ function refreshRoute(prefix) {
   const surcharges = Number(document.querySelector(`#${prefix}-surcharges`)?.value || 0);
   const delivered = state.stops.reduce((sum, stop) => sum + Number(stop.liters || 0), 0);
   const totalKm = state.legs.reduce((sum, leg) => sum + Number(leg.kilometers || 0), 0);
+  const billedKm = state.legs.reduce((sum, leg) => sum + Number(leg.billedKilometers ?? leg.kilometers ?? 0), 0);
   const legSale = roundMoney(state.legs.reduce((sum, leg) => sum + leg.salePrice, 0));
   const totalCost = roundMoney(state.legs.reduce((sum, leg) => sum + leg.cost, 0));
   const totalSale = roundMoney(legSale + (Number.isFinite(surcharges) ? surcharges : 0));
@@ -532,7 +561,8 @@ function refreshRoute(prefix) {
   const box = document.querySelector(`#${prefix}-totals`);
   if (box) {
     const cards = [
-      ["Km", totalKm],
+      ["Nákladové km", totalKm],
+      ["Fakturované km", billedKm],
       ["Naloženo l", loaded],
       ["Vyloženo l", delivered],
       ["Náklad Kč", totalCost],
@@ -625,6 +655,7 @@ function readForm(prefix) {
     stops: route.stops,
     legs: route.legs.map((leg) => ({
       kilometers: leg.kilometers,
+      billedKilometers: leg.billedKilometers,
       salePrice: leg.salePrice,
       saleOverridden: leg.saleOverridden,
       kmSource: leg.kmSource
@@ -753,6 +784,7 @@ function versionLines(version) {
     const stop = stops.find((item) => item.sequence === leg.sequence) || stops[index] || {};
     const source = leg.kmSource === "Matrix" ? " · z matice" : leg.kmSource === "Manual" ? " · ručně" : "";
     const km = leg.kilometers === null || leg.kilometers === undefined || leg.kilometers === "" ? "—" : `${orderLiters.format(Number(leg.kilometers))} km${source}`;
+    const billed = leg.billedKilometers === null || leg.billedKilometers === undefined ? "= nákladové" : `${orderLiters.format(Number(leg.billedKilometers))} km`;
     const fuel = stop.fuelType || version.fuelType || "";
     return `<tr>
       <td>${orderText(leg.sequence || index + 1)}</td>
@@ -760,6 +792,7 @@ function versionLines(version) {
       <td>${orderText(leg.toPlace || stop.place || "")}</td>
       <td>${orderText(fuel)}</td>
       <td class="num">${orderText(km)}</td>
+      <td class="num">${orderText(billed)}</td>
       <td class="num">${orderLiters.format(Number(leg.liters ?? stop.liters ?? 0))} l</td>
       <td class="num">${orderMoney.format(Number(leg.salePrice || 0))} Kč${leg.saleOverridden ? " · ruční" : ""}</td>
       <td class="num">${orderMoney.format(Number(leg.costPrice || 0))} Kč</td>
@@ -767,7 +800,7 @@ function versionLines(version) {
     </tr>`;
   }).join("");
   return `<table id="version-lines">
-    <thead><tr><th>Úsek</th><th>Odkud</th><th>Kam</th><th>Palivo</th><th>Km</th><th>Litry</th><th>Prodej</th><th>Náklad</th><th>Poznámka</th></tr></thead>
+    <thead><tr><th>Úsek</th><th>Odkud</th><th>Kam</th><th>Palivo</th><th>Nákladové km</th><th>Fakturované km</th><th>Litry</th><th>Prodej</th><th>Náklad</th><th>Poznámka</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
 }
@@ -912,18 +945,20 @@ async function orderFetch(url, options) {
 }
 
 async function fetchCatalog() {
-  const [vehicles, drivers, trips, fuels, loadingPlaces] = await Promise.all([
+  const [vehicles, drivers, trips, fuels, loadingPlaces, points] = await Promise.all([
     orderFetch("/api/dispatch/vehicles"),
     orderFetch("/api/dispatch/drivers"),
     orderFetch("/api/dispatch/trips"),
     orderFetch("/api/dispatch/fuel-types"),
-    orderFetch("/api/dispatch/loading-places")
+    orderFetch("/api/dispatch/loading-places"),
+    orderFetch("/api/dispatch/points")
   ]);
   if (Array.isArray(vehicles.data)) orderCatalog.vehicles = vehicles.data;
   if (Array.isArray(drivers.data)) orderCatalog.drivers = drivers.data;
   if (Array.isArray(trips.data)) orderCatalog.trips = trips.data;
   if (Array.isArray(fuels.data)) orderCatalog.fuelTypes = fuels.data;
   if (Array.isArray(loadingPlaces.data)) orderCatalog.loadingPlaces = loadingPlaces.data;
+  if (Array.isArray(points.data)) orderCatalog.points = points.data;
 }
 
 async function loadCatalog() {
@@ -1149,6 +1184,13 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
     }
   }
   if (event.target.matches("[id$='-cost-km']")) event.target.dataset.touched = "1";
+  if (event.target.matches("[data-leg-billed]")) {
+    const billedRow = event.target.closest("[data-stop-row]");
+    if (billedRow) {
+      billedRow.dataset.billedDirty = "1";
+      paintKmSource(billedRow);
+    }
+  }
   if (event.target.matches("[data-leg-km]") && !applyingMatrixKm) {
     const kmRow = event.target.closest("[data-stop-row]");
     if (kmRow) {

@@ -12,6 +12,7 @@ public static class OrderEndpoints
         api.MapGet("/orders/{id}", GetOrder);
         api.MapGet("/fuel-types", ListFuelTypes);
         api.MapGet("/loading-places", ListLoadingPlaces);
+        api.MapGet("/points", ListPoints);
         api.MapPost("/distances/lookup", LookupDistances);
         api.MapPost("/distances", SaveDistance);
         api.MapPost("/orders", CreateOrder);
@@ -73,6 +74,9 @@ public static class OrderEndpoints
     private static Task<IResult> ListLoadingPlaces(IOrderStore store, CancellationToken cancellationToken) =>
         Execute(async () => Results.Ok(await store.ListLoadingPlacesAsync(cancellationToken)));
 
+    private static Task<IResult> ListPoints(IOrderStore store, CancellationToken cancellationToken) =>
+        Execute(async () => Results.Ok(await store.ListPointsAsync(cancellationToken)));
+
     private static Task<IResult> LookupDistances(
         DistanceLookupRequest? request,
         IOrderStore store,
@@ -96,7 +100,7 @@ public static class OrderEndpoints
             if (error is not null)
                 return Results.BadRequest(new { message = error });
             await store.SaveDistanceAsync(write!, Actor(httpContext), cancellationToken);
-            return Results.Ok(new { from = write!.FromPlace, to = write.ToPlace, km = write.Km });
+            return Results.Ok(new { from = write!.FromPlace, to = write.ToPlace, km = write.Km, billedKm = write.BilledKm });
         });
 
     private static Task<IResult> CreateOrder(
