@@ -154,28 +154,6 @@ public sealed class OrderRouteTests
     }
 
     [Fact]
-    public void Trip_link_fills_only_a_free_order_with_one_matching_code()
-    {
-        var links = OrderTripLink.Match(
-            [
-                new OrderTripLink.TripCode("t1", "Z2026-0001"),
-                new OrderTripLink.TripCode("t2", "Z2026-0001"),
-                new OrderTripLink.TripCode("t3", "Z2026-0002"),
-                new OrderTripLink.TripCode("t4", "  "),
-                new OrderTripLink.TripCode("t5", null)
-            ],
-            [
-                new OrderTripLink.OrderLink("o1", "Z2026-0001", null),
-                new OrderTripLink.OrderLink("o2", "Z2026-0002", null),
-                new OrderTripLink.OrderLink("o3", "Z2026-0002", "already"),
-                new OrderTripLink.OrderLink("o4", "Z2026-0099", null)
-            ]);
-
-        var link = Assert.Single(links);
-        Assert.Equal(("o2", "t3"), link);
-    }
-
-    [Fact]
     public void Sale_lines_use_leg_prices_and_skip_cost()
     {
         var order = Blank() with

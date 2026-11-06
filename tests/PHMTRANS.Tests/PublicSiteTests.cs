@@ -144,9 +144,9 @@ public sealed class PublicSitePageTests
         Assert.Contains("var(--accent)", css, StringComparison.Ordinal);
         Assert.Contains("var(--button)", css, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(root, "landing", "logo-dark.png")));
-        Assert.True(File.Exists(Path.Combine(root, "landing", "tanker-scania.webp")));
+        Assert.True(File.Exists(Path.Combine(root, "landing", "tanker-scania-1200.webp")));
         Assert.True(File.Exists(Path.Combine(root, "landing", "truck-white-scania.webp")));
-        Assert.True(File.Exists(Path.Combine(root, "landing", "truck-sunset.webp")));
+        Assert.True(File.Exists(Path.Combine(root, "landing", "truck-sunset-1200.webp")));
 
         Assert.Contains("name=\"PublicHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"PublicIndex\"", webConfig, StringComparison.Ordinal);
@@ -250,11 +250,8 @@ public sealed class PublicSiteHttpTests : IClassFixture<PublicSiteApp>
             "/landing/logo.png",
             "/landing/truck-white-scania.webp",
             "/landing/truck-white-scania-480.webp",
-            "/landing/tanker-scania.webp",
             "/landing/tanker-scania-768.webp",
-            "/landing/truck-sunset.webp",
             "/landing/truck-sunset-768.webp",
-            "/landing/truck-blue-scania.webp",
             "/landing/fonts/barlow-condensed-800.woff2",
             "/img/eu-projekt.png"
         })

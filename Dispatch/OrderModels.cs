@@ -21,8 +21,6 @@ public static class OrderStatuses
 
     public static bool IsKnown(string status) => All.Contains(status);
 
-    public static bool IsConfirmed(string status) => status is KFakturaci or Vyfakturovano;
-
     public static int Rank(string status) => status switch
     {
         Nova => 0,
@@ -34,8 +32,6 @@ public static class OrderStatuses
         Stornovano => 6,
         _ => 7
     };
-
-    public static bool CountsInTotals(string status) => status != Stornovano;
 }
 
 public static class OrderSyncActions

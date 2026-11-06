@@ -29,7 +29,6 @@ public sealed class OrderCancelTests
         Assert.Equal("zákazník odřekl", cancelled.Order.CancelReason);
         Assert.Null(cancelled.Order.TripId);
         Assert.Equal(2, cancelled.Order.CurrentVersion);
-        Assert.False(OrderStatuses.CountsInTotals(cancelled.Order.Status));
         var bundle = await store.GetAsync(created.Order.Id, CancellationToken.None);
         Assert.NotNull(bundle);
         Assert.Contains(bundle.Versions, version => version.CurrentVersion == 2 && version.Status == OrderStatuses.Stornovano);

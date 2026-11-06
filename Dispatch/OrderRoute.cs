@@ -356,45 +356,6 @@ public static class OrderRoute
     private static string NewId() => Guid.NewGuid().ToString("n");
 }
 
-public static class OrderTripLink
-{
-    public sealed record TripCode(string TripId, string? OrderCode);
-
-    public sealed record OrderLink(string OrderId, string Code, string? TripId);
-
-    public static IReadOnlyList<(string OrderId, string TripId)> Match(
-        IEnumerable<TripCode> trips,
-        IEnumerable<OrderLink> orders)
-    {
-        var byCode = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var trip in trips)
-        {
-            var code = trip.OrderCode?.Trim();
-            if (string.IsNullOrEmpty(code))
-                continue;
-            if (!byCode.TryGetValue(code, out var list))
-            {
-                list = [];
-                byCode[code] = list;
-            }
-
-            list.Add(trip.TripId);
-        }
-
-        var linked = new List<(string OrderId, string TripId)>();
-        foreach (var order in orders)
-        {
-            if (order.TripId is not null)
-                continue;
-            if (!byCode.TryGetValue(order.Code.Trim(), out var matches) || matches.Count != 1)
-                continue;
-            linked.Add((order.OrderId, matches[0]));
-        }
-
-        return linked;
-    }
-}
-
 public static class OrderAssignment
 {
     public const string TakenMessage = "Zakázka už je na jiné jízdě.";

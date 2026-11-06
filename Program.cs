@@ -58,20 +58,8 @@ builder.Services.AddHostedService<CrmSchemaInitializer>();
 builder.Services.AddSingleton<SqlAuthStore>();
 builder.Services.AddSingleton<IAuthStore>(sp => sp.GetRequiredService<SqlAuthStore>());
 builder.Services.AddHostedService<AuthSchemaInitializer>();
-if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("Dispatch:Preview", false))
-{
-    // Náhled bez SQL. Zapne se jen v Development a jen když je Dispatch:Preview true.
-    builder.Services.AddSingleton<PreviewDispatchStore>();
-    builder.Services.AddSingleton<IDispatchStore>(sp => sp.GetRequiredService<PreviewDispatchStore>());
-    builder.Services.AddSingleton<PreviewOrderStore>();
-    builder.Services.AddSingleton<IOrderStore>(sp => sp.GetRequiredService<PreviewOrderStore>());
-    builder.Services.AddSingleton<PreviewAuthStore>();
-    builder.Services.AddSingleton<IAuthStore>(sp => sp.GetRequiredService<PreviewAuthStore>());
-}
 builder.Services.AddSingleton<SqlPohodaAddressBook>();
 builder.Services.AddSingleton<IPohodaAddressBook>(sp => sp.GetRequiredService<SqlPohodaAddressBook>());
-if (builder.Environment.IsDevelopment() && builder.Configuration.GetValue("Dispatch:Preview", false))
-    builder.Services.AddSingleton<IPohodaAddressBook, PreviewPohodaAddressBook>();
 builder.Services.AddHttpClient<PohodaMServerClient>()
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { UseProxy = false })
     .ConfigureHttpClient((services, client) =>
@@ -83,8 +71,6 @@ builder.Services.AddHttpClient<PohodaMServerClient>()
     });
 
 var app = builder.Build();
-if (app.Environment.IsDevelopment() && app.Configuration.GetValue("Dispatch:Preview", false))
-    app.Logger.LogWarning("Dispečink běží v paměti (Dispatch:Preview). Do SQL se nic nezapisuje.");
 
 app.UseForwardedHeaders();
 if (!app.Environment.IsDevelopment())

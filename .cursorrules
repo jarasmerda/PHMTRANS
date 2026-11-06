@@ -9,13 +9,11 @@
 ## Lokální vývoj (Windows PC + Cursor)
 - Editor: Cursor
 - .NET SDK: 10.0.403
-- Docker Desktop je nainstalovaný
-- Dockerfile používá Linux image (mcr.microsoft.com/dotnet/sdk:10.0 a aspnet:10.0)
-- Lokální test: docker build -t phmtrans . && docker run -p 5000:8080 phmtrans
-- Kontrola běhu: /health (v kontejneru port 8080)
+- Lokální test: dotnet test tests/PHMTRANS.Tests
+- Kontrola běhu: /health
 
 ## Server (Windows Server)
-- Docker na serveru není potřeba. Aplikace běží jako služba Windows přes nainstalovaný .NET SDK 10.
+- Aplikace běží jako služba Windows přes nainstalovaný .NET SDK 10.
 - Projekt je naklonovaný v: C:\PHMTRANS
 - Publikace: dotnet publish -c Release -o C:\PHMTRANS\app
 - Služba poslouchá jen na http://127.0.0.1:8089 (ven přes IIS/ARR) a stránky bere z C:\PHMTRANS\wwwroot
