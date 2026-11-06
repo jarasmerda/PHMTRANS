@@ -24,7 +24,7 @@ public sealed class ModuleNavigationPageTests
 
         foreach (var html in new[] { erp, dispatch, crm })
         {
-            Assert.Contains("erp.css?v=18", html, StringComparison.Ordinal);
+            Assert.Contains("erp.css?v=19", html, StringComparison.Ordinal);
             Assert.Contains("class=\"module-links\"", html, StringComparison.Ordinal);
             Assert.Contains("aria-label=\"Moduly\"", html, StringComparison.Ordinal);
             Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"", html, StringComparison.Ordinal);
@@ -68,7 +68,7 @@ public sealed class ModuleNavigationPageTests
         foreach (var name in new[] { "erp.html", "dispecink.html", "crm.html", "admin.html", "heslo.html", "vyber.html", "login.html" })
         {
             var html = File.ReadAllText(Path.Combine(root, name));
-            Assert.Contains("erp.css?v=18", html, StringComparison.Ordinal);
+            Assert.Contains("erp.css?v=19", html, StringComparison.Ordinal);
             Assert.Contains("<header", html, StringComparison.Ordinal);
             Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"><span>PHM</span> TRANS</a>", html, StringComparison.Ordinal);
             Assert.Contains("class=\"site-back\" href=\"https://phmtrans.cz/\">Zpět na web</a>", html, StringComparison.Ordinal);
