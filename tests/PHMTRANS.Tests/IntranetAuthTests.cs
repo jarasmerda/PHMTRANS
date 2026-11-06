@@ -374,6 +374,34 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
         var invoicesAfter = await user.SendAsync(Get("/api/bi/issued-invoices", "intranet.phmtrans.cz"));
         Assert.NotEqual(HttpStatusCode.Forbidden, invoicesAfter.StatusCode);
 
+        var groupB = await admin.PutAsJsonAsync($"/api/admin/users/{id}", new
+        {
+            displayName = "Jen skupina B",
+            isAdmin = false,
+            isActive = true,
+            allowErp = true,
+            allowDispatch = false,
+            allowCrm = false,
+            erpReports = new[] { ErpReports.MonthlyGroupB }
+        });
+        Assert.Equal(HttpStatusCode.OK, groupB.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await user.SendAsync(Get("/api/bi/monthly-invoices?year=2026", "intranet.phmtrans.cz"))).StatusCode);
+        var groupBReport = await user.SendAsync(Get("/api/bi/monthly-invoices-group-b?year=2026", "intranet.phmtrans.cz"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, groupBReport.StatusCode);
+        Assert.NotEqual(HttpStatusCode.Unauthorized, groupBReport.StatusCode);
+
+        var backToInvoices = await admin.PutAsJsonAsync($"/api/admin/users/{id}", new
+        {
+            displayName = "Jen faktury",
+            isAdmin = false,
+            isActive = true,
+            allowErp = true,
+            allowDispatch = false,
+            allowCrm = false,
+            erpReports = new[] { ErpReports.Invoices }
+        });
+        Assert.Equal(HttpStatusCode.OK, backToInvoices.StatusCode);
+
         // Starší požadavek bez seznamu reportů výběr nemění.
         var legacy = await admin.PutAsJsonAsync($"/api/admin/users/{id}", new
         {
@@ -400,6 +428,10 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
         Assert.Equal("faktury,mesicni", ErpReports.Store(["mesicni", "FAKTURY"]));
         Assert.Equal(ErpReports.Invoices, ErpReports.ForApiPath("/api/bi/issued-invoices"));
         Assert.Equal(ErpReports.Monthly, ErpReports.ForApiPath("/api/bi/monthly-invoices"));
+        Assert.Equal(ErpReports.MonthlyGroupB, ErpReports.ForApiPath("/api/bi/monthly-invoices-group-b"));
+        Assert.Equal(ErpReports.MonthlyGroupB, ErpReports.ForApiPath("/API/BI/monthly-invoices-group-b/"));
+        Assert.Null(ErpReports.ForApiPath("/api/bi/monthly-invoices-jine"));
+        Assert.Contains(ErpReports.MonthlyGroupB, legacy.AllowedErpReports());
         Assert.Contains("ADD ErpReports nvarchar(200) NULL", AuthSchema.Script, StringComparison.Ordinal);
     }
 

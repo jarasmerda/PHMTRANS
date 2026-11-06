@@ -34,24 +34,27 @@ public static class ErpReports
 {
     public const string Invoices = "faktury";
     public const string Monthly = "mesicni";
+    public const string MonthlyGroupB = "mesicni-b";
 
-    public static readonly string[] All = [Invoices, Monthly];
+    public static readonly string[] All = [Invoices, Monthly, MonthlyGroupB];
 
     public static readonly IReadOnlyDictionary<string, string> Names = new Dictionary<string, string>
     {
         [Invoices] = "Vydané faktury",
-        [Monthly] = "Vydané faktury – měsíční přehled"
+        [Monthly] = "Vydané faktury – měsíční přehled",
+        [MonthlyGroupB] = "Vydané faktury – měsíční přehled skupiny B"
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> ApiPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["/api/bi/issued-invoices"] = Invoices,
+        ["/api/bi/monthly-invoices"] = Monthly,
+        ["/api/bi/monthly-invoices-group-b"] = MonthlyGroupB
     };
 
     /// <summary>Report, ke kterému patří API cesta, nebo null.</summary>
-    public static string? ForApiPath(string path)
-    {
-        if (path.StartsWith("/api/bi/issued-invoices", StringComparison.OrdinalIgnoreCase))
-            return Invoices;
-        if (path.StartsWith("/api/bi/monthly-invoices", StringComparison.OrdinalIgnoreCase))
-            return Monthly;
-        return null;
-    }
+    public static string? ForApiPath(string path) =>
+        ApiPaths.TryGetValue(path.TrimEnd('/'), out var report) ? report : null;
 
     /// <summary>Uložená hodnota: null znamená všechny reporty (účty založené před zavedením výběru).</summary>
     public static IReadOnlyList<string> Parse(string? stored) =>

@@ -115,3 +115,5 @@ public sealed record MonthlySection(
     decimal Total);
 
 public sealed record MonthlyInvoiceReport(int Year, MonthlySection Main, MonthlySection GroupB);
+
+public sealed record MonthlyGroupReport(int Year, MonthlySection GroupB);

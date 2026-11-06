@@ -28,6 +28,7 @@
   <nav class="report-tabs" aria-label="Reporty ERP">
     <a href="#faktury" data-report-link="faktury" aria-current="page">Vydané faktury</a>
     <a href="#mesicni" data-report-link="mesicni">Vydané faktury – měsíční přehled</a>
+    <a href="#mesicni-b" data-report-link="mesicni-b">Měsíční přehled – skupina B</a>
   </nav>
   <p id="erp-none" class="section-title" hidden>Nemáte přístup k žádnému reportu ERP. Požádejte správce.</p>
   <div data-report="faktury" hidden>
@@ -81,17 +82,29 @@
   </div>
   <div data-report="mesicni" hidden>
   <h2 class="section-title">Vydané faktury – měsíční přehled</h2>
-  <form id="monthly-form">
-    <label>Rok <input id="monthly-year" name="year" type="number" min="2000" max="2100" step="1" required></label>
+  <form data-monthly-form>
+    <label>Rok <input data-monthly-year name="year" type="number" min="2000" max="2100" step="1" required></label>
     <button type="submit">Zobrazit</button>
   </form>
-  <p id="monthly-message" hidden></p>
-  <section class="monthly-wrap" id="monthly-wrap" hidden>
-    <div class="table-scroll"><table class="monthly" id="monthly"></table></div>
+  <p data-monthly-message hidden></p>
+  <section class="monthly-wrap" data-monthly-wrap hidden>
+    <div class="table-scroll"><table class="monthly" data-monthly-table></table></div>
   </section>
-  <p class="monthly-note" id="monthly-note" hidden>Částky bez DPH podle data vystavení. Spodní část jsou odběratelé ze skupiny B adresáře Pohody.</p>
+  <p class="monthly-note" data-monthly-note hidden>Částky bez DPH podle data vystavení. Spodní část jsou odběratelé ze skupiny B adresáře Pohody.</p>
+  </div>
+  <div data-report="mesicni-b" hidden>
+  <h2 class="section-title">Vydané faktury – měsíční přehled skupiny B</h2>
+  <form data-monthly-form>
+    <label>Rok <input data-monthly-year name="year" type="number" min="2000" max="2100" step="1" required></label>
+    <button type="submit">Zobrazit</button>
+  </form>
+  <p data-monthly-message hidden></p>
+  <section class="monthly-wrap" data-monthly-wrap hidden>
+    <div class="table-scroll"><table class="monthly" data-monthly-table></table></div>
+  </section>
+  <p class="monthly-note" data-monthly-note hidden>Částky bez DPH podle data vystavení. Jen odběratelé ze skupiny B adresáře Pohody.</p>
   </div>
   <script src="/multi-filter.js?v=1"></script>
-  <script src="/erp.js?v=11"></script>
+  <script src="/erp.js?v=12"></script>
 </body>
 </html>

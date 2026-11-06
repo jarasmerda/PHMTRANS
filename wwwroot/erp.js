@@ -138,15 +138,6 @@ async function load(event, refresh = false) {
 }
 
 const whole = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
-const monthlyYear = document.querySelector("#monthly-year");
-const monthlyMessage = document.querySelector("#monthly-message");
-let monthlySeq = 0;
-let monthlyLoadedYear = null;
-
-function showMonthlyMessage(value) {
-  monthlyMessage.hidden = !value;
-  monthlyMessage.textContent = value ?? "";
-}
 
 function monthlyCells(months, quarters, total) {
   const cells = [];
@@ -178,7 +169,7 @@ function monthlySection(section, empty) {
 }
 
 // Obě části jsou v jedné tabulce, aby se při posunu do strany hýbaly spolu a sloupce měsíců byly pod sebou.
-function monthlyTable(data) {
+function monthlyBothTable(data) {
   return `<thead>${monthlyHead("Fakturace v Kč")}</thead>
     <tbody>
       ${monthlySection(data.main, "V tomto roce není žádná faktura.")}
@@ -188,41 +179,72 @@ function monthlyTable(data) {
     </tbody>`;
 }
 
-async function loadMonthly(event) {
+function monthlyGroupBTable(data) {
+  return `<thead>${monthlyHead("Fakturace v Kč – skupina B")}</thead>
+    <tbody>${monthlySection(data.groupB, "Odběratelé ze skupiny B v tomto roce nemají fakturu.")}</tbody>`;
+}
+
+// Měsíční přehledy: každý má vlastní panel, rok a endpoint, tabulka se kreslí stejně.
+const monthlyViews = {
+  mesicni: { endpoint: "/api/bi/monthly-invoices", table: monthlyBothTable },
+  "mesicni-b": { endpoint: "/api/bi/monthly-invoices-group-b", table: monthlyGroupBTable }
+};
+
+function monthlyPart(view, name) {
+  return document.querySelector(`[data-report="${view.id}"] [data-monthly-${name}]`);
+}
+
+function showMonthlyMessage(view, value) {
+  const message = monthlyPart(view, "message");
+  message.hidden = !value;
+  message.textContent = value ?? "";
+}
+
+async function loadMonthly(view, event) {
   event?.preventDefault();
-  const year = Number(monthlyYear.value);
-  const current = ++monthlySeq;
-  showMonthlyMessage("Načítám faktury z Pohody…");
-  document.querySelector("#monthly-wrap").hidden = true;
-  document.querySelector("#monthly-note").hidden = true;
+  const year = Number(monthlyPart(view, "year").value);
+  const current = ++view.seq;
+  showMonthlyMessage(view, "Načítám faktury z Pohody…");
+  monthlyPart(view, "wrap").hidden = true;
+  monthlyPart(view, "note").hidden = true;
 
   let response;
   try {
-    response = await fetch(`/api/bi/monthly-invoices?${new URLSearchParams({ year: String(year) })}`);
+    response = await fetch(`${view.endpoint}?${new URLSearchParams({ year: String(year) })}`);
   } catch {
-    if (current === monthlySeq) showMonthlyMessage("Přehled se nepodařilo načíst.");
+    if (current === view.seq) showMonthlyMessage(view, "Přehled se nepodařilo načíst.");
     return;
   }
-  if (current !== monthlySeq) return;
+  if (current !== view.seq) return;
   if (response.status === 401) {
     location.href = "/login.html";
     return;
   }
   const data = await response.json().catch(() => ({}));
-  if (current !== monthlySeq) return;
+  if (current !== view.seq) return;
   if (!response.ok) {
-    showMonthlyMessage(data.message || "Přehled se nepodařilo načíst.");
+    showMonthlyMessage(view, data.message || "Přehled se nepodařilo načíst.");
     return;
   }
 
-  showMonthlyMessage("");
-  monthlyLoadedYear = year;
-  document.querySelector("#monthly").innerHTML = monthlyTable(data);
-  document.querySelector("#monthly-wrap").hidden = false;
-  document.querySelector("#monthly-note").hidden = false;
+  showMonthlyMessage(view, "");
+  view.loadedYear = year;
+  monthlyPart(view, "table").innerHTML = view.table(data);
+  monthlyPart(view, "wrap").hidden = false;
+  monthlyPart(view, "note").hidden = false;
 }
 
-const reports = { faktury: "Vydané faktury", mesicni: "Vydané faktury – měsíční přehled" };
+for (const [id, view] of Object.entries(monthlyViews)) {
+  Object.assign(view, { id, seq: 0, loadedYear: null });
+  monthlyPart(view, "year").value = String(today.getFullYear());
+  monthlyPart(view, "form").addEventListener("submit", (event) => loadMonthly(view, event));
+}
+
+const reports = {
+  faktury: "Vydané faktury",
+  mesicni: "Vydané faktury – měsíční přehled",
+  "mesicni-b": "Vydané faktury – měsíční přehled skupiny B"
+};
 // Reporty, ke kterým má uživatel přístup. Doplní se z /api/auth/me, server je hlídá i u API.
 let allowedReports = Object.keys(reports);
 let invoicesLoaded = false;
@@ -247,7 +269,8 @@ function showReport() {
     invoicesLoaded = true;
     load(null, true);
   }
-  if (id === "mesicni" && monthlyLoadedYear === null) loadMonthly(null);
+  const view = monthlyViews[id];
+  if (view && view.loadedYear === null) loadMonthly(view, null);
 }
 
 async function initReports() {
@@ -274,8 +297,6 @@ document.querySelector("#logout").addEventListener("click", async () => {
   location.href = "/login.html";
 });
 
-monthlyYear.value = String(today.getFullYear());
-document.querySelector("#monthly-form").addEventListener("submit", loadMonthly);
 
 setRange("year");
 document.querySelector("#range").addEventListener("submit", (event) => load(event, true));
