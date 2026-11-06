@@ -88,6 +88,21 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
     }
 
     [Fact]
+    public async Task Documents_need_login_and_explain_a_missing_folder()
+    {
+        using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var anonymous = await client.SendAsync(Request("/api/dispatch/orders/x/documents", "intranet.phmtrans.cz", user: false));
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+
+        var list = await client.SendAsync(Request("/api/dispatch/orders/x/documents", "intranet.phmtrans.cz", user: true));
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("configured").GetBoolean());
+        Assert.Contains("Dispatch:DocumentsPath", json.RootElement.GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Calendar_needs_login_and_a_valid_range_and_trips_are_gone()
     {
         using var client = _app.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });

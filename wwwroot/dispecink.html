@@ -113,6 +113,12 @@
     #calendar .cal-order small { display: block; font-weight: 400; color: var(--text-secondary); }
     .load-bar { display: block; height: 0.35rem; border-radius: 1rem; background: var(--border); margin-top: 0.3rem; overflow: hidden; }
     .load-bar i { display: block; height: 100%; background: var(--accent); }
+    .doc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+    .doc-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.6rem; }
+    .doc-list li { border: 1px solid var(--border); border-radius: 10px; padding: 0.4rem; background: #fff; font-size: 0.78rem; overflow-wrap: anywhere; }
+    .doc-list a { color: var(--ink); font-weight: 700; text-decoration: none; }
+    .doc-list img { display: block; width: 100%; height: 7rem; object-fit: cover; border-radius: 6px; margin-bottom: 0.3rem; background: var(--surface); }
+    .doc-list .doc-pdf { display: flex; align-items: center; justify-content: center; height: 7rem; border-radius: 6px; margin-bottom: 0.3rem; background: var(--surface); font-weight: 700; }
     .loads h3 { margin: 0.4rem 0; }
     .load-row { display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(8rem, 0.8fr) auto; gap: 0.5rem 0.6rem; align-items: end; margin-bottom: 0.5rem; }
     .load-row input, .load-row select { width: 100%; min-width: 0; box-sizing: border-box; }
@@ -280,6 +286,18 @@
         <button type="button" id="order-cancel" class="ghost">Stornovat</button>
         <button type="button" id="order-close" class="ghost">Zavřít</button>
       </div>
+      <section id="order-docs" class="docs">
+        <h3>Doklady</h3>
+        <p class="note">Fotky a PDF se ukládají do složky zakázky na serveru, odkud je OneDrive synchronizuje.</p>
+        <div class="doc-actions">
+          <button type="button" id="doc-camera-button">Vyfotit doklad</button>
+          <button type="button" id="doc-file-button" class="ghost">Přiložit soubor</button>
+          <input type="file" id="doc-camera" accept="image/*" capture="environment" hidden>
+          <input type="file" id="doc-file" accept="image/*,application/pdf,.heic,.heif" multiple hidden>
+        </div>
+        <p id="doc-message" class="note" hidden></p>
+        <ul id="doc-list" class="doc-list"></ul>
+      </section>
       <h3>Historie verzí</h3>
       <p class="note">Starší uložené snímky. Aktuální údaje jsou ve formuláři nahoře.</p>
       <ul id="version-links" class="version-links"></ul>
@@ -369,6 +387,7 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=15"></script>
+  <script src="/dispecink-orders.js?v=16"></script>
+  <script src="/dispecink-doklady.js?v=1"></script>
 </body>
 </html>
