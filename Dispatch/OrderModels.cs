@@ -139,7 +139,8 @@ public sealed record DispatchOrder(
     string? CustomerZip = null,
     string? CustomerEmail = null,
     string? CustomerPhone = null,
-    int? FuelTypeId = null);
+    int? FuelTypeId = null,
+    IReadOnlyList<OrderLoad>? Loads = null);
 
 public sealed record OrderSaveRequest(
     int? CustomerPohodaId,
@@ -172,7 +173,8 @@ public sealed record OrderSaveRequest(
     string? CustomerZip = null,
     string? CustomerEmail = null,
     string? CustomerPhone = null,
-    int? FuelTypeId = null);
+    int? FuelTypeId = null,
+    IReadOnlyList<OrderLoadInput>? Loads = null);
 
 public sealed record OrderSyncEntry(
     long Id,

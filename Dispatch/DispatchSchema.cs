@@ -250,6 +250,21 @@ public static class DispatchSchema
             CREATE UNIQUE INDEX UX_Disp_OrderLeg_OrderSeq ON dbo.Disp_OrderLeg (OrderId, Sequence);
         END;
 
+        IF OBJECT_ID(N'dbo.Disp_OrderLoad', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_OrderLoad
+            (
+                OrderId nvarchar(64) NOT NULL,
+                Sequence int NOT NULL,
+                FuelTypeId int NULL,
+                FuelType nvarchar(80) NOT NULL,
+                Liters decimal(18,3) NOT NULL,
+                CONSTRAINT PK_Disp_OrderLoad PRIMARY KEY (OrderId, Sequence),
+                CONSTRAINT FK_Disp_OrderLoad_Order FOREIGN KEY (OrderId) REFERENCES dbo.Disp_Order (Id),
+                CONSTRAINT FK_Disp_OrderLoad_FuelType FOREIGN KEY (FuelTypeId) REFERENCES dbo.Disp_FuelType (Id)
+            );
+        END;
+
         IF OBJECT_ID(N'dbo.Disp_Setting', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.Disp_Setting

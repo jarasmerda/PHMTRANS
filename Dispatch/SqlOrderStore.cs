@@ -877,6 +877,7 @@ public sealed class SqlOrderStore(
             DELETE FROM dbo.Disp_SyncQueue WHERE OrderId = @Id;
             DELETE FROM dbo.Disp_OrderLeg WHERE OrderId = @Id;
             DELETE FROM dbo.Disp_OrderStop WHERE OrderId = @Id;
+            DELETE FROM dbo.Disp_OrderLoad WHERE OrderId = @Id;
             DELETE FROM dbo.Disp_OrderVersion WHERE OrderId = @Id;
             DELETE FROM dbo.Disp_Order WHERE Id = @Id;
             """,
@@ -917,6 +918,23 @@ public sealed class SqlOrderStore(
             transaction,
             cancellationToken,
             new { order.Id }));
+        await connection.ExecuteAsync(Command(
+            "DELETE FROM dbo.Disp_OrderLoad WHERE OrderId = @Id",
+            transaction,
+            cancellationToken,
+            new { order.Id }));
+        foreach (var load in order.Loads ?? [])
+        {
+            await connection.ExecuteAsync(Command(
+                """
+                INSERT INTO dbo.Disp_OrderLoad (OrderId, Sequence, FuelTypeId, FuelType, Liters)
+                VALUES (@OrderId, @Sequence, @FuelTypeId, @FuelType, @Liters)
+                """,
+                transaction,
+                cancellationToken,
+                new { OrderId = order.Id, load.Sequence, load.FuelTypeId, load.FuelType, load.Liters }));
+        }
+
         foreach (var stop in order.Stops ?? [])
         {
             await connection.ExecuteAsync(Command(
@@ -987,12 +1005,24 @@ public sealed class SqlOrderStore(
             null,
             cancellationToken,
             new { Ids = ids }))).AsList();
+        var loads = (await connection.QueryAsync<RouteLoadRow>(Command(
+            """
+            SELECT OrderId, Sequence, FuelTypeId, FuelType, Liters
+            FROM dbo.Disp_OrderLoad
+            WHERE OrderId IN @Ids
+            ORDER BY Sequence
+            """,
+            null,
+            cancellationToken,
+            new { Ids = ids }))).AsList();
         return orders.Select(order =>
         {
+            var orderLoads = loads.Where(load => load.OrderId == order.Id).Select(load => load.ToLoad()).ToArray();
             var routed = order with
             {
                 Stops = stops.Where(stop => stop.OrderId == order.Id).Select(stop => stop.ToStop()).ToArray(),
-                Legs = legs.Where(leg => leg.OrderId == order.Id).Select(leg => leg.ToLeg()).ToArray()
+                Legs = legs.Where(leg => leg.OrderId == order.Id).Select(leg => leg.ToLeg()).ToArray(),
+                Loads = orderLoads.Length > 0 ? orderLoads : null
             };
             return routed with { Quote = OrderPricing.Summarize(routed) };
         }).ToArray();
@@ -1025,7 +1055,17 @@ public sealed class SqlOrderStore(
             transaction,
             cancellationToken,
             new { order.Id }))).AsList();
-        var routed = order with { Stops = stops, Legs = legs };
+        var loads = (await connection.QueryAsync<RouteLoadRow>(Command(
+            """
+            SELECT OrderId, Sequence, FuelTypeId, FuelType, Liters
+            FROM dbo.Disp_OrderLoad
+            WHERE OrderId = @Id
+            ORDER BY Sequence
+            """,
+            transaction,
+            cancellationToken,
+            new { order.Id }))).Select(load => load.ToLoad()).ToArray();
+        var routed = order with { Stops = stops, Legs = legs, Loads = loads.Length > 0 ? loads : null };
         return routed with { Quote = OrderPricing.Summarize(routed) };
     }
 
@@ -1122,6 +1162,17 @@ public sealed class SqlOrderStore(
         new(sql, parameters, transaction, cancellationToken: cancellationToken);
 
     private static string? Trim(string? value, int max) => OrderSyncLimits.TrimToColumn(value, max);
+
+    private sealed class RouteLoadRow
+    {
+        public string OrderId { get; set; } = "";
+        public int Sequence { get; set; }
+        public int? FuelTypeId { get; set; }
+        public string FuelType { get; set; } = "";
+        public decimal Liters { get; set; }
+
+        public OrderLoad ToLoad() => new(Sequence, FuelTypeId, FuelType, Liters);
+    }
 
     private sealed class RouteStopRow
     {

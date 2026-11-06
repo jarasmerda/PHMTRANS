@@ -112,6 +112,11 @@
       padding: 1rem;
       margin-top: 1rem;
     }
+    .loads h3 { margin: 0.4rem 0; }
+    .load-row { display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(8rem, 0.8fr) auto; gap: 0.5rem 0.6rem; align-items: end; margin-bottom: 0.5rem; }
+    .load-row input, .load-row select { width: 100%; min-width: 0; box-sizing: border-box; }
+    .loads > .note { margin-left: 0.6rem; }
+    @media (max-width: 760px) { .load-row { grid-template-columns: 1fr 1fr; } .load-row button { grid-column: 1 / -1; justify-self: start; } }
     .stop-row {
       display: grid;
       grid-template-columns: minmax(10rem, 1.6fr) minmax(8.5rem, 1fr) minmax(6rem, 0.7fr) minmax(7rem, 0.8fr) minmax(7rem, 0.8fr);
@@ -445,7 +450,7 @@
     </section>
   </div>
   <script src="/multi-filter.js?v=1"></script>
-  <script src="/dispecink.js?v=12"></script>
-  <script src="/dispecink-orders.js?v=12"></script>
+  <script src="/dispecink.js?v=13"></script>
+  <script src="/dispecink-orders.js?v=13"></script>
 </body>
 </html>

@@ -39,7 +39,8 @@ public static class OrderPohodaFields
         && left.Status == right.Status
         && left.IsLocked == right.IsLocked
         && left.PohodaInvoiceNumber == right.PohodaInvoiceNumber
-        && SameCostRoute(left, right);
+        && SameCostRoute(left, right)
+        && OrderLoads.SameLoads(left, right);
 
     // Místa a prodejní cena úseků jdou do textu a částky položky v Pohodě.
     // Náklad, km při ruční prodejní ceně, vozidlo, řidič a jízda v XML nejsou.

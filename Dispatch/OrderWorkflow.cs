@@ -358,7 +358,8 @@ public static class OrderWorkflow
             CustomerZip: draft.CustomerZip,
             CustomerEmail: draft.CustomerEmail,
             CustomerPhone: draft.CustomerPhone,
-            FuelTypeId: draft.FuelTypeId);
+            FuelTypeId: draft.FuelTypeId,
+            Loads: draft.Loads);
     }
 
     private static (string Status, bool Locked, string? Invoice) ResolveState(
@@ -424,13 +425,25 @@ public static class OrderWorkflow
         var unloading = Required(unloadingSource, 160, "Vyplňte místo vykládky.", "Místo vykládky může mít nejvýše 160 znaků.");
         if (unloading.Error is not null)
             return Draft.Fail(unloading.Error);
+        IReadOnlyList<OrderLoad>? loads = null;
+        if (request.Loads is not null)
+        {
+            var builtLoads = OrderLoads.Build(request.Loads, catalog.FuelTypes);
+            if (builtLoads.Error is not null)
+                return Draft.Fail(builtLoads.Error);
+            loads = builtLoads.Loads;
+        }
+
         var requestedFuel = request.FuelTypeId is null && string.IsNullOrWhiteSpace(request.FuelType);
-        var fuel = ResolveFuel(
-            requestedFuel ? current?.FuelTypeId : request.FuelTypeId,
-            requestedFuel ? current?.FuelType : request.FuelType,
-            catalog.FuelTypes);
-        if (fuel.Error is not null)
-            return Draft.Fail(fuel.Error);
+        var fuel = loads is not null
+            ? (loads[0].FuelTypeId, loads[0].FuelType, (string?)null)
+            : ResolveFuel(
+                requestedFuel ? current?.FuelTypeId : request.FuelTypeId,
+                requestedFuel ? current?.FuelType : request.FuelType,
+                catalog.FuelTypes);
+        if (fuel.Item3 is not null)
+            return Draft.Fail(fuel.Item3);
+        var liters = loads is not null ? loads.Sum(load => load.Liters) : request.Liters;
 
         if (request.LoadingDate is null)
             return Draft.Fail("Vyplňte datum nakládky.");
@@ -438,9 +451,9 @@ public static class OrderWorkflow
             return Draft.Fail("Vyplňte datum vykládky.");
         if (request.UnloadingDate.Value < request.LoadingDate.Value)
             return Draft.Fail("Vykládka nemůže být před nakládkou.");
-        if (request.Liters is null)
+        if (liters is null)
             return Draft.Fail("Vyplňte litry.");
-        if (request.Liters < 0 || request.Liters > 1_000_000m)
+        if (liters < 0 || liters > 1_000_000m)
             return Draft.Fail("Litry musí být od 0 do 1 000 000.");
         var agreedPrice = request.AgreedPrice ?? 0m;
         if (request.Stops is null && request.AgreedPrice is null)
@@ -475,8 +488,8 @@ public static class OrderWorkflow
             unloading.Value,
             request.LoadingDate,
             request.UnloadingDate,
-            fuel.Name,
-            decimal.Round(request.Liters.Value, 3, MidpointRounding.AwayFromZero),
+            fuel.Item2,
+            decimal.Round(liters.Value, 3, MidpointRounding.AwayFromZero),
             OrderPohodaFields.Money(agreedPrice),
             OrderPohodaFields.Money(surcharges),
             Blank(request.Note),
@@ -493,7 +506,8 @@ public static class OrderWorkflow
             zip.Value,
             email.Value,
             phone.Value,
-            fuel.Id);
+            fuel.Item1,
+            loads);
     }
 
     private static OrderChange WithDistances(OrderChange change, IReadOnlyList<DistanceWrite>? distances)
@@ -597,7 +611,8 @@ public static class OrderWorkflow
         string? CustomerZip = null,
         string? CustomerEmail = null,
         string? CustomerPhone = null,
-        int? FuelTypeId = null)
+        int? FuelTypeId = null,
+        IReadOnlyList<OrderLoad>? Loads = null)
     {
         public static Draft Fail(string error) => new(error, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }

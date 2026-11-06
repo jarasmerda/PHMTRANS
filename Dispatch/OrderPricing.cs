@@ -46,6 +46,7 @@ public static class OrderPricing
         var totalSale = OrderPohodaFields.Money(legSale + order.Surcharges);
         var margin = OrderPohodaFields.Money(totalSale - totalCost);
         var marginPerKm = totalKm == 0 ? 0m : OrderPohodaFields.Money(margin / totalKm);
+        var fuels = OrderLoads.Balance(order);
         var marginPercent = totalSale == 0
             ? 0m
             : decimal.Round(margin / totalSale * 100m, 2, MidpointRounding.AwayFromZero);
@@ -60,7 +61,8 @@ public static class OrderPricing
             margin,
             marginPerKm,
             marginPercent,
-            delivered > order.Liters);
+            delivered > order.Liters || fuels.Any(fuel => fuel.Delivered > fuel.Loaded),
+            fuels);
     }
 }
 
@@ -75,4 +77,5 @@ public sealed record OrderQuote(
     decimal Margin,
     decimal MarginPerKm,
     decimal MarginPercent,
-    bool DeliveredExceedsLoaded);
+    bool DeliveredExceedsLoaded,
+    IReadOnlyList<FuelBalance>? Fuels = null);

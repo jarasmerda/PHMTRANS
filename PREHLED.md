@@ -117,6 +117,7 @@ Adresář Pohody `dbo.AD` čte našeptávač zákazníka a měsíční přehled 
 | `Disp_Vehicle`, `Disp_Driver`, `Disp_Trip` | Vozidla, řidiči, jízdy. |
 | `Disp_VehicleCompartment` | Přepážky cisteren: vozidlo, číslo přepážky 1–10, objem v litrech. |
 | `Disp_Order`, `Disp_OrderStop`, `Disp_OrderLeg` | Zakázka, vykládky, úseky. |
+| `Disp_OrderLoad` | Nakládka zakázky po palivech: palivo a naložené litry. |
 | `Disp_OrderVersion`, `Disp_SyncQueue` | Snímky verzí a fronta do Pohody. |
 | `Disp_FuelType` | Číselník paliva. Seed: Motorová nafta, Benzín. |
 | `Disp_LoadingPlace` | Nakládací místa (sklady, rafinerie): `Name`, `Active`. |
@@ -153,9 +154,9 @@ VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 
 **Jízdy.** Stavy Nová, Přiřazená, Na cestě, Vyložená, Zrušená, Stornováno. Kód `J{rok}-{čtyři číslice}`. Vozidlo a řidič z číselníku. Na jízdě je seznam jejích zakázek. Stornovaná jízda zakázky nepřijímá.
 
-**Zakázky.** Stavy Nová, Naplánovaná, Na cestě, Doručeno, K fakturaci, Vyfakturováno, Stornováno. Kód `Z{rok}-{čtyři číslice}`. Zákazník z adresáře Pohody, na zakázce zůstane snímek názvu, IČO, DIČ a adresy. Hlavička má nakládku, datum, naložené litry, sazby a druh paliva. Vykládky tvoří úseky Nakládka → Vykládka 1 → Vykládka 2 … Každá vykládka má vlastní palivo, jinak převezme to z hlavičky.
+**Zakázky.** Stavy Nová, Naplánovaná, Na cestě, Doručeno, K fakturaci, Vyfakturováno, Stornováno. Kód `Z{rok}-{čtyři číslice}`. Zákazník z adresáře Pohody, na zakázce zůstane snímek názvu, IČO, DIČ a adresy. Hlavička má nakládku, data a sazby. **Nakládka po palivech** (`Disp_OrderLoad`) má řádek pro každé palivo s naloženými litry, nejvýš 10 paliv a každé jen jednou. `Disp_Order.Liters` je součet a `Disp_Order.FuelType` je první palivo. Starší zakázka bez řádků se bere jako jedno palivo z hlavičky. Vykládky tvoří úseky Nakládka → Vykládka 1 → Vykládka 2 … Každá vykládka má vlastní palivo, jinak převezme první palivo nakládky. Deska upozorní, když se u některého paliva vyloží víc, než se naložilo. Změna nakládky je obchodní změna a přidá verzi.
 
-**Ceny.** Prodej za kilometr, nebo za litr. Náklad úseku je km × Kč/km. Prodej je km × sazba, litry × sazba, nebo ruční cena úseku, plus příplatky. Deska ukazuje km, naloženo, vyloženo, náklad, prodej a marži v Kč, Kč/km a procentech. Vyložené litry nad naložené se jen upozorní.
+**Ceny.** Prodej za kilometr, nebo za litr. Náklad úseku je km × Kč/km. Prodej je km × sazba, litry × sazba, nebo ruční cena úseku, plus příplatky. Deska ukazuje km, naloženo, vyloženo, náklad, prodej a marži v Kč, Kč/km a procentech. Vyložené litry nad naložené (celkem nebo u jednoho paliva) se jen upozorní.
 
 **Matice vzdáleností.** `Disp_Distance` má normalizované `FromPlace` a `ToPlace`, A→B je totéž co B→A. Každá vykládka ukazuje svůj úsek (Nakládka → Vykládka 1, Vykládka 1 → Vykládka 2 …) a km se doplní z matice. Když pár v matici chybí, řádek napíše „není v matici, zadejte km“. Po zadání km se objeví tlačítko **Uložit do matice**, které pár hned zapíše do `Disp_Distance` i s uživatelem (`POST /api/dispatch/distances`). Chybějící nebo přepsané km se zapíšou i při uložení zakázky. Km slouží pro nákladovou cenu úseku.
 

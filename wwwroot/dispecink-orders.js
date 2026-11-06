@@ -133,8 +133,6 @@ function formFields(prefix, order) {
     ${loadingField(prefix, order?.loadingPlace || "")}
     <label>Datum nakládky <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}"></label>
     <label>Datum vykládky <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}"></label>
-    <label>Druh paliva <select id="${prefix}-fuel" required>${fuelOptions(order?.fuelTypeId, order?.fuelType, !order)}</select></label>
-    <label>Naložené litry <input id="${prefix}-liters" type="number" min="0" step="0.001" required value="${orderText(order?.liters ?? "")}"></label>
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
     <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
@@ -153,15 +151,58 @@ function formFields(prefix, order) {
     <label>Číslo CMR <input id="${prefix}-cmr" maxlength="40" value="${orderText(order?.cmrNumber || "")}"></label>
     <label>Číslo faktury <input id="${prefix}-invoice" maxlength="40" value="${orderText(order?.pohodaInvoiceNumber || "")}"></label>
     <label class="wide">Poznámka <input id="${prefix}-note" maxlength="500" value="${orderText(order?.note || "")}"></label>
+    <div class="wide loads" data-loads="${prefix}">
+      <h3>Nakládka po palivech</h3>
+      <div id="${prefix}-loads">${orderLoadsOf(order).map((load) => loadRow(load, !order)).join("")}</div>
+      <button type="button" data-add-load>Přidat palivo</button>
+      <span class="note" id="${prefix}-loads-total"></span>
+    </div>
     <div class="wide" id="${prefix}-route" data-route="${prefix}">
       <h3>Vykládky a úseky</h3>
-      <div id="${prefix}-stops">${stops.map((stop, index) => stopRow(prefix, stop, legs[index], order?.fuelTypeId, order?.fuelType)).join("")}</div>
+      <div id="${prefix}-stops">${stops.map((stop, index) => stopRow(prefix, stop, legs[index], orderLoadsOf(order)[0]?.fuelTypeId, orderLoadsOf(order)[0]?.fuelType)).join("")}</div>
       <button type="button" data-add-stop="${prefix}">Přidat vykládku</button>
       <div id="${prefix}-totals" class="totals"></div>
-      <p id="${prefix}-liter-warn" class="route-warn" hidden>Součet litrů na vykládkách je vyšší než naložené litry.</p>
+      <p id="${prefix}-liter-warn" class="route-warn" hidden></p>
     </div>
     ${prefix === "create" ? `<div class="wide"><button type="submit">Založit zakázku</button></div>` : ""}
   `;
+}
+
+function orderLoadsOf(order) {
+  if (order?.loads?.length) return order.loads;
+  return [{ fuelTypeId: order?.fuelTypeId || null, fuelType: order?.fuelType || "", liters: order?.liters ?? "" }];
+}
+
+function loadRow(load, preferFirst) {
+  return `<div class="load-row" data-load-row>
+      <label>Palivo <select data-load-fuel required>${fuelOptions(load?.fuelTypeId, load?.fuelType, preferFirst)}</select></label>
+      <label>Naložené litry <input data-load-liters type="number" min="0" step="0.001" required value="${orderText(load?.liters ?? "")}"></label>
+      <button type="button" class="ghost" data-load-remove>Odebrat</button>
+    </div>`;
+}
+
+function readLoads(prefix) {
+  return [...document.querySelectorAll(`#${prefix}-loads [data-load-row]`)].map((row) => {
+    const select = row.querySelector("[data-load-fuel]");
+    const id = Number(select?.value);
+    const litersText = row.querySelector("[data-load-liters]")?.value.trim() ?? "";
+    return {
+      fuelTypeId: Number.isInteger(id) && id > 0 ? id : null,
+      fuelType: select?.selectedOptions?.[0]?.textContent?.trim() || "",
+      liters: litersText === "" ? null : Number(litersText)
+    };
+  });
+}
+
+function firstLoadFuel(prefix) {
+  const first = readLoads(prefix)[0];
+  return { id: first?.fuelTypeId || "", name: first?.fuelType || "" };
+}
+
+function loadsText(order) {
+  return orderLoadsOf(order)
+    .map((load) => `${load.fuelType || "—"} ${orderLiters.format(Number(load.liters || 0))} l`)
+    .join(", ");
 }
 
 function loadingField(prefix, current) {
@@ -477,7 +518,8 @@ function routeState(prefix) {
 function refreshRoute(prefix) {
   paintPairs(prefix);
   const state = routeState(prefix);
-  const loaded = Number(document.querySelector(`#${prefix}-liters`)?.value || 0);
+  const loads = readLoads(prefix);
+  const loaded = loads.reduce((sum, load) => sum + Number(load.liters || 0), 0);
   const surcharges = Number(document.querySelector(`#${prefix}-surcharges`)?.value || 0);
   const delivered = state.stops.reduce((sum, stop) => sum + Number(stop.liters || 0), 0);
   const totalKm = state.legs.reduce((sum, leg) => sum + Number(leg.kilometers || 0), 0);
@@ -502,8 +544,34 @@ function refreshRoute(prefix) {
     box.innerHTML = cards.map(([label, value]) =>
       `<article><span>${orderText(label)}</span><strong>${orderText(orderMoney.format(Number(value) || 0))}</strong></article>`).join("");
   }
+  const total = document.querySelector(`#${prefix}-loads-total`);
+  if (total) total.textContent = `Celkem naloženo ${orderLiters.format(loaded)} l`;
   const warn = document.querySelector(`#${prefix}-liter-warn`);
-  if (warn) warn.hidden = !(delivered > loaded);
+  if (warn) {
+    const first = loads[0];
+    const balance = new Map();
+    const key = (id, name) => (id ? `id:${id}` : `n:${String(name || "").toLowerCase()}`);
+    for (const load of loads) {
+      const k = key(load.fuelTypeId, load.fuelType);
+      const item = balance.get(k) || { name: load.fuelType, loaded: 0, delivered: 0 };
+      item.loaded += Number(load.liters || 0);
+      balance.set(k, item);
+    }
+    for (const stop of state.stops) {
+      const k = stop.fuelTypeId ? key(stop.fuelTypeId) : key(first?.fuelTypeId, first?.fuelType);
+      const name = stop.fuelTypeId
+        ? ((orderCatalog.fuelTypes || []).find((item) => item.id === stop.fuelTypeId)?.name || "")
+        : first?.fuelType;
+      const item = balance.get(k) || { name, loaded: 0, delivered: 0 };
+      item.delivered += Number(stop.liters || 0);
+      balance.set(k, item);
+    }
+    const over = [...balance.values()].filter((item) => item.delivered > item.loaded);
+    warn.hidden = over.length === 0;
+    warn.textContent = over.length
+      ? `Vyloženo víc, než se naložilo: ${over.map((item) => `${item.name || "palivo"} ${orderLiters.format(item.delivered)} l z ${orderLiters.format(item.loaded)} l`).join(", ")}.`
+      : "";
+  }
   return state;
 }
 
@@ -515,10 +583,10 @@ function customerSnapshot(order) {
 
 function readForm(prefix) {
   const value = (name) => document.querySelector(`#${prefix}-${name}`).value;
-  const fuelSelect = document.querySelector(`#${prefix}-fuel`);
-  const fuelTypeId = Number(fuelSelect?.value);
+  const loads = readLoads(prefix);
+  const firstLoad = loads[0] || {};
   const idText = value("customer-id").trim();
-  const liters = Number(value("liters"));
+  const liters = loads.reduce((sum, load) => sum + Number(load.liters || 0), 0);
   const surcharges = value("surcharges").trim() === "" ? 0 : Number(value("surcharges"));
   const route = refreshRoute(prefix);
   const agreed = roundMoney(route.legs.reduce((sum, leg) => sum + leg.salePrice, 0));
@@ -537,9 +605,10 @@ function readForm(prefix) {
     unloadingPlace: last,
     loadingDate: value("loading-date"),
     unloadingDate: value("unloading-date"),
-    fuelType: fuelSelect?.selectedOptions?.[0]?.textContent?.trim() || "",
-    fuelTypeId: Number.isInteger(fuelTypeId) && fuelTypeId > 0 ? fuelTypeId : null,
+    fuelType: firstLoad.fuelType || "",
+    fuelTypeId: firstLoad.fuelTypeId || null,
     liters: Number.isFinite(liters) ? liters : null,
+    loads: loads.map((load) => ({ fuelTypeId: load.fuelTypeId, liters: load.liters })),
     agreedPrice: agreed,
     surcharges: Number.isFinite(surcharges) ? surcharges : null,
     vehicleId: value("vehicle"),
@@ -607,7 +676,7 @@ function renderOrders(data) {
       <td>${orderText(order.customerName)}</td>
       <td>${orderText(order.loadingPlace)}<br><span class="route-to">→ ${orderText(order.unloadingPlace)}</span></td>
       <td>${orderDay(order.loadingDate)}</td>
-      <td>${orderText(order.fuelType)}<br><span class="route-to">${orderLiters.format(Number(order.liters || 0))} l</span></td>
+      <td>${orderText(loadsText(order))}<br><span class="route-to">celkem ${orderLiters.format(Number(order.liters || 0))} l</span></td>
       <td class="num">${orderText(priceText(order))}</td>
       <td>${orderText(order.status)}${order.isLocked ? `<br><span class="pill">Zámek</span>` : ""}</td>
       <td>${orderText(order.pohodaOrderNumber || "—")}<br>${order.latestSyncStatus ? syncPill(order.latestSyncStatus) : `<span class="pill">neodesláno</span>`}${order.latestSyncWarning ? `<div class="note warn">${orderText(order.latestSyncWarning)}</div>` : ""}${order.latestSyncError ? `<div class="note">${orderText(order.latestSyncError)}</div>` : ""}</td>
@@ -737,7 +806,7 @@ function versionPage(data, version) {
       ${versionFact("Vykládka", version.unloadingPlace)}
       ${versionFact("Datum nakládky", orderDay(version.loadingDate))}
       ${versionFact("Datum vykládky", orderDay(version.unloadingDate))}
-      ${versionFact("Palivo", version.fuelType)}
+      ${versionFact("Nakládka po palivech", loadsText(version))}
       ${versionFact("Naložené litry", orderLiters.format(Number(version.liters || 0)))}
       ${versionFact("Režim", mode)}
       ${versionFact("Prodej Kč/km", orderMoney.format(Number(version.salePerKm || 0)))}
@@ -1012,13 +1081,28 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     }
     return;
   }
+  const loadsBox = event.target.closest("[data-loads]");
+  if (loadsBox) {
+    const loadsPrefix = loadsBox.dataset.loads;
+    if (event.target.closest("[data-add-load]")) {
+      const used = new Set(readLoads(loadsPrefix).map((load) => String(load.fuelTypeId)));
+      const next = (orderCatalog.fuelTypes || []).find((item) => !used.has(String(item.id)));
+      document.querySelector(`#${loadsPrefix}-loads`).insertAdjacentHTML("beforeend", loadRow(next ? { fuelTypeId: next.id, liters: "" } : {}, false));
+      refreshRoute(loadsPrefix);
+    } else if (event.target.closest("[data-load-remove]")) {
+      if (document.querySelectorAll(`#${loadsPrefix}-loads [data-load-row]`).length > 1)
+        event.target.closest("[data-load-row]")?.remove();
+      refreshRoute(loadsPrefix);
+    }
+    return;
+  }
   const route = event.target.closest("[data-route]");
   if (!route) return;
   const prefix = route.dataset.route;
   const row = event.target.closest("[data-stop-row]");
   if (event.target.closest("[data-add-stop]")) {
-    const headerFuel = document.querySelector(`#${prefix}-fuel`);
-    document.querySelector(`#${prefix}-stops`).insertAdjacentHTML("beforeend", stopRow(prefix, {}, null, headerFuel?.value, headerFuel?.selectedOptions?.[0]?.textContent));
+    const headerFuel = firstLoadFuel(prefix);
+    document.querySelector(`#${prefix}-stops`).insertAdjacentHTML("beforeend", stopRow(prefix, {}, null, headerFuel.id, headerFuel.name));
     refreshRoute(prefix);
     scheduleDistanceFill(prefix);
     return;
@@ -1073,7 +1157,7 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
     }
   }
   const route = event.target.closest("[data-route]") || event.target.closest("form");
-  const prefix = event.target.id?.startsWith("edit-") ? "edit" : event.target.id?.startsWith("create-") ? "create" : route?.dataset?.route;
+  const prefix = event.target.id?.startsWith("edit-") ? "edit" : event.target.id?.startsWith("create-") ? "create" : (event.target.closest("[data-loads]")?.dataset.loads || route?.dataset?.route);
   if (prefix) refreshRoute(prefix);
   if (prefix && event.target.matches("[data-stop-place], [id$='-loading']")) scheduleDistanceFill(prefix);
 });
@@ -1088,16 +1172,21 @@ document.querySelector("#orders-view").addEventListener("change", (event) => {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
     applyTripCrew(prefix);
   }
-  if (event.target.matches("[id$='-fuel']") && !event.target.matches("[data-stop-fuel]")) {
-    const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
-    document.querySelectorAll(`#${prefix}-stops [data-stop-fuel][data-fuel-linked="1"]`).forEach((select) => {
-      select.value = event.target.value;
-    });
+  if (event.target.matches("[data-load-fuel]")) {
+    const prefix = event.target.closest("[data-loads]")?.dataset.loads;
+    const first = prefix ? firstLoadFuel(prefix) : null;
+    if (first) {
+      document.querySelectorAll(`#${prefix}-stops [data-stop-fuel][data-fuel-linked="1"]`).forEach((select) => {
+        select.value = String(first.id);
+      });
+      refreshRoute(prefix);
+    }
   }
   if (event.target.matches("[data-stop-fuel]")) {
     const prefix = event.target.closest("[data-route]")?.dataset.route;
-    const header = prefix ? document.querySelector(`#${prefix}-fuel`) : null;
-    event.target.dataset.fuelLinked = header && event.target.value === header.value ? "1" : "0";
+    const first = prefix ? firstLoadFuel(prefix) : null;
+    event.target.dataset.fuelLinked = first && event.target.value === String(first.id) ? "1" : "0";
+    if (prefix) refreshRoute(prefix);
   }
 });
 
