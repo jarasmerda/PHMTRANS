@@ -113,6 +113,10 @@ public static class ModuleGate
     private static bool IsLoginPage(string path) =>
         path.Equals("/login.html", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsPublicApi(string path) =>
+        path.Equals("/api/login", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/api/logout", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsApi(string path) =>
         path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase);
 
@@ -144,6 +148,9 @@ public static class ModuleGate
         if (path.Equals("/heslo.html", StringComparison.OrdinalIgnoreCase)
             || path.Equals("/vyber.html", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/api/auth", StringComparison.OrdinalIgnoreCase))
+            return RequiredAccess.User;
+        // Každé další API vyžaduje přihlášení. Bez přihlášení jde jen login a logout.
+        if (IsApi(path) && !IsPublicApi(path))
             return RequiredAccess.User;
         return RequiredAccess.None;
     }

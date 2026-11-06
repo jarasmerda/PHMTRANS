@@ -11,6 +11,6 @@ Soubory jsou ve `wwwroot/landing/` (veřejné na phmtrans.cz, bez přihlášení
 
 Vedle originálů jsou menší varianty (`-480`, `-768`, `-1200` / `-1280`) pro `srcset`. Stránka používá bílou Scanii v heru, cisternu a západ slunce ve vozovém parku. Modrá Scania je v sadě, na stránce se nezobrazuje.
 
-Logo: `logo-orig.jpg` = https://www.erp.phmtrans.cz/image.jpg (vlastní logo firmy); `logo.png` = ořez s průhledným pozadím a tmavým nápisem TRANS (záhlaví na bílém pozadí); `logo-dark.png` = varianta s bílým nápisem TRANS (patička na tmavém pruhu).
+Logo (vlastní logo firmy): `logo.png` = ořez s průhledným pozadím a tmavým nápisem TRANS (záhlaví na bílém pozadí); `logo-dark.png` = varianta s bílým nápisem TRANS (patička na tmavém pruhu).
 
 Písmo Barlow a Barlow Condensed (The Barlow Project Authors) je ve `wwwroot/landing/fonts/` pod SIL Open Font License 1.1, text licence je v `OFL.txt`.

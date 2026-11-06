@@ -4,24 +4,12 @@ public static class SiteHost
 {
     public const string IntranetOrigin = "https://intranet.phmtrans.cz";
 
-    public static string Name(HttpContext context)
-    {
-        var forwarded = context.Request.Headers["X-Forwarded-Host"].FirstOrDefault();
-        var raw = string.IsNullOrWhiteSpace(forwarded)
-            ? context.Request.Host.Host
-            : forwarded.Split(',')[0].Trim();
-        var colon = raw.LastIndexOf(':');
-        if (colon > 0 && raw.IndexOf(':') == colon && raw[(colon + 1)..].All(char.IsDigit))
-            raw = raw[..colon];
-
-        return raw;
-    }
+    // X-Forwarded-Host od důvěryhodné proxy už promítl UseForwardedHeaders do Request.Host.
+    // Hlavičku od klienta se tu nečte, jinak by si host mohl kdokoli podvrhnout.
+    public static string Name(HttpContext context) => context.Request.Host.Host;
 
     public static bool IsWwwPublic(string host) =>
         host.Equals("www.phmtrans.cz", StringComparison.OrdinalIgnoreCase);
-
-    public static bool IsApex(string host) =>
-        host.Equals("phmtrans.cz", StringComparison.OrdinalIgnoreCase);
 
     public static bool IsIntranet(string host) =>
         host.Equals("intranet.phmtrans.cz", StringComparison.OrdinalIgnoreCase)

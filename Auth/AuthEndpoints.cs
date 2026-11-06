@@ -327,14 +327,9 @@ public static class AuthEndpoints
         }
     }
 
-    internal static string ClientKey(HttpContext context)
-    {
-        var forwarded = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim();
-        if (!string.IsNullOrEmpty(forwarded))
-            return forwarded;
-
-        return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-    }
+    // Adresu klienta od důvěryhodné proxy doplní UseForwardedHeaders. Samotné X-Forwarded-For od klienta se ignoruje.
+    internal static string ClientKey(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }
 
 public sealed record LoginRequest(string? Username, string? Password);
