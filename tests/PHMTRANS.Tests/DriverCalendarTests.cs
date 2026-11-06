@@ -50,6 +50,35 @@ public sealed class DriverCalendarTests
         Assert.Equal(Monday, DriverCalendar.WeekStart(new DateOnly(2026, 11, 8)));
     }
 
+    [Fact]
+    public void Events_have_hours_default_times_and_skip_cancelled_or_outside_orders()
+    {
+        var drivers = new[] { new DispatchDriver("drv-1", "Jan Novák", null) };
+        var vehicles = new[] { new DispatchVehicle("veh-1", "1A2 3456", "MAN") };
+        var orders = new[]
+        {
+            Order("o1", "drv-1", Monday, Monday) with { LoadingTime = "05:30", UnloadingTime = "11:00", VehicleId = "veh-1" },
+            Order("o2", "drv-9", Monday.AddDays(1), Monday.AddDays(2)),
+            Order("o3", "drv-1", Monday, Monday) with { Status = OrderStatuses.Stornovano },
+            Order("o4", "drv-1", Monday.AddDays(-1), Monday.AddDays(-1)) with { UnloadingTime = "23:00" },
+            Order("o5", "drv-1", Monday.AddDays(7), Monday.AddDays(7))
+        };
+
+        var calendar = DriverCalendar.Events(drivers, vehicles, orders, Monday, 7);
+
+        Assert.Equal(["o1", "o2"], calendar.Events.Select(item => item.Id));
+        var first = calendar.Events[0];
+        Assert.Equal(Monday.ToDateTime(new TimeOnly(5, 30)), first.Start);
+        Assert.Equal(Monday.ToDateTime(new TimeOnly(11, 0)), first.End);
+        Assert.False(first.Estimated);
+        Assert.Equal("1A2 3456", first.Vehicle);
+        var second = calendar.Events[1];
+        Assert.Null(second.DriverId);
+        Assert.True(second.Estimated);
+        Assert.Equal(Monday.AddDays(2).ToDateTime(new TimeOnly(14, 0)), second.End);
+        Assert.Equal(["drv-1"], calendar.Drivers.Select(driver => driver.Id));
+    }
+
     private static DispatchOrder Order(string id, string? driverId, DateOnly loading, DateOnly unloading) => new(
         id, id.ToUpperInvariant(), null, "Zákazník", "Sklad", "ČS", loading, unloading, "motorová nafta",
         10000m, 0m, 0m, null, null, null, driverId, OrderStatuses.Nova, false, 1, null, null, null, null,

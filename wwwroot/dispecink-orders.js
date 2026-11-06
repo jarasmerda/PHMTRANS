@@ -1447,14 +1447,62 @@ window.showOrder = async (id) => {
   await openOrder(id, true);
 };
 
-document.querySelector("#open-order-create")?.addEventListener("click", () => {
+function openCreate(prefill) {
   const local = document.querySelector("#order-create-message");
   if (local) local.hidden = true;
-  document.querySelector("#order-create-dialog")?.showModal();
+  if (prefill?.date) {
+    const set = (id, value) => {
+      const input = document.querySelector(`#create-${id}`);
+      if (input && value) input.value = value;
+    };
+    set("loading-date", prefill.date);
+    set("unloading-date", prefill.date);
+    if (prefill.time) {
+      const [hours, minutes] = prefill.time.split(":").map(Number);
+      const end = Math.min(hours * 60 + minutes + 8 * 60, 23 * 60 + 45);
+      set("loading-time", prefill.time);
+      set("unloading-time", `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`);
+    }
+    if (prefill.driver && orderCatalog.drivers.some((driver) => driver.id === prefill.driver))
+      set("driver", prefill.driver);
+  }
+  const dialog = document.querySelector("#order-create-dialog");
+  if (dialog && !dialog.open) dialog.showModal();
   refreshAvailability("create");
+}
+
+document.querySelector("#open-order-create")?.addEventListener("click", () => openCreate());
+
+// Odkazy z hodinového kalendáře: #zakazka=ID otevře zakázku, #nova=RRRR-MM-DDTHH:MM&ridic=ID založí novou.
+function handleLinkHash() {
+  const hash = decodeURIComponent(location.hash);
+  if (hash.startsWith("#zakazka=")) {
+    const id = hash.slice("#zakazka=".length);
+    showView("orders");
+    if (id) openOrder(id, true);
+    return true;
+  }
+  if (hash.startsWith("#nova")) {
+    const params = new URLSearchParams(hash.slice(1).replace(/^nova=?/, "datum="));
+    const [date, time] = (params.get("datum") || "").split("T");
+    showView("orders");
+    openCreate({
+      date: /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : null,
+      time: /^\d{2}:\d{2}$/.test(time || "") ? time : null,
+      driver: params.get("ridic")
+    });
+    return true;
+  }
+  return false;
+}
+
+window.addEventListener("hashchange", () => {
+  if (!location.hash.startsWith("#tyden")) handleLinkHash();
 });
 
 loadCatalog().then(() => {
+  if (location.hash.startsWith("#tyden")) return;
+  if (handleLinkHash()) return;
   if (location.hash === "#fronta") showView("queue");
   else if (location.hash === "#kalendar") showView("calendar");
   else showView("orders");

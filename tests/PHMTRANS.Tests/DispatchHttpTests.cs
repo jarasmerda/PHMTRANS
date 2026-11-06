@@ -113,6 +113,11 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         var invalid = await client.SendAsync(Request("/api/dispatch/calendar?days=500", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
 
+        var events = await client.SendAsync(Request("/api/dispatch/calendar/events", "intranet.phmtrans.cz", user: false));
+        Assert.Equal(HttpStatusCode.Unauthorized, events.StatusCode);
+        var badEvents = await client.SendAsync(Request("/api/dispatch/calendar/events?from=x", "intranet.phmtrans.cz", user: true));
+        Assert.Equal(HttpStatusCode.BadRequest, badEvents.StatusCode);
+
         var trips = await client.SendAsync(Request("/api/dispatch/trips", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.NotFound, trips.StatusCode);
     }
