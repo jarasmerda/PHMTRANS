@@ -1,10 +1,23 @@
 # Přehled PHMTRANS
 
-Jediný popis projektu. Stav k 6. 11. 2026.
+Jediný popis projektu, sdílený všemi feedy. Stav k 6. 11. 2026. Při změně chování nebo nastavení se upravuje ve stejném PR.
 Jeden proces ASP.NET Core (.NET 10), stránky jsou statické soubory ve `wwwroot`.
 Faktury čte Pohoda mServer, objednávky do něj zapisuje. Dispečink, CRM a účty intranetu jsou v SQL Serveru.
 
 GitHub: https://github.com/jarasmerda/PHMTRANS
+
+## Feedy (sessions Claude Code)
+
+Práce na projektu je rozdělená do feedů podle modulů. Každý feed si sám načte `CLAUDE.md` (pravidla) a odtud tento soubor (popis projektu). Feed pracuje ve vývojovém klonu `C:\Projects\PHMTRANS`, každý ve vlastní větvi a pracovní kopii (worktree), změny jdou do `main` přes pull request.
+
+| Feed | Řeší | Hlavní soubory |
+| --- | --- | --- |
+| **ERP** | reporty ERP (vydané faktury, měsíční přehledy), čtení z Pohody, oprávnění na reporty | `Bi/`, `Pohoda/`, `wwwroot/erp.*` |
+| **Dispečink** | jízdy, zakázky, trasy a ceny, matice vzdáleností, fronta do Pohody | `Dispatch/`, `wwwroot/dispecink*` |
+
+Sdílené soubory (`wwwroot/erp.css`, `Site/`, `Auth/`, `Program.cs`, `PREHLED.md`, `CLAUDE.md`) mění kterýkoli feed. Před prací `git pull origin main`, změna jako samostatný malý PR, v popisu PR napsat, že jde o sdílený soubor. `erp.css` nese verzi `?v=` ve všech stránkách: kdo ji zvedá, zvedne ji všude najednou (stránky i testy).
+
+Nový feed (třeba CRM): přidat řádek do tabulky, založit session ve složce `C:\Projects\PHMTRANS` s vlastní pracovní kopií a do prvního zadání napsat, který modul řeší.
 
 ## Moduly
 

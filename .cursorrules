@@ -27,6 +27,7 @@
 
 ## Důležité soubory
 - PREHLED.md je podklad aktuálního nastavení pro další úpravy
+- CLAUDE.md jsou pravidla pro feedy Claude Code (ERP, Dispečink)
 - Program.cs
 - appsettings.json
 - appsettings.Production.json jen na serveru, mimo git
