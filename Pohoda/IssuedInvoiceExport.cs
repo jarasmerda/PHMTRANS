@@ -76,12 +76,38 @@ public static class IssuedInvoiceExport
             number = Text(header, "ids");
 
         var customer = CustomerName(header);
+        var (partnerId, ico) = Partner(header);
 
         var total = HomeTotal(invoice);
+        var totalNoVat = HomeBase(invoice);
         var paid = PaidAmount(invoice);
         var date = Date(header, "date");
         var due = Date(header, "dateDue");
-        return new IssuedInvoice(number, date, due, customer, total, paid, Status(total, paid, due));
+        return new IssuedInvoice(number, date, due, customer, total, paid, Status(total, paid, due), totalNoVat, partnerId, ico);
+    }
+
+    // Základ bez DPH v domácí měně: osvobozeno + snížená + základní + třetí sazba.
+    private static decimal HomeBase(XElement invoice)
+    {
+        var summary = invoice.Descendants().FirstOrDefault(element => element.Name.LocalName == "invoiceSummary");
+        var home = summary?.Descendants().FirstOrDefault(element => element.Name.LocalName == "homeCurrency");
+        if (home is null)
+            return 0;
+
+        return Amount(home, "priceNone") + Amount(home, "priceLow") + Amount(home, "priceHigh") + Amount(home, "price3");
+    }
+
+    // partnerIdentity/id je ID záznamu v adresáři Pohody (dbo.AD), IČO je záloha, když odkaz chybí.
+    private static (int? Id, string? Ico) Partner(XElement header)
+    {
+        var partner = header.Elements().FirstOrDefault(element => element.Name.LocalName == "partnerIdentity");
+        if (partner is null)
+            return (null, null);
+
+        var idText = partner.Elements().FirstOrDefault(element => element.Name.LocalName == "id")?.Value.Trim();
+        int? id = int.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0 ? parsed : null;
+        var ico = Text(partner, "ico");
+        return (id, ico.Length > 0 ? ico : null);
     }
 
     private static decimal HomeTotal(XElement invoice)
@@ -158,4 +184,7 @@ public sealed record IssuedInvoice(
     string Customer,
     decimal Total,
     decimal Paid,
-    string Status);
+    string Status,
+    decimal TotalNoVat = 0,
+    int? PartnerId = null,
+    string? Ico = null);

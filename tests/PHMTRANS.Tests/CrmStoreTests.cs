@@ -330,7 +330,7 @@ public sealed class CrmPageTests
         var webConfig = File.ReadAllText(Path.Combine(root, "web.config"));
 
         Assert.Contains("<h1>CRM</h1>", html, StringComparison.Ordinal);
-        Assert.Contains("erp.css?v=17", html, StringComparison.Ordinal);
+        Assert.Contains("erp.css?v=18", html, StringComparison.Ordinal);
         Assert.Contains("class=\"brand\" href=\"https://phmtrans.cz/\"", html, StringComparison.Ordinal);
         Assert.Contains("class=\"site-back\" href=\"https://phmtrans.cz/\">Zpět na web</a>", html, StringComparison.Ordinal);
         Assert.Contains("crm.js?v=2", html, StringComparison.Ordinal);

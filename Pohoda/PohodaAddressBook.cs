@@ -23,9 +23,17 @@ public sealed class PohodaAddressBookException(string message, bool permissionDe
     public bool PermissionDenied { get; } = permissionDenied;
 }
 
+public sealed record PohodaAddressGroup(int Id, string? Ico, string? Group);
+
 public interface IPohodaAddressBook
 {
     Task<IReadOnlyList<PohodaAddress>> SearchAsync(string query, CancellationToken cancellationToken);
+
+    /// <summary>Skupina adresy (dbo.AD.Skupina) podle ID nebo IČO.</summary>
+    Task<IReadOnlyList<PohodaAddressGroup>> GroupsAsync(
+        IReadOnlyCollection<int> ids,
+        IReadOnlyCollection<string> icos,
+        CancellationToken cancellationToken);
 }
 
 // Jen čtení. Do dbo.AD se nezapisuje.
@@ -59,6 +67,13 @@ public static partial class PohodaAddressSql
            OR Jmeno LIKE @Like ESCAPE '!'
            OR ICO LIKE @Like ESCAPE '!'
         ORDER BY Firma, Jmeno, ID
+        """;
+
+    public static string GroupsSql(string database) =>
+        $"""
+        SELECT ID, ICO, Skupina
+        FROM {QualifiedTable(database)}
+        WHERE ID IN @Ids OR ICO IN @Icos
         """;
 
     public static string Like(string query)
@@ -116,24 +131,53 @@ public sealed class PohodaAddressRow
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
+public sealed class PohodaAddressGroupRow
+{
+    public int ID { get; set; }
+    public string? ICO { get; set; }
+    public string? Skupina { get; set; }
+}
+
 public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<PohodaOptions> options) : IPohodaAddressBook
 {
     private readonly string? _connectionString = configuration.GetConnectionString("Dispatch");
 
     public async Task<IReadOnlyList<PohodaAddress>> SearchAsync(string query, CancellationToken cancellationToken)
     {
+        var rows = await QueryAsync<PohodaAddressRow>(
+            PohodaAddressSql.SearchSql,
+            new { Like = PohodaAddressSql.Like(query) },
+            cancellationToken);
+        return rows.Select(row => row.ToAddress()).Where(address => address is not null).Select(address => address!).ToArray();
+    }
+
+    public async Task<IReadOnlyList<PohodaAddressGroup>> GroupsAsync(
+        IReadOnlyCollection<int> ids,
+        IReadOnlyCollection<string> icos,
+        CancellationToken cancellationToken)
+    {
+        if (ids.Count == 0 && icos.Count == 0)
+            return [];
+
+        var rows = await QueryAsync<PohodaAddressGroupRow>(
+            PohodaAddressSql.GroupsSql,
+            new { Ids = ids.ToArray(), Icos = icos.ToArray() },
+            cancellationToken);
+        return rows.Select(row => new PohodaAddressGroup(row.ID, row.ICO?.Trim(), row.Skupina?.Trim())).ToArray();
+    }
+
+    private async Task<IEnumerable<T>> QueryAsync<T>(Func<string, string> sqlFor, object parameters, CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(_connectionString))
             throw new PohodaAddressBookException(
-                "Dispečink nemá nastavené ConnectionStrings:Dispatch, adresář Pohody (dbo.AD) nelze číst.");
+                "Není nastavené ConnectionStrings:Dispatch, adresář Pohody (dbo.AD) nelze číst.");
 
         var database = PohodaAddressSql.DatabaseName(options.Value.AddressBookDatabase);
-        var sql = PohodaAddressSql.SearchSql(database);
         try
         {
             await using var connection = new SqlConnection(_connectionString);
-            var rows = await connection.QueryAsync<PohodaAddressRow>(
-                new CommandDefinition(sql, new { Like = PohodaAddressSql.Like(query) }, cancellationToken: cancellationToken));
-            return rows.Select(row => row.ToAddress()).Where(address => address is not null).Select(address => address!).ToArray();
+            return await connection.QueryAsync<T>(
+                new CommandDefinition(sqlFor(database), parameters, cancellationToken: cancellationToken));
         }
         catch (SqlException exception) when (PohodaAddressSql.IsPermissionError(exception.Number))
         {

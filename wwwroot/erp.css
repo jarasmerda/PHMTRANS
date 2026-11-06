@@ -176,6 +176,38 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
 }
 
 .module-links a:hover,
+.report-tabs {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0.35rem auto 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.report-tabs a {
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+
+.report-tabs a[aria-current="page"] {
+  background: var(--button);
+  color: var(--on-button);
+  border-color: var(--accent);
+}
+
+.report-tabs a:hover {
+  background: var(--button-hover);
+  color: var(--on-button);
+  border-color: var(--button-hover);
+}
+
+.report-tabs a:focus-visible,
 .module-links a:focus-visible {
   color: var(--ink);
   text-decoration: underline;
@@ -207,6 +239,38 @@ h2 { margin-bottom: 0.8rem; font-size: 1.05rem; }
   color: var(--on-button);
 }
 
+.report-tabs {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0.35rem auto 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.report-tabs a {
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+}
+
+.report-tabs a[aria-current="page"] {
+  background: var(--button);
+  color: var(--on-button);
+  border-color: var(--accent);
+}
+
+.report-tabs a:hover {
+  background: var(--button-hover);
+  color: var(--on-button);
+  border-color: var(--button-hover);
+}
+
+.report-tabs a:focus-visible,
 .module-links a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -417,4 +481,28 @@ tbody tr:nth-child(even) { background: rgba(247, 244, 238, 0.94); }
     padding-right: 0.15rem;
     margin-right: 0;
   }
+}
+
+/* Měsíční přehled: měsíce, čtvrtletí zvýrazněná, součet sekce v patičce. */
+.monthly-wrap {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.6rem;
+}
+
+table.monthly { font-size: 0.82rem; white-space: nowrap; }
+table.monthly th, table.monthly td { padding: 0.35rem 0.4rem; }
+table.monthly td:first-child, table.monthly th:first-child { position: sticky; left: 0; background: #fff; }
+table.monthly .quarter { background: rgba(214, 205, 178, 0.55); font-weight: 700; }
+table.monthly .total { background: rgba(196, 184, 148, 0.75); }
+table.monthly tfoot th, table.monthly tfoot td { font-weight: 700; border-top: 2px solid var(--ink); }
+
+.monthly-note {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto 1.5rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
 }
