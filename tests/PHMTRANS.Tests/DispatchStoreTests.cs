@@ -403,7 +403,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"vehicle\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver\"", html, StringComparison.Ordinal);
         Assert.Contains("— nepřiřazeno —", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink.js?v=11", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=12", html, StringComparison.Ordinal);
         Assert.Contains("dispecink-orders.js?v=10", html, StringComparison.Ordinal);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("filter.css?v=1", html, StringComparison.Ordinal);
@@ -517,6 +517,29 @@ public sealed class DispatchPageTests
 public sealed class DispatchSqlGuardTests
 {
     [Fact]
+    public void Vehicle_compartments_are_attached_in_order_and_invalid_rows_are_skipped()
+    {
+        var vehicles = SqlDispatchStore.BuildVehicles(
+            [
+                new SqlDispatchStore.VehicleRow("veh-a", "1AB 0001", "Cisterna A", 21.5m),
+                new SqlDispatchStore.VehicleRow("veh-b", "1AB 0002", "Cisterna B", null)
+            ],
+            [
+                new SqlDispatchStore.CompartmentRow("veh-a", 2, 6000m),
+                new SqlDispatchStore.CompartmentRow("veh-a", 1, 8000m),
+                new SqlDispatchStore.CompartmentRow("veh-a", 11, 5000m),
+                new SqlDispatchStore.CompartmentRow("veh-a", 3, 0m),
+                new SqlDispatchStore.CompartmentRow("veh-x", 1, 5000m)
+            ]);
+
+        var first = vehicles.Single(vehicle => vehicle.Id == "veh-a");
+        Assert.Equal([1, 2], first.Compartments!.Select(item => item.Number));
+        Assert.Equal(14000m, VehicleCompartments.TotalCapacity(first));
+        Assert.Equal(21.5m, first.CostPerKm);
+        Assert.Empty(vehicles.Single(vehicle => vehicle.Id == "veh-b").Compartments!);
+    }
+
+    [Fact]
     public void Schema_script_creates_missing_tables_and_adds_missing_trip_columns()
     {
         var script = DispatchSchema.Script;
@@ -524,7 +547,7 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("dbo.Disp_Vehicle", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Driver", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Trip", script, StringComparison.Ordinal);
-        Assert.Equal(11, Count(script, "IF OBJECT_ID"));
+        Assert.Equal(12, Count(script, "IF OBJECT_ID"));
         Assert.Contains("dbo.Disp_Order", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_OrderVersion", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_SyncQueue", script, StringComparison.Ordinal);
@@ -543,6 +566,9 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("dbo.Disp_Setting", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_FuelType", script, StringComparison.Ordinal);
         Assert.Contains("dbo.Disp_Distance", script, StringComparison.Ordinal);
+        Assert.Contains("IF OBJECT_ID(N'dbo.Disp_VehicleCompartment', N'U') IS NULL", script, StringComparison.Ordinal);
+        Assert.Contains("CHECK (Number BETWEEN 1 AND 10)", script, StringComparison.Ordinal);
+        Assert.Contains("FK_Disp_VehicleCompartment_Vehicle", script, StringComparison.Ordinal);
         Assert.Contains("N'Motorová nafta'", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.Contains("N'Benzín'", DispatchSchema.Data, StringComparison.Ordinal);
         Assert.Contains("UX_Disp_Distance_Pair", script, StringComparison.Ordinal);

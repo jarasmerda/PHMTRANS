@@ -22,6 +22,20 @@ public static class DispatchSchema
             );
         END;
 
+        IF OBJECT_ID(N'dbo.Disp_VehicleCompartment', N'U') IS NULL
+        BEGIN
+            CREATE TABLE dbo.Disp_VehicleCompartment
+            (
+                VehicleId nvarchar(64) NOT NULL,
+                Number int NOT NULL,
+                CapacityLiters decimal(18,3) NOT NULL,
+                CONSTRAINT PK_Disp_VehicleCompartment PRIMARY KEY (VehicleId, Number),
+                CONSTRAINT FK_Disp_VehicleCompartment_Vehicle FOREIGN KEY (VehicleId) REFERENCES dbo.Disp_Vehicle (Id),
+                CONSTRAINT CK_Disp_VehicleCompartment_Number CHECK (Number BETWEEN 1 AND 10),
+                CONSTRAINT CK_Disp_VehicleCompartment_Capacity CHECK (CapacityLiters > 0)
+            );
+        END;
+
         IF OBJECT_ID(N'dbo.Disp_Driver', N'U') IS NULL
         BEGIN
             CREATE TABLE dbo.Disp_Driver

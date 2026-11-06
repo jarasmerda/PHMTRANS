@@ -115,6 +115,7 @@ Adresář Pohody `dbo.AD` čte našeptávač zákazníka a měsíční přehled 
 | --- | --- |
 | `Auth_User` | Účty intranetu. |
 | `Disp_Vehicle`, `Disp_Driver`, `Disp_Trip` | Vozidla, řidiči, jízdy. |
+| `Disp_VehicleCompartment` | Přepážky cisteren: vozidlo, číslo přepážky 1–10, objem v litrech. |
 | `Disp_Order`, `Disp_OrderStop`, `Disp_OrderLeg` | Zakázka, vykládky, úseky. |
 | `Disp_OrderVersion`, `Disp_SyncQueue` | Snímky verzí a fronta do Pohody. |
 | `Disp_FuelType` | Číselník paliva. Seed: Motorová nafta, Benzín. |
@@ -139,6 +140,13 @@ Tři reporty, přepínají se záložkami (`/ERP#faktury`, `/ERP#mesicni`, `/ERP
 ## Dispečink
 
 Deska má tři pohledy: Jízdy, Zakázky, Fronta Pohody. Založení jízdy i zakázky je samostatné okno. Seznamy umí víc stavů najednou a ve výchozím filtru vynechají storno.
+
+**Cisterny a přepážky.** Vozidlo má až 10 přepážek, každá s vlastním objemem v litrech (`Disp_VehicleCompartment`). Zadávají se zatím přímo v SQL, deska je ukáže u nákladových sazeb vozidel (počet, součet a objemy). Vozidlo bez řádků má „přepážky nezadané“. Řádek s číslem mimo 1–10 nebo nulovým objemem se ignoruje. Příklad:
+
+```sql
+INSERT INTO dbo.Disp_VehicleCompartment (VehicleId, Number, CapacityLiters)
+VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
+```
 
 **Jízdy.** Stavy Nová, Přiřazená, Na cestě, Vyložená, Zrušená, Stornováno. Kód `J{rok}-{čtyři číslice}`. Vozidlo a řidič z číselníku. Na jízdě je seznam jejích zakázek. Stornovaná jízda zakázky nepřijímá.
 

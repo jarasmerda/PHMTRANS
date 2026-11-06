@@ -220,8 +220,13 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
         SqlTransaction? transaction,
         CancellationToken cancellationToken)
     {
-        var vehicles = (await connection.QueryAsync<DispatchVehicle>(Command(
+        var vehicleRows = (await connection.QueryAsync<VehicleRow>(Command(
             "SELECT Id, Plate, Label, CostPerKm FROM dbo.Disp_Vehicle", transaction, cancellationToken))).AsList();
+        var compartments = (await connection.QueryAsync<CompartmentRow>(Command(
+            "SELECT VehicleId, Number, CapacityLiters FROM dbo.Disp_VehicleCompartment",
+            transaction,
+            cancellationToken))).AsList();
+        var vehicles = BuildVehicles(vehicleRows, compartments);
         var drivers = (await connection.QueryAsync<DispatchDriver>(Command(
             "SELECT Id, Name, Phone FROM dbo.Disp_Driver", transaction, cancellationToken))).AsList();
         var trips = (await connection.QueryAsync<DispatchTrip>(Command(
@@ -247,6 +252,34 @@ public sealed class SqlDispatchStore(IConfiguration configuration, ILogger<SqlDi
             DefaultCostPerKm = defaultCost
         };
     }
+
+    public static List<DispatchVehicle> BuildVehicles(
+        IEnumerable<VehicleRow> rows,
+        IEnumerable<CompartmentRow> compartments)
+    {
+        var byVehicle = compartments
+            .Where(row => row.Number is >= 1 and <= VehicleCompartments.MaxCount && row.CapacityLiters > 0m)
+            .GroupBy(row => row.VehicleId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<VehicleCompartment>)group
+                    .OrderBy(row => row.Number)
+                    .Select(row => new VehicleCompartment(row.Number, row.CapacityLiters))
+                    .ToArray(),
+                StringComparer.Ordinal);
+        return rows
+            .Select(row => new DispatchVehicle(
+                row.Id,
+                row.Plate,
+                row.Label,
+                row.CostPerKm,
+                byVehicle.TryGetValue(row.Id, out var list) ? list : []))
+            .ToList();
+    }
+
+    public sealed record VehicleRow(string Id, string Plate, string Label, decimal? CostPerKm);
+
+    public sealed record CompartmentRow(string VehicleId, int Number, decimal CapacityLiters);
 
     private static Task<int> InsertTripAsync(
         SqlConnection connection,
