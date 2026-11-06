@@ -394,11 +394,20 @@ function showTrip(id) {
     history.replaceState(null, "", window.keepQuery(`#jizda-${id}`));
 }
 
+function compartmentsText(vehicle) {
+  const list = vehicle.compartments ?? [];
+  if (!list.length) return "přepážky nezadané";
+  const total = list.reduce((sum, item) => sum + Number(item.capacityLiters || 0), 0);
+  const word = list.length === 1 ? "přepážka" : list.length < 5 ? "přepážky" : "přepážek";
+  return `${list.length} ${word} · ${litersLabel(total)} l (${list.map((item) => litersLabel(item.capacityLiters)).join(" / ")})`;
+}
+
 function renderRates() {
   if (!rates) return;
   document.querySelector("#default-cost").value = rates.defaultCostPerKm ?? 0;
   document.querySelector("#vehicle-rates").innerHTML = (rates.vehicles ?? []).map((vehicle) =>
     `<label>${text(vehicle.plate)} · ${text(vehicle.label)}
+      <small class="note">${text(compartmentsText(vehicle))}</small>
       <input data-vehicle-cost="${text(vehicle.id)}" type="number" min="0" step="0.0001" placeholder="výchozí" value="${vehicle.costPerKm ?? ""}">
     </label>`).join("");
 }

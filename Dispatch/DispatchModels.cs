@@ -30,7 +30,23 @@ public static class DispatchStatuses
     };
 }
 
-public sealed record DispatchVehicle(string Id, string Plate, string Label, decimal? CostPerKm = null);
+public sealed record DispatchVehicle(
+    string Id,
+    string Plate,
+    string Label,
+    decimal? CostPerKm = null,
+    IReadOnlyList<VehicleCompartment>? Compartments = null);
+
+// Přepážka cisterny. Čísluje se od 1, vozidlo jich má nejvýš 10.
+public sealed record VehicleCompartment(int Number, decimal CapacityLiters);
+
+public static class VehicleCompartments
+{
+    public const int MaxCount = 10;
+
+    public static decimal TotalCapacity(DispatchVehicle vehicle) =>
+        (vehicle.Compartments ?? []).Sum(compartment => compartment.CapacityLiters);
+}
 
 public sealed record DispatchDriver(string Id, string Name, string? Phone);
 

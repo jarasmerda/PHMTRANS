@@ -89,9 +89,9 @@ public sealed class MemoryDispatchStore : IDispatchStore
         {
             Vehicles =
             [
-                new("veh-1", "1A2 3456", "Cisterna MAN 32 m³"),
-                new("veh-2", "2B3 4567", "Cisterna Volvo 28 m³"),
-                new("veh-3", "3C4 5678", "Cisterna Scania 36 m³")
+                new("veh-1", "1A2 3456", "Cisterna MAN 32 m³", null, Compartments(8000, 8000, 6000, 6000, 4000)),
+                new("veh-2", "2B3 4567", "Cisterna Volvo 28 m³", null, Compartments(7000, 7000, 7000, 7000)),
+                new("veh-3", "3C4 5678", "Cisterna Scania 36 m³", null, Compartments(9000, 7000, 7000, 5000, 4000, 4000))
             ],
             Drivers =
             [
@@ -110,6 +110,9 @@ public sealed class MemoryDispatchStore : IDispatchStore
             ]
         };
     }
+
+    private static VehicleCompartment[] Compartments(params decimal[] capacities) =>
+        capacities.Select((capacity, index) => new VehicleCompartment(index + 1, capacity)).ToArray();
 
     private static DispatchTrip Trip(
         string id,

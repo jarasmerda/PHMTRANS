@@ -138,6 +138,11 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal(HttpStatusCode.OK, vehicles.StatusCode);
         using var vehicleJson = JsonDocument.Parse(await vehicles.Content.ReadAsStringAsync());
         Assert.Contains(vehicleJson.RootElement.EnumerateArray(), item => item.GetProperty("plate").GetString() == "1A2 3456");
+        var man = vehicleJson.RootElement.EnumerateArray().Single(item => item.GetProperty("plate").GetString() == "1A2 3456");
+        var compartments = man.GetProperty("compartments").EnumerateArray().ToArray();
+        Assert.Equal(5, compartments.Length);
+        Assert.Equal(1, compartments[0].GetProperty("number").GetInt32());
+        Assert.Equal(8000m, compartments[0].GetProperty("capacityLiters").GetDecimal());
 
         var drivers = await client.SendAsync(Request("/api/dispatch/drivers", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, drivers.StatusCode);
