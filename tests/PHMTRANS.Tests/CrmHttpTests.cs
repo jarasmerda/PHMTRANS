@@ -41,8 +41,7 @@ public sealed class CrmHttpTests : IClassFixture<CrmApp>
         var portal = await client.SendAsync(Request(HttpMethod.Get, "/", user: false));
         var portalHtml = await portal.Content.ReadAsStringAsync();
         Assert.Equal(HttpStatusCode.OK, portal.StatusCode);
-        Assert.Contains("https://intranet.phmtrans.cz/CRM", portalHtml, StringComparison.Ordinal);
-        Assert.Contains("https://intranet.phmtrans.cz/Dispecink", portalHtml, StringComparison.Ordinal);
+        Assert.Contains("https://intranet.phmtrans.cz/\">Intranet</a>", portalHtml, StringComparison.Ordinal);
 
         var signedCrm = await client.SendAsync(Request(HttpMethod.Get, "/CRM", user: true, host: "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, signedCrm.StatusCode);

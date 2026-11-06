@@ -13,6 +13,7 @@ ARG GIT_BRANCH=
 RUN dotnet publish -c Release -o /app/publish -p:GitBranch="${GIT_BRANCH}"
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-windowsservercore-ltsc2022
+ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 WORKDIR /app
 COPY --from=build /app/publish .

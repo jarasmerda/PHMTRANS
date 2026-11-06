@@ -22,10 +22,6 @@ public sealed class PohodaOptions
 
     public string Application { get; set; } = "PHMTRANS";
 
-    public string CodePrefix { get; set; } = "PE";
-
-    public int CodeDigits { get; set; } = 5;
-
     public int TimeoutSeconds { get; set; } = 180;
 
     /// <summary>

@@ -327,7 +327,6 @@ public sealed class CrmPageTests
         var root = FindWwwRoot();
         var html = File.ReadAllText(Path.Combine(root, "crm.html"));
         var js = File.ReadAllText(Path.Combine(root, "crm.js"));
-        var index = File.ReadAllText(Path.Combine(root, "index.html"));
         var webConfig = File.ReadAllText(Path.Combine(root, "web.config"));
 
         Assert.Contains("<h1>CRM</h1>", html, StringComparison.Ordinal);
@@ -379,9 +378,6 @@ public sealed class CrmPageTests
         Assert.Contains("param: \"faze\"", js, StringComparison.Ordinal);
         Assert.Contains("param: \"aktivity\"", js, StringComparison.Ordinal);
         Assert.Contains(", \"PUT\")", js, StringComparison.Ordinal);
-        Assert.Contains("https://intranet.phmtrans.cz/CRM", index, StringComparison.Ordinal);
-        Assert.Contains(">CRM</a>", index, StringComparison.Ordinal);
-        Assert.True(index.IndexOf("https://intranet.phmtrans.cz/Dispecink", StringComparison.Ordinal) < index.IndexOf("https://intranet.phmtrans.cz/CRM", StringComparison.Ordinal));
         Assert.Contains("name=\"CrmHome\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("name=\"CrmApi\"", webConfig, StringComparison.Ordinal);
         Assert.Contains("crm.html", webConfig, StringComparison.Ordinal);

@@ -12,7 +12,6 @@ GitHub: https://github.com/jarasmerda/PHMTRANS
 | --- | --- | --- | --- |
 | Veřejný web | `landing.html` na `phmtrans.cz` | — | jen soubory |
 | ERP | `/ERP` → `erp.html` | `/api/bi/issued-invoices` | Pohoda, vydané faktury |
-| CPQ | konfigurátor zásob | `/Cpq…`, `/api/pohoda/xml` | Pohoda, skladové karty |
 | Dispečink | `/Dispecink` → `dispecink.html` | `/api/dispatch/…` | SQL, tabulky `Disp_*` |
 | CRM | `/CRM` → `crm.html` | `/api/crm/…` | SQL, tabulky `Crm_*` |
 | Účty | `/login.html`, `/heslo`, `/Admin` | `/api/login`, `/api/auth/…`, `/api/admin/users` | SQL, `Auth_User` |
@@ -27,7 +26,7 @@ GitHub: https://github.com/jarasmerda/PHMTRANS
 | `C:\PHMTRANS` | Klon na Windows Serveru. Odtud se dělá `git pull`. |
 | `C:\PHMTRANS\app` | Publikace služby: `dotnet publish -c Release -o C:\PHMTRANS\app`. |
 | `C:\PHMTRANS\wwwroot` | Stránky, které služba servíruje. Úprava jen HTML, CSS a JS je `git pull` bez publikace. |
-| Služba Windows `PHMTRANS` | Port 8089, start Automatic. Mimo Development poslouchá na `http://*:8089`. |
+| Služba Windows `PHMTRANS` | Port 8089, start Automatic. Mimo Development poslouchá jen na `http://127.0.0.1:8089` (ven jde přes IIS/ARR). Jinou adresu nastaví `ASPNETCORE_URLS`. |
 
 Docker na serveru neběží. `Dockerfile` a `Dockerfile.windows` v repozitáři zůstávají.
 
@@ -46,10 +45,10 @@ Náhled bez SQL je jen Development a jen když je `Dispatch:Preview` true. Pak j
 
 Stejné platí pro `www.` u starých hostitelů. Cesta modulu je bez ohledu na velikost písmen: `/erp` i `/ERP`. Pod prefixem fungují i soubory a API, třeba `/Dispecink/api/dispatch/board`.
 
-Aplikace na IP: http://185.219.164.45:8089/
-mServer: http://185.219.164.45:444 (`/status` bez hesla, `/xml` s přihlášením).
+Služba není z internetu přímo dostupná, port 8089 poslouchá jen na loopbacku.
+mServer: http://185.219.164.45:444 (`/xml` s přihlášením). Port 444 má být ve firewallu povolený jen pro server aplikace.
 
-Host se bere z `X-Forwarded-Host`, jinak z `Request.Host`. IIS ARR má posílat i `X-Forwarded-Proto`. Podrobnosti vazeb a certifikátu jsou v `docs/intranet-navrh.md`.
+Host se bere z `Request.Host`. Hlavičky `X-Forwarded-Host`, `X-Forwarded-Proto` a `X-Forwarded-For` se přijmou jen od důvěryhodné proxy, výchozí je loopback (IIS/ARR na stejném serveru). Další proxy jdou doplnit v `ForwardedHeaders:KnownProxies`. Podrobnosti vazeb a certifikátu jsou v `docs/intranet-navrh.md`.
 
 ## Nasazení
 
@@ -142,25 +141,32 @@ Uzamčená objednávka (vyfakturovaná) se v Pohodě nemění. Vznikne opravný 
 
 Zákazník je `Firma` nebo `Osoba`. Kontakt visí na zákazníkovi. Příležitost má fázi Nový, V jednání, Nabídka, Vyhráno, Prohráno. Aktivita je hovor, schůzka nebo poznámka a visí na zákazníkovi, na příležitosti, nebo na obou. Kódy: zákazník `C{rok}-0001`, příležitost `O{rok}-0001`, aktivita `A{rok}-0001`. Do Pohody CRM nezapisuje.
 
-## ERP a CPQ
+## ERP
 
 Faktury jsou `issuedInvoice`, částky v domácí měně. Stavy: Uhrazeno, Částečně, Po splatnosti, Neuhrazeno. Volá je účet služby, ne heslo z formuláře.
 
-CPQ čte hodnoty z `Data/cpq` vedle kořene obsahu. Ta složka v gitu není. Založení zásoby a `POST /api/pohoda/xml` přeposílají XML do mServeru. XML je Windows-1250. Odpověď se čte podle deklarace. Když deklarace říká UTF-8 a bajty UTF-8 nejsou, použije se Windows-1250.
+XML pro mServer je Windows-1250. Odpověď se čte podle deklarace. Když deklarace říká UTF-8 a bajty UTF-8 nejsou, použije se Windows-1250.
 
 Účet služby, ne v gitu:
 
 - `Pohoda__Username`, `Pohoda__Password`, `Pohoda__Ico`
 - volitelně `Pohoda__WriteUsername` a `Pohoda__WritePassword` jen pro zápis
 
-V `appsettings.json` je `BaseUrl` `http://185.219.164.45:444`, aplikace `PHMTRANS`, prefix zásoby `PE` a pět číslic, timeout 180 sekund. HTTP klient nejde přes proxy. `appsettings.Production.json` je v `.gitignore`.
+V `appsettings.json` je `BaseUrl` `http://185.219.164.45:444`, aplikace `PHMTRANS`, timeout 180 sekund. HTTP klient nejde přes proxy. `appsettings.Production.json` je v `.gitignore`.
 
-`/api/pohoda/status` heslo nepotřebuje. Když chybí účet služby, faktury vrátí `mServer vrátil 401:`, zatímco status zůstane v pořádku.
+Když chybí účet služby, faktury vrátí `mServer vrátil 401:`.
+
+## Zabezpečení
+
+- Každé `/api/…` kromě `/api/login` a `/api/logout` vyžaduje přihlášení. Nové API tak bez přihlášení neprojde, ani když se zapomene doplnit do `ModuleGate`.
+- Limit pokusů o přihlášení se počítá podle skutečné adresy klienta. Podvržené `X-Forwarded-For` od klienta se ignoruje.
+- Odpovědi nesou `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy` a na HTTPS `Strict-Transport-Security`. API odpovědi mají `Cache-Control: no-store`.
+- CPQ (konfigurátor zásob) a přeposílání libovolného XML do Pohody (`/api/pohoda/xml`) byly odstraněné, protože běžely bez přihlášení.
 
 ## Na co myslet při další úpravě
 
 - Hesla, IČO a connection string do gitu nepatří. V `appsettings.json` zůstávají prázdné.
 - HTML ve `wwwroot` a C# mají jiný postup nasazení. Nová tabulka `Disp_*` nebo `Crm_*` se na serveru objeví až po publikaci a startu služby.
-- Zkouška na `localhost:8089` bez `X-Forwarded-Host` neukáže přesměrování hostitelů.
+- Zkouška na `localhost:8089` bez `X-Forwarded-Host` neukáže přesměrování hostitelů. Z loopbacku se hlavička přijme.
 - Cookie nemá `Domain=.phmtrans.cz`. Intranet a staré hostitele nespojovat do jedné relace.
 - `docs/dispecink-navrh.md` a `docs/crm-navrh.md` popisují první verze. Aktuální chování zakázek, synchronizace a účtů je v tomto souboru a v kódu.
