@@ -28,17 +28,6 @@ public sealed class PohodaMServerClient(
         return IssuedInvoiceExport.Read(body);
     }
 
-    public async Task<IReadOnlyList<PohodaCustomer>> FindCustomersAsync(string company, CancellationToken cancellationToken)
-    {
-        EnsureUser();
-        if (string.IsNullOrWhiteSpace(_options.Ico))
-            throw new PohodaException("V nastavení chybí Pohoda:Ico.");
-
-        var xml = AddressBookExport.CreateRequest(_options, company.Trim());
-        var body = await PostXmlAsync(Windows1250.GetBytes(xml), cancellationToken);
-        return AddressBookExport.Read(body);
-    }
-
     public async Task<PohodaXmlResponse> ImportXmlAsync(string xml, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.Ico))

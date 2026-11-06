@@ -115,7 +115,7 @@ public sealed class IntranetAuthHttpTests : IClassFixture<IntranetAuthApp>
 
         var erp = await client.SendAsync(Get("/erp", "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, erp.StatusCode);
-        Assert.Contains("href=\"#uctovani-faktur\"", await erp.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Contains("Vydané faktury", await erp.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
         var home = await client.SendAsync(Get("/", "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.Redirect, home.StatusCode);
@@ -479,7 +479,7 @@ public sealed class IntranetRoutingTests : IClassFixture<PublicSiteApp>
 
         var lower = await client.SendAsync(Get("/erp", "intranet.phmtrans.cz", user: true));
         Assert.Equal(HttpStatusCode.OK, lower.StatusCode);
-        Assert.Contains("href=\"#uctovani-faktur\"", await lower.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+        Assert.Contains("Vydané faktury", await lower.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
         var login = await client.SendAsync(Get("/ERP", "intranet.phmtrans.cz", user: false));
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);

@@ -46,7 +46,6 @@ public sealed class ModuleNavigationPageTests
         Assert.DoesNotContain("href=\"https://intranet.phmtrans.cz/Dispecink\"", dispatch, StringComparison.Ordinal);
         Assert.Contains("href=\"https://intranet.phmtrans.cz/CRM\">CRM</a>", dispatch, StringComparison.Ordinal);
         Assert.Contains("<h1>Dispečink</h1>", dispatch, StringComparison.Ordinal);
-        Assert.DoesNotContain("erp-sections", dispatch, StringComparison.Ordinal);
         Assert.DoesNotContain("Připravujeme", dispatch, StringComparison.Ordinal);
 
         Assert.Contains("href=\"https://intranet.phmtrans.cz/ERP\">ERP</a>", crm, StringComparison.Ordinal);
@@ -59,7 +58,6 @@ public sealed class ModuleNavigationPageTests
         Assert.Contains(">Zákazníci</button>", crm, StringComparison.Ordinal);
         Assert.Contains(">Příležitosti</button>", crm, StringComparison.Ordinal);
         Assert.Contains(">Aktivity</button>", crm, StringComparison.Ordinal);
-        Assert.DoesNotContain("erp-sections", crm, StringComparison.Ordinal);
         Assert.DoesNotContain("Připravujeme", crm, StringComparison.Ordinal);
     }
 
@@ -100,45 +98,19 @@ public sealed class ModuleNavigationPageTests
         var js = File.ReadAllText(Path.Combine(root, "erp.js"));
 
         Assert.Contains("<h1>ERP</h1>", html, StringComparison.Ordinal);
-        Assert.Contains("erp.js?v=6", html, StringComparison.Ordinal);
+        Assert.Contains("erp.js?v=7", html, StringComparison.Ordinal);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("id=\"from\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"to\"", html, StringComparison.Ordinal);
-        Assert.Contains("aria-label=\"Části ERP\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"#bi\"", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"#zpracovani-objednavek\">Zpracování objednávek</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"#vytvareni-objednavek\">Vytváření objednávek</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"#uctovani-faktur\">Účtování faktur</a>", html, StringComparison.Ordinal);
-        Assert.Contains("data-erp-section=\"bi\"", html, StringComparison.Ordinal);
         Assert.Contains("<h2 class=\"section-title\">Vydané faktury</h2>", html, StringComparison.Ordinal);
         Assert.Contains("id=\"range\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"customer\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"chart\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"rows\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-erp-section=\"zpracovani-objednavek\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-erp-section=\"vytvareni-objednavek\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-erp-section=\"uctovani-faktur\"", html, StringComparison.Ordinal);
-        Assert.Equal(3, Count(html, "Připravujeme"));
-        Assert.Contains("hashchange", js, StringComparison.Ordinal);
-        Assert.Contains("zpracovani-objednavek", js, StringComparison.Ordinal);
-        Assert.Contains("vytvareni-objednavek", js, StringComparison.Ordinal);
-        Assert.Contains("uctovani-faktur", js, StringComparison.Ordinal);
         Assert.Contains("/api/bi/issued-invoices", js, StringComparison.Ordinal);
         Assert.Contains("param: \"odberatel\"", js, StringComparison.Ordinal);
     }
 
-    private static int Count(string text, string value)
-    {
-        var count = 0;
-        var index = 0;
-        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            index += value.Length;
-        }
-
-        return count;
-    }
 
     private static string FindWwwRoot()
     {
@@ -177,16 +149,13 @@ public sealed class ModuleNavigationHttpTests : IClassFixture<ModuleNavigationAp
         var signed = await client.SendAsync(Request("/erp.html", user: true));
         Assert.Equal(HttpStatusCode.OK, signed.StatusCode);
         var html = await signed.Content.ReadAsStringAsync();
-        Assert.Contains("href=\"#uctovani-faktur\"", html, StringComparison.Ordinal);
-        Assert.Contains("Připravujeme", html, StringComparison.Ordinal);
         Assert.Contains("Vydané faktury", html, StringComparison.Ordinal);
         Assert.Contains("aria-current=\"page\">ERP</span>", html, StringComparison.Ordinal);
 
         var signedHome = await client.SendAsync(Request("/ERP", user: true, host: "intranet.phmtrans.cz"));
         Assert.Equal(HttpStatusCode.OK, signedHome.StatusCode);
         var homeHtml = await signedHome.Content.ReadAsStringAsync();
-        Assert.Contains("Části ERP", homeHtml, StringComparison.Ordinal);
-        Assert.Contains("href=\"#uctovani-faktur\"", homeHtml, StringComparison.Ordinal);
+        Assert.Contains("Vydané faktury", homeHtml, StringComparison.Ordinal);
     }
 
     private static HttpRequestMessage Request(string path, bool user, string? host = null)

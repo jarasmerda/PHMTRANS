@@ -146,24 +146,3 @@ public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<
     }
 }
 
-public sealed class PreviewPohodaAddressBook : IPohodaAddressBook
-{
-    private static readonly PohodaAddress[] Samples =
-    [
-        new(42, "Velkoobchod Demo s.r.o.", "Velkoobchod Demo s.r.o.", null, "Skladová 12", "Cerekvice nad Loučnou", "569 53", "12345678", "CZ12345678", "info@demo.cz", "+420 601 000 001"),
-        new(43, "Agropodnik Demo a.s.", "Agropodnik Demo a.s.", "Jan Novák", "Polní 4", "Lovosice", "410 02", "87654321", "CZ87654321", "agro@demo.cz", "+420 602 000 002")
-    ];
-
-    public Task<IReadOnlyList<PohodaAddress>> SearchAsync(string query, CancellationToken cancellationToken)
-    {
-        var term = query.Trim();
-        IReadOnlyList<PohodaAddress> found = Samples
-            .Where(item =>
-                item.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
-                || (item.Ico?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false)
-                || (item.Person?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false))
-            .Take(20)
-            .ToArray();
-        return Task.FromResult(found);
-    }
-}
