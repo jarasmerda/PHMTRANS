@@ -327,7 +327,9 @@ public static class OrderWorkflow
             CustomerEmail: draft.CustomerEmail,
             CustomerPhone: draft.CustomerPhone,
             FuelTypeId: draft.FuelTypeId,
-            Loads: draft.Loads);
+            Loads: draft.Loads,
+            LoadingTime: draft.LoadingTime,
+            UnloadingTime: draft.UnloadingTime);
     }
 
     private static (string Status, bool Locked, string? Invoice) ResolveState(
@@ -419,6 +421,16 @@ public static class OrderWorkflow
             return Draft.Fail("Vyplňte datum vykládky.");
         if (request.UnloadingDate.Value < request.LoadingDate.Value)
             return Draft.Fail("Vykládka nemůže být před nakládkou.");
+        var loadingTime = OrderTimes.Parse(request.LoadingTime, "Čas nakládky");
+        if (loadingTime.Error is not null)
+            return Draft.Fail(loadingTime.Error);
+        var unloadingTime = OrderTimes.Parse(request.UnloadingTime, "Čas vykládky");
+        if (unloadingTime.Error is not null)
+            return Draft.Fail(unloadingTime.Error);
+        if (request.UnloadingDate.Value == request.LoadingDate.Value
+            && loadingTime.Value is not null && unloadingTime.Value is not null
+            && string.CompareOrdinal(unloadingTime.Value, loadingTime.Value) < 0)
+            return Draft.Fail("Čas vykládky nemůže být před časem nakládky.");
         if (liters is null)
             return Draft.Fail("Vyplňte litry.");
         if (liters < 0 || liters > 1_000_000m)
@@ -474,7 +486,9 @@ public static class OrderWorkflow
             email.Value,
             phone.Value,
             fuel.Item1,
-            loads);
+            loads,
+            loadingTime.Value,
+            unloadingTime.Value);
     }
 
     private static OrderChange WithDistances(OrderChange change, IReadOnlyList<DistanceWrite>? distances)
@@ -576,7 +590,9 @@ public static class OrderWorkflow
         string? CustomerEmail = null,
         string? CustomerPhone = null,
         int? FuelTypeId = null,
-        IReadOnlyList<OrderLoad>? Loads = null)
+        IReadOnlyList<OrderLoad>? Loads = null,
+        string? LoadingTime = null,
+        string? UnloadingTime = null)
     {
         public static Draft Fail(string error) => new(error, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }

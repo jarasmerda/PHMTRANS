@@ -264,8 +264,16 @@ function formFields(prefix, order) {
     <input type="hidden" id="${prefix}-customer-email" value="${orderText(order?.customerEmail || "")}">
     <input type="hidden" id="${prefix}-customer-phone" value="${orderText(order?.customerPhone || "")}">
     ${loadingField(prefix, order?.loadingPlace || "")}
-    <label>Datum nakládky <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}"></label>
-    <label>Datum vykládky <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}"></label>
+    <label>Nakládka (datum a čas)
+      <span class="date-time">
+        <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}">
+        <input id="${prefix}-loading-time" type="time" step="900" aria-label="Čas nakládky" value="${orderText(order ? order.loadingTime || "" : "06:00")}">
+      </span></label>
+    <label>Vykládka (datum a čas)
+      <span class="date-time">
+        <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}">
+        <input id="${prefix}-unloading-time" type="time" step="900" aria-label="Čas vykládky" value="${orderText(order ? order.unloadingTime || "" : "14:00")}">
+      </span></label>
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <div class="wide availability">
       <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář řidičů</button>
@@ -771,6 +779,8 @@ function readForm(prefix) {
     unloadingPlace: last,
     loadingDate: value("loading-date"),
     unloadingDate: value("unloading-date"),
+    loadingTime: value("loading-time") || null,
+    unloadingTime: value("unloading-time") || null,
     fuelType: firstLoad.fuelType || "",
     fuelTypeId: firstLoad.fuelTypeId || null,
     liters: Number.isFinite(liters) ? liters : null,
@@ -950,8 +960,8 @@ function versionPage(data, version) {
       ${versionFact("Adresa", address)}
       ${versionFact("Nakládka", version.loadingPlace)}
       ${versionFact("Vykládka", version.unloadingPlace)}
-      ${versionFact("Datum nakládky", orderDay(version.loadingDate))}
-      ${versionFact("Datum vykládky", orderDay(version.unloadingDate))}
+      ${versionFact("Datum nakládky", `${orderDay(version.loadingDate)} ${version.loadingTime || ""}`.trim())}
+      ${versionFact("Datum vykládky", `${orderDay(version.unloadingDate)} ${version.unloadingTime || ""}`.trim())}
       ${versionFact("Nakládka po palivech", loadsText(version))}
       ${versionFact("Naložené litry", orderLiters.format(Number(version.liters || 0)))}
       ${versionFact("Režim", mode)}
