@@ -470,7 +470,9 @@ tbody tr:nth-child(even) { background: rgba(247, 244, 238, 0.94); }
 table.monthly { font-size: 0.82rem; white-space: nowrap; }
 table.monthly th, table.monthly td { padding: 0.35rem 0.4rem; }
 table.monthly td:first-child, table.monthly th:first-child { position: sticky; left: 0; z-index: 1; }
+/* Zamrzlý první sloupec potřebuje neprůhledné pozadí, proto stejné střídání barev jako zbytek řádku. */
 table.monthly td:first-child { background: #fff; }
+table.monthly tbody tr:nth-child(even) td:first-child { background: var(--table-stripe); }
 table.monthly th:first-child { background: var(--table-header); }
 /* Název firmy se zalomí po zhruba 60 znacích, na úzkém displeji dřív, aby zůstalo místo pro čísla. */
 table.monthly .company {

@@ -233,7 +233,7 @@ public static class ModuleGate
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1">
               <title>Bez oprávnění – PHM Trans</title>
-              <link rel="stylesheet" href="/erp.css?v=20">
+              <link rel="stylesheet" href="/erp.css?v=21">
             </head>
             <body>
               <header class="login-bar">
