@@ -127,21 +127,36 @@ async function refreshAvailability(prefix) {
   availabilityGeneration[prefix] = generation;
   const range = availabilityRange(prefix);
   const span = range ? range.days + availabilityBefore + availabilityAfter : 0;
-  const result = range
-    ? await orderFetch(`/api/dispatch/calendar?from=${isoShift(range.from, -availabilityBefore)}&days=${span}`)
-    : { ok: false };
+  const [result, events] = range
+    ? await Promise.all([
+      orderFetch(`/api/dispatch/calendar?from=${isoShift(range.from, -availabilityBefore)}&days=${span}`),
+      orderFetch(`/api/dispatch/calendar/events?from=${isoShift(range.from, -1)}&days=${range.days + 2}`)
+    ])
+    : [{ ok: false }, { ok: false }];
   if (availabilityGeneration[prefix] !== generation) return;
   const ownId = prefix === "edit" ? orderDetail?.order?.id : null;
   const busy = new Map();
-  for (const row of (result.ok ? result.data?.drivers : null) ?? []) {
-    if (!row.driverId) continue;
-    const codes = new Set();
-    for (const day of row.days ?? []) {
-      if (day.date < range.from || day.date > range.to) continue;
-      for (const order of day.orders ?? [])
-        if (order.id !== ownId) codes.add(order.code);
+  if (events.ok && Array.isArray(events.data?.events)) {
+    // Obsazenost po hodinách: zakázka řidiče se překrývá s časem od–do této zakázky.
+    const time = (id, fallback) => document.querySelector(`#${prefix}-${id}`)?.value || fallback;
+    const start = `${range.from}T${time("loading-time", "06:00")}`;
+    const end = `${document.querySelector(`#${prefix}-unloading-date`)?.value || range.from}T${time("unloading-time", "14:00")}`;
+    for (const event of events.data.events) {
+      if (!event.driverId || event.id === ownId) continue;
+      if (String(event.start).slice(0, 16) >= end || String(event.end).slice(0, 16) <= start) continue;
+      busy.set(event.driverId, [...new Set([...(busy.get(event.driverId) ?? []), event.code])]);
     }
-    if (codes.size) busy.set(row.driverId, [...codes]);
+  } else {
+    for (const row of (result.ok ? result.data?.drivers : null) ?? []) {
+      if (!row.driverId) continue;
+      const codes = new Set();
+      for (const day of row.days ?? []) {
+        if (day.date < range.from || day.date > range.to) continue;
+        for (const order of day.orders ?? [])
+          if (order.id !== ownId) codes.add(order.code);
+      }
+      if (codes.size) busy.set(row.driverId, [...codes]);
+    }
   }
   availabilityBusy[prefix] = result.ok ? busy : null;
   availabilityData[prefix] = result.ok ? { range, data: result.data, ownId } : null;
@@ -168,8 +183,8 @@ function applyAvailability(prefix) {
   note.hidden = false;
   note.classList.toggle("warn", !!clash);
   note.textContent = clash
-    ? `Pozor, řidič má v těchto dnech i zakázku ${clash.join(", ")}.`
-    : `Volní řidiči v těchto dnech: ${free.length} z ${orderCatalog.drivers.length}.`;
+    ? `Pozor, řidič má v tu dobu i zakázku ${clash.join(", ")}.`
+    : `Volní řidiči v tu dobu: ${free.length} z ${orderCatalog.drivers.length}.`;
   renderAvailabilityPanel(prefix);
 }
 
@@ -276,9 +291,11 @@ function formFields(prefix, order) {
       </span></label>
     <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
     <div class="wide availability">
+      <button type="button" data-toggle-booking="${prefix}">Naplánovat čas řidiče</button>
       <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář řidičů</button>
       <button type="button" class="ghost" data-open-week="${prefix}">Vytíženost po hodinách ↗</button>
       <span class="note" id="${prefix}-driver-note" hidden></span>
+      <div id="${prefix}-booking" class="avail-panel" hidden></div>
       <div id="${prefix}-availability" class="avail-panel" hidden></div>
     </div>
     <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
@@ -1313,7 +1330,7 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
 });
 
 document.querySelector("#orders-view").addEventListener("change", (event) => {
-  if (event.target.matches("[id$='-loading-date'], [id$='-unloading-date']"))
+  if (event.target.matches("[id$='-loading-date'], [id$='-unloading-date'], [id$='-loading-time'], [id$='-unloading-time']"))
     scheduleAvailability(event.target.id.startsWith("edit-") ? "edit" : "create");
   if (event.target.matches("select[id$='-driver']"))
     applyAvailability(event.target.id.startsWith("edit-") ? "edit" : "create");
