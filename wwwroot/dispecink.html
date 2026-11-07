@@ -140,6 +140,25 @@
     .wk-event small { display: block; color: var(--text-secondary); }
     .wk-event span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .wk-now { position: absolute; left: 0; right: 0; height: 2px; background: #d33; pointer-events: none; z-index: 2; }
+    .bk-tools { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; margin: 0.4rem 0; }
+    .bk-tools .note { margin: 0; }
+    .bk-note { min-height: 2.6em; margin: 0.2rem 0 0.4rem; }
+    .bk-scroll { overflow-x: auto; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    .bk-grid { width: max-content; }
+    .bk-row { display: flex; border-top: 1px solid var(--border); }
+    .bk-row.bk-head { border-top: 0; }
+    .bk-name { position: sticky; left: 0; z-index: 3; background: #fff; flex: 0 0 8.5rem; width: 8.5rem; padding: 0.4rem 0.5rem; font-size: 0.85rem; border-right: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bk-row.chosen .bk-name { box-shadow: inset 3px 0 0 var(--accent); font-weight: 700; }
+    .bk-hours { display: flex; }
+    .bk-hours span { width: 40px; box-sizing: border-box; padding: 0.25rem 0 0.25rem 3px; border-left: 1px solid #e8ebf1; font-size: 0.72rem; color: var(--text-secondary); }
+    .bk-track { position: relative; height: 2.5rem; cursor: crosshair; user-select: none; -webkit-user-select: none;
+      background-image: repeating-linear-gradient(to right, #e8ebf1 0, #e8ebf1 1px, transparent 1px, transparent 40px); }
+    .bk-busy { position: absolute; top: 5px; bottom: 5px; box-sizing: border-box; padding: 2px 4px; border-left: 3px solid #8a93a6; border-radius: 4px;
+      background: #e6e9f0; font-size: 0.7rem; white-space: nowrap; overflow: hidden; pointer-events: none; }
+    .bk-busy.clash { background: #fde8e8; border-left-color: #c43c3c; }
+    .bk-pick { position: absolute; top: 2px; bottom: 2px; z-index: 1; box-sizing: border-box; padding: 2px 5px; border: 2px solid var(--accent); border-radius: 5px;
+      background: rgba(253, 236, 214, 0.94); font-size: 0.74rem; font-weight: 700; white-space: nowrap; overflow: hidden; pointer-events: none; }
+    .bk-ghost { border-style: dashed; }
     .date-time { display: flex; gap: 0.3rem; }
     .date-time input[type="date"] { flex: 1 1 8.5rem; min-width: 0; }
     .date-time input[type="time"] { flex: 0 0 6.2rem; min-width: 0; }
@@ -454,8 +473,9 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=21"></script>
+  <script src="/dispecink-orders.js?v=22"></script>
   <script src="/dispecink-doklady.js?v=1"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
+  <script src="/dispecink-booking.js?v=1"></script>
 </body>
 </html>
