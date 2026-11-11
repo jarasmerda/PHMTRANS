@@ -110,13 +110,15 @@ public static class DriverCalendar
                 item.Order.VehicleId is not null && plates.TryGetValue(item.Order.VehicleId, out var plate) ? plate : null,
                 item.Span.Start,
                 item.Span.End,
-                item.Order.LoadingTime is null || item.Order.UnloadingTime is null))
+                item.Order.LoadingTime is null || item.Order.UnloadingTime is null,
+                item.Order.VehicleId is not null && plates.ContainsKey(item.Order.VehicleId) ? item.Order.VehicleId : null))
             .ToArray();
         return new CalendarEvents(
             from,
             from.AddDays(days - 1),
             drivers.Select(driver => new CalendarDriver(driver.Id, driver.Name, driver.Phone)).ToArray(),
-            events);
+            events,
+            vehicles.Select(vehicle => new CalendarVehicle(vehicle.Id, vehicle.Plate, vehicle.Label)).ToArray());
     }
 
     private static DateOnly Start(DispatchOrder order) => order.LoadingDate;
@@ -152,13 +154,18 @@ public sealed record CalendarEvent(
     string? Vehicle,
     DateTime Start,
     DateTime End,
-    bool Estimated);
+    bool Estimated,
+    string? VehicleId = null);
+
+// Vozidlo v týdenním kalendáři vytíženosti (řádek filtru a barva).
+public sealed record CalendarVehicle(string Id, string Plate, string Label);
 
 public sealed record CalendarEvents(
     DateOnly From,
     DateOnly To,
     IReadOnlyList<CalendarDriver> Drivers,
-    IReadOnlyList<CalendarEvent> Events);
+    IReadOnlyList<CalendarEvent> Events,
+    IReadOnlyList<CalendarVehicle>? Vehicles = null);
 
 public sealed record CalendarResponse(
     DateOnly From,

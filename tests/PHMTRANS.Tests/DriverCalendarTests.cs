@@ -72,6 +72,9 @@ public sealed class DriverCalendarTests
         Assert.Equal(Monday.ToDateTime(new TimeOnly(11, 0)), first.End);
         Assert.False(first.Estimated);
         Assert.Equal("1A2 3456", first.Vehicle);
+        Assert.Equal("veh-1", first.VehicleId);
+        Assert.Null(calendar.Events[1].VehicleId);
+        Assert.Equal([("veh-1", "1A2 3456")], calendar.Vehicles!.Select(vehicle => (vehicle.Id, vehicle.Plate)));
         var second = calendar.Events[1];
         Assert.Null(second.DriverId);
         Assert.True(second.Estimated);

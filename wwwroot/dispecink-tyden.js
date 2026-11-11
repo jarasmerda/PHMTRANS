@@ -1,4 +1,4 @@
-// Týdenní kalendář řidičů po hodinách (jako v Outlooku). Běží ve vlastním okně
+// Týdenní vytíženost vozidel po hodinách (jako v Outlooku). Běží ve vlastním okně
 // na adrese dispečinku s #tyden. Zakázky a nové zakázky se otevírají v hlavním okně.
 (() => {
   const weekMode = location.hash.startsWith("#tyden");
@@ -30,7 +30,7 @@
   const dayHead = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", timeZone: "UTC" });
   const longDay = new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", timeZone: "UTC" });
   const liters = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
-  const storageKey = "phm-tyden-skryti";
+  const storageKey = "phm-tyden-vozidla-skryta";
   const grid = document.querySelector("#week-grid");
   const message = document.querySelector("#week-message");
   const asked = location.hash.match(/^#tyden=(\d{4}-\d{2}-\d{2})/)?.[1];
@@ -41,7 +41,7 @@
   let scrolled = false;
 
   document.body.classList.add("week-mode");
-  document.title = "Kalendář řidičů – PHM Trans";
+  document.title = "Vytíženost vozidel – PHM Trans";
   document.querySelector("#week-view").hidden = false;
 
   function todayIso() {
@@ -95,13 +95,15 @@
     message.textContent = text || "";
   }
 
-  function driverColor(id) {
-    const index = (data?.drivers ?? []).findIndex((driver) => driver.id === id);
+  // Barvy a filtr podle vozidel. Jména řidičů se tu nepoužívají.
+  function vehicleColor(id) {
+    const index = (data?.vehicles ?? []).findIndex((vehicle) => vehicle.id === id);
     return index < 0 ? "#7d8696" : palette[index % palette.length];
   }
 
-  function driverName(id) {
-    return (data?.drivers ?? []).find((driver) => driver.id === id)?.name || "Bez řidiče";
+  function vehicleName(id) {
+    const vehicle = (data?.vehicles ?? []).find((item) => item.id === id);
+    return vehicle ? vehicle.plate : "Bez vozidla";
   }
 
   function openMain(hash) {
@@ -134,11 +136,11 @@
     render();
   }
 
-  function renderDrivers() {
-    const rows = [...(data?.drivers ?? []).map((driver) => ({ id: driver.id, name: driver.name })), { id: "", name: "Bez řidiče" }];
+  function renderVehicles() {
+    const rows = [...(data?.vehicles ?? []).map((vehicle) => ({ id: vehicle.id, name: vehicle.label ? `${vehicle.plate} · ${vehicle.label}` : vehicle.plate })), { id: "", name: "Bez vozidla" }];
     document.querySelector("#week-drivers").innerHTML = rows.map((row) => `
-      <label class="week-driver" style="--driver:${driverColor(row.id || null)}">
-        <input type="checkbox" data-week-driver="${esc(row.id)}"${hidden.has(row.id) ? "" : " checked"}>
+      <label class="week-driver" style="--driver:${vehicleColor(row.id || null)}">
+        <input type="checkbox" data-week-vehicle="${esc(row.id)}"${hidden.has(row.id) ? "" : " checked"}>
         <span>${esc(row.name)}</span>
       </label>`).join("");
   }
@@ -175,11 +177,11 @@
   }
 
   function render() {
-    renderDrivers();
+    renderVehicles();
     const days = Array.from({ length: 7 }, (_, index) => shiftIso(weekStart, index));
     const today = todayIso();
     document.querySelector("#week-title").textContent = `${longDay.format(new Date(`${days[0]}T00:00:00Z`))} – ${longDay.format(new Date(`${days[6]}T00:00:00Z`))}`;
-    const events = (data?.events ?? []).filter((event) => !hidden.has(event.driverId || ""));
+    const events = (data?.events ?? []).filter((event) => !hidden.has(event.vehicleId || ""));
     const hours = Array.from({ length: 24 }, (_, hour) => `<div class="wk-hour" style="height:${HOUR}px">${hour}:00</div>`).join("");
     const columns = days.map((day) => {
       const segments = [];
@@ -194,12 +196,12 @@
         const width = 100 / item.columns;
         const height = Math.max((item.bottom - item.top) / 60 * HOUR, 20);
         const time = `${item.before ? "↑ " : ""}${clock(item.start)}–${clock(item.end)}${item.after ? " ↓" : ""}`;
-        const title = `${event.code} · ${driverName(event.driverId)}\n${event.customer}\n${event.loadingPlace} → ${event.unloadingPlace}\n${liters.format(event.liters)} l${event.vehicle ? ` · ${event.vehicle}` : ""} · ${event.status}${event.estimated ? "\nČas není zadaný, bere se 6:00–14:00." : ""}`;
+        const title = `${event.code} · ${vehicleName(event.vehicleId)}\n${event.customer}\n${event.loadingPlace} → ${event.unloadingPlace}\n${liters.format(event.liters)} l · ${event.status}${event.estimated ? "\nČas není zadaný, bere se 6:00–14:00." : ""}`;
         return `<button type="button" class="wk-event${event.estimated ? " estimated" : ""}" data-week-order="${esc(event.id)}"
-          style="top:${item.top / 60 * HOUR}px;height:${height}px;left:calc(${item.column * width}% + 1px);width:calc(${width}% - 3px);--driver:${driverColor(event.driverId)}"
+          style="top:${item.top / 60 * HOUR}px;height:${height}px;left:calc(${item.column * width}% + 1px);width:calc(${width}% - 3px);--driver:${vehicleColor(event.vehicleId)}"
           title="${esc(title)}">
           <b>${esc(event.code)}</b> <small>${esc(time)}</small>
-          <span>${esc(driverName(event.driverId))}</span>
+          <span>${esc(vehicleName(event.vehicleId))}</span>
           <span>${esc(event.customer)}</span>
         </button>`;
       }).join("");
@@ -217,7 +219,7 @@
       scrolled = true;
       document.querySelector("#week-scroll").scrollTop = 6 * HOUR - 12;
     }
-    if (!events.length && data?.events?.length) show("Všichni řidiči se zakázkami jsou skrytí.");
+    if (!events.length && data?.events?.length) show("Všechna vozidla se zakázkami jsou skrytá.");
   }
 
   document.querySelector("#week-view").addEventListener("click", (event) => {
@@ -249,18 +251,18 @@
     if (column) {
       const rect = column.getBoundingClientRect();
       const minutes = Math.min(Math.max(Math.floor((event.clientY - rect.top) / HOUR * 2) * 30, 0), 1410);
-      const visible = (data?.drivers ?? []).filter((driver) => !hidden.has(driver.id));
-      const driver = visible.length === 1 ? `&ridic=${encodeURIComponent(visible[0].id)}` : "";
+      const visible = (data?.vehicles ?? []).filter((vehicle) => !hidden.has(vehicle.id));
+      const vehicle = visible.length === 1 ? `&vozidlo=${encodeURIComponent(visible[0].id)}` : "";
       const time = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-      openMain(`#nova=${column.dataset.weekDay}T${time}${driver}`);
+      openMain(`#nova=${column.dataset.weekDay}T${time}${vehicle}`);
     }
   });
 
   document.querySelector("#week-drivers").addEventListener("change", (event) => {
-    const box = event.target.closest("[data-week-driver]");
+    const box = event.target.closest("[data-week-vehicle]");
     if (!box) return;
-    if (box.checked) hidden.delete(box.dataset.weekDriver);
-    else hidden.add(box.dataset.weekDriver);
+    if (box.checked) hidden.delete(box.dataset.weekVehicle);
+    else hidden.add(box.dataset.weekVehicle);
     saveHidden();
     show("");
     render();
