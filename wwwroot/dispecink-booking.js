@@ -1,7 +1,8 @@
 // Výběr času řidiče ve formuláři zakázky: den po hodinách, řádek pro každého řidiče.
 // Tažením přes volný úsek (nebo klepnutím na začátek) se vyplní řidič, datum a čas od–do.
 (() => {
-  const HOUR = 40;
+  // Šířka hodiny: na mobilu užší, ať je vidět víc hodin najednou.
+  const HOUR = window.matchMedia?.("(max-width: 760px)").matches ? 28 : 40;
   const SNAP = 15;
   const LAST = 23 * 60 + 45;
   const state = {};
@@ -104,7 +105,7 @@
     const pick = formPick(prefix, day);
     const clash = clashes(prefix, day, pick);
     const busy = busyOf(prefix, day);
-    const hours = Array.from({ length: 24 }, (_, hour) => `<span>${hour}</span>`).join("");
+    const hours = Array.from({ length: 24 }, (_, hour) => `<span style="width:${HOUR}px">${hour}</span>`).join("");
     const rows = drivers.map((driver) => {
       const blocks = busy.filter((item) => item.event.driverId === driver.id).map((item) => {
         const left = Math.max(item.start, 0) / 60 * HOUR;
@@ -115,13 +116,19 @@
       const mine = pick && pick.driver === driver.id
         ? `<div class="bk-pick" style="left:${pick.start / 60 * HOUR}px;width:${Math.max((pick.end - pick.start) / 60 * HOUR, 6)}px">${esc(hm(Math.min(pick.start, LAST)))}–${esc(pick.end >= 1440 ? "24:00" : hm(pick.end))}</div>`
         : "";
-      return `<div class="bk-row${pick?.driver === driver.id ? " chosen" : ""}">
+      const pending = current.pending?.driver === driver.id
+        ? `<div class="bk-start" style="left:${current.pending.start / 60 * HOUR}px"><span>od ${esc(hm(current.pending.start))}</span></div>`
+        : "";
+      return `<div class="bk-row${pick?.driver === driver.id ? " chosen" : ""}${pending ? " pending" : ""}">
         <div class="bk-name">${esc(driver.name)}</div>
-        <div class="bk-track" data-bk-track="${prefix}" data-driver="${esc(driver.id)}" style="width:${24 * HOUR}px">${blocks}${mine}</div>
+        <div class="bk-track" data-bk-track="${prefix}" data-driver="${esc(driver.id)}" style="width:${24 * HOUR}px;--bk-hour:${HOUR}px">${blocks}${mine}${pending}</div>
       </div>`;
     }).join("");
     let note = current.message;
-    if (!note && clash.length)
+    if (!note && current.pending) {
+      const name = drivers.find((item) => item.id === current.pending.driver)?.name || "";
+      note = `Začátek ${hm(current.pending.start)} u řidiče ${name}. Teď klepněte na konec ve stejném řádku.`;
+    } else if (!note && clash.length)
       note = `Pozor: řidič má v tu dobu i zakázku ${[...new Set(clash.map((item) => item.event.code))].join(", ")}.`;
     else if (!note && current.applied)
       note = current.applied;
@@ -130,9 +137,9 @@
         <button type="button" class="ghost" data-bk-shift="${prefix}" data-days="-1" aria-label="Předchozí den">‹</button>
         <strong>${esc(dayLabel.format(new Date(`${day}T00:00:00Z`)))}</strong>
         <button type="button" class="ghost" data-bk-shift="${prefix}" data-days="1" aria-label="Další den">›</button>
-        <span class="note">Táhněte myší přes volný úsek u řidiče, nebo klepněte na začátek. Šedé jsou jiné zakázky.</span>
+        <span class="note">Klepněte u řidiče na začátek a pak na konec (myší můžete i táhnout). Šedé jsou jiné zakázky.</span>
       </div>
-      <p class="note bk-note${clash.length ? " warn" : ""}">${esc(note)}</p>
+      <p class="note bk-note${clash.length && !current.pending ? " warn" : ""}">${esc(note)}${current.pending ? ` <button type="button" class="ghost bk-cancel" data-bk-cancel="${prefix}">Zrušit</button>` : ""}</p>
       <div class="bk-scroll" data-bk-scroll="${prefix}">
         <div class="bk-grid">
           <div class="bk-row bk-head"><div class="bk-name"></div><div class="bk-hours">${hours}</div></div>
@@ -149,6 +156,7 @@
     const driver = field(prefix, "driver");
     if (!driver || driver.disabled) return;
     const current = state[prefix];
+    current.pending = null;
     const from = Math.min(Math.max(start, 0), LAST);
     const to = Math.min(Math.max(end, from + SNAP), LAST);
     const set = (id, value) => {
@@ -214,16 +222,28 @@
     drag = null;
     // Na mobilu je posun prstem posouvání, ne výběr.
     if (touch && moved > 12) return;
-    let from = Math.min(start, end);
-    let to = Math.max(start, end);
+    const from = Math.min(start, end);
+    const to = Math.max(start, end);
+    // Klepnutí (mobil) nebo kliknutí bez tažení: první určí začátek, druhé ve stejném řádku konec.
     if (to - from < SNAP) {
-      // Klepnutí: začátek tady, délka podle formuláře (jinak 8 hodin).
-      const length = (toMinutes(field(prefix, "unloading-time")?.value) ?? 0) - (toMinutes(field(prefix, "loading-time")?.value) ?? 0);
-      from = Math.min(from, LAST - SNAP);
-      to = from + (length > 0 && field(prefix, "loading-date")?.value === field(prefix, "unloading-date")?.value ? length : 8 * 60);
+      tapAt(prefix, driver, start);
+      return;
     }
     apply(prefix, driver, from, to);
   });
+
+  function tapAt(prefix, driver, minute) {
+    const current = state[prefix];
+    if (!current) return;
+    const pending = current.pending;
+    if (pending && pending.driver === driver && minute > pending.start) {
+      apply(prefix, driver, pending.start, minute);
+      return;
+    }
+    current.pending = { driver, start: Math.min(minute, LAST - SNAP) };
+    current.applied = "";
+    render(prefix);
+  }
 
   document.addEventListener("pointercancel", () => {
     drag?.ghost?.remove();
@@ -249,7 +269,14 @@
       if (!state[prefix]) return;
       state[prefix].day = shiftIso(state[prefix].day, Number(shift.dataset.days));
       state[prefix].applied = "";
+      state[prefix].pending = null;
       load(prefix);
+      return;
+    }
+    const cancel = event.target.closest("[data-bk-cancel]");
+    if (cancel && state[cancel.dataset.bkCancel]) {
+      state[cancel.dataset.bkCancel].pending = null;
+      render(cancel.dataset.bkCancel);
     }
   });
 

@@ -51,7 +51,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"week-view\" hidden", html, StringComparison.Ordinal);
         Assert.Contains("#zakazka=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-open-week", ordersJs, StringComparison.Ordinal);
-        Assert.Contains("dispecink-booking.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-booking.js?v=2", html, StringComparison.Ordinal);
         Assert.Contains("data-toggle-booking", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-comp-number", ordersJs, StringComparison.Ordinal);
         Assert.Contains("closeOrderDetail();", ordersJs, StringComparison.Ordinal);
@@ -80,6 +80,7 @@ public sealed class DispatchPageTests
         var bookingJs = File.ReadAllText(Path.Combine(root, "dispecink-booking.js"));
         Assert.Contains("/api/dispatch/calendar/events?from=", bookingJs, StringComparison.Ordinal);
         Assert.Contains("data-bk-track", bookingJs, StringComparison.Ordinal);
+        Assert.Contains("tapAt(", bookingJs, StringComparison.Ordinal);
         Assert.True(html.IndexOf("id=\"order-docs-summary\"", StringComparison.Ordinal) < html.IndexOf("id=\"order-edit\"", StringComparison.Ordinal));
         var weekJs = File.ReadAllText(Path.Combine(root, "dispecink-tyden.js"));
         Assert.Contains("/api/dispatch/calendar/events?from=", weekJs, StringComparison.Ordinal);
