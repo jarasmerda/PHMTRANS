@@ -397,6 +397,43 @@
     @media (max-width: 900px) {
       #order-cards { grid-template-columns: 1fr 1fr; }
     }
+    /* ---------- Pohled řidiče ---------- */
+    .driver-wrap { background: #fff; border: 1px solid #dfe3ea; border-radius: 16px; padding: 1rem 1.1rem 1.2rem; }
+    .driver-wrap h3 { margin: 1rem 0 0.5rem; font-size: 1rem; }
+    .driver-tools { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: end; }
+    .driver-tools label { min-width: min(18rem, 100%); }
+    .driver-tools select { width: 100%; max-width: none; min-height: 2.6rem; font-size: 1rem; }
+    .driver-range { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .driver-agenda { display: grid; gap: 0.4rem; }
+    .dv-day { display: grid; grid-template-columns: 9.5rem 1fr; gap: 0.5rem; padding: 0.5rem 0.7rem; border: 1px solid #dfe3ea; border-radius: 10px; background: #fbfcfe; }
+    .dv-day.today { border-color: var(--accent); background: #fff8ef; }
+    .dv-day.free { opacity: 0.75; }
+    .dv-day-name { font-weight: 800; text-transform: capitalize; }
+    .dv-day-items { display: grid; gap: 0.3rem; }
+    .dv-slot { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; text-align: left; background: #fff; color: var(--ink); border: 1px solid #cfd5df; border-left: 5px solid var(--unload-a-line, #2e9e5b); font-weight: 400; padding: 0.4rem 0.6rem; }
+    .dv-slot:hover { background: #eef1f6; color: var(--ink); }
+    .dv-time { font-weight: 800; }
+    .driver-orders { display: grid; gap: 0.8rem; }
+    .dv-order { border: 1px solid #dfe3ea; border-radius: 14px; padding: 0.8rem 0.9rem; background: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05); scroll-margin-top: 5rem; }
+    .dv-order header { display: flex; flex-wrap: wrap; gap: 0.4rem 0.6rem; align-items: center; width: auto; padding: 0; border: 0; position: static; margin-bottom: 0.5rem; font-size: 1.05rem; }
+    .dv-order section { width: auto; margin: 0 0 0.6rem; }
+    .dv-order h4 { margin: 0 0 0.25rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); }
+    .dv-order p { margin: 0.15rem 0; }
+    .dv-order ul { margin: 0; padding-left: 1.1rem; }
+    .dv-chip { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; background: #eef1f6; font-size: 0.8rem; font-weight: 700; }
+    .dv-badge { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; background: var(--unload-a-line, #2e9e5b); color: #fff; font-size: 0.75rem; font-weight: 800; }
+    .dv-badge.load { background: var(--load-line, #2f6fdf); }
+    .dv-load { padding: 0.4rem 0.6rem; border-left: 5px solid var(--load-line, #2f6fdf); background: var(--load-bg, #eaf2fd); border-radius: 8px; }
+    .dv-stops { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.35rem; }
+    .dv-stop { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; align-items: center; padding: 0.4rem 0.6rem; border-radius: 8px; border-left: 5px solid var(--unload-a-line, #2e9e5b); background: var(--unload-a-bg, #e4f7ea); }
+    .dv-stop.b { border-left-color: var(--unload-b-line, #0f6a37); background: var(--unload-b-bg, #c4e9d1); }
+    .dv-stop.b .dv-badge { background: var(--unload-b-line, #0f6a37); }
+    .dv-stop .note { flex-basis: 100%; margin: 0; }
+    .dv-note { padding: 0.4rem 0.6rem; border-radius: 8px; background: #fff8dc; }
+    @media (max-width: 760px) {
+      .driver-wrap { padding: 0.7rem 0.6rem; }
+      .dv-day { grid-template-columns: 1fr; gap: 0.25rem; }
+    }
     /* Sekce v oknech nemají šířku stránky (erp.css), ale celou šířku okna. */
     dialog section { width: auto; max-width: none; box-sizing: border-box; }
     /* Mobil: okna přes celou šířku, menší okraje (na konci, aby přebilo předchozí pravidla). */
@@ -431,6 +468,7 @@
   <section class="view-tabs" aria-label="Pohledy dispečinku">
     <button type="button" id="tab-orders" aria-current="page">Zakázky</button>
     <button type="button" id="tab-queue" class="ghost">Fronta Pohody</button>
+    <button type="button" id="tab-driver" class="ghost">Pohled řidiče</button>
   </section>
   <div id="orders-view">
     <p id="order-sync-note" class="note"></p>
@@ -618,6 +656,24 @@
       </div>
     </section>
   </div>
+  <div id="driver-view" hidden>
+    <section class="driver-wrap">
+      <div class="driver-tools">
+        <label>Řidič <select id="driver-pick"></select></label>
+        <div class="driver-range">
+          <button type="button" class="ghost" data-dv-shift="-7" aria-label="Předchozí týden">‹</button>
+          <strong id="driver-range-title"></strong>
+          <button type="button" class="ghost" data-dv-shift="7" aria-label="Další týden">›</button>
+          <button type="button" class="ghost" data-dv-today>Tento týden</button>
+        </div>
+      </div>
+      <p id="driver-message" class="note" hidden></p>
+      <h3>Můj kalendář</h3>
+      <div id="driver-agenda" class="driver-agenda"></div>
+      <h3>Moje zakázky</h3>
+      <div id="driver-orders" class="driver-orders"></div>
+    </section>
+  </div>
   <div id="queue-view" hidden>
     <p id="queue-sync-note" class="note"></p>
     <p id="queue-message" hidden></p>
@@ -670,9 +726,10 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=15"></script>
-  <script src="/dispecink-orders.js?v=30"></script>
+  <script src="/dispecink-orders.js?v=31"></script>
   <script src="/dispecink-doklady.js?v=4"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=2"></script>
+  <script src="/dispecink-ridic.js?v=1"></script>
 </body>
 </html>
