@@ -364,6 +364,8 @@ public static class DispatchSchema
             ALTER TABLE dbo.Disp_Order ADD CustomerPhone nvarchar(40) NULL;
         IF COL_LENGTH(N'dbo.Disp_OrderLoad', N'Compartments') IS NULL
             ALTER TABLE dbo.Disp_OrderLoad ADD Compartments nvarchar(40) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Order', N'MissingDocumentsReason') IS NULL
+            ALTER TABLE dbo.Disp_Order ADD MissingDocumentsReason nvarchar(500) NULL;
         IF COL_LENGTH(N'dbo.Disp_Order', N'LoadingTime') IS NULL
             ALTER TABLE dbo.Disp_Order ADD LoadingTime time(0) NULL;
         IF COL_LENGTH(N'dbo.Disp_Order', N'UnloadingTime') IS NULL

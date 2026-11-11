@@ -179,6 +179,11 @@
     .load-bar { display: block; height: 0.35rem; border-radius: 1rem; background: var(--border); margin-top: 0.3rem; overflow: hidden; }
     .load-bar i { display: block; height: 100%; background: var(--accent); }
     .doc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+    #confirm-docs-dialog { width: min(34rem, calc(100% - 2rem)); }
+    .missing-docs { margin: 0.4rem 0 0.8rem; padding-left: 1.2rem; color: #a33; font-weight: 700; }
+    .reason-field { display: grid; gap: 0.3rem; font-weight: 700; }
+    .reason-field textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 0.5rem; border: 1px solid var(--border); border-radius: 8px; }
+    .dialog-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.8rem; }
     .doc-progress { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; align-items: center; margin: 0.4rem 0; }
     .doc-bar { flex: 1 1 10rem; max-width: 18rem; height: 0.5rem; border-radius: 1rem; background: var(--border); overflow: hidden; }
     .doc-bar i { display: block; height: 100%; background: #2e9e5b; }
@@ -375,6 +380,7 @@
       <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
       <p id="order-cancel-note" class="note warn" hidden></p>
       <p id="order-sync-warning" class="note warn" hidden></p>
+      <p id="order-docs-reason" class="note warn" hidden></p>
       <section id="order-docs" class="docs">
         <h3>Doklady</h3>
         <p class="note">Postupujte po krocích. Fotky a PDF se ukládají do složky zakázky na serveru, odkud je OneDrive synchronizuje.</p>
@@ -421,6 +427,24 @@
         <p id="order-create-message" class="note warn" hidden></p>
         <form id="order-create"></form>
       </section>
+    </dialog>
+    <dialog id="confirm-docs-dialog">
+      <form id="confirm-docs-form">
+        <div class="dialog-head">
+          <h2>Chybí doklady</h2>
+          <button type="button" class="ghost" data-close-dialog>Zavřít</button>
+        </div>
+        <p>Zakázka nemá nahrané tyto povinné doklady:</p>
+        <ul id="confirm-docs-missing" class="missing-docs"></ul>
+        <label class="reason-field">Důvod, proč doklady chybí
+          <textarea id="confirm-docs-reason" rows="3" maxlength="500" placeholder="Např. zákazník potvrzení nevydal, stáčecí list dodá řidič zítra…"></textarea>
+        </label>
+        <p id="confirm-docs-message" class="note warn" hidden></p>
+        <div class="dialog-actions">
+          <button type="submit">Potvrdit k fakturaci s důvodem</button>
+          <button type="button" class="ghost" data-close-dialog>Zpět k dokladům</button>
+        </div>
+      </form>
     </dialog>
     <section id="rates-wrap">
       <h2>Nákladová sazba</h2>
@@ -513,8 +537,8 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=25"></script>
-  <script src="/dispecink-doklady.js?v=2"></script>
+  <script src="/dispecink-orders.js?v=26"></script>
+  <script src="/dispecink-doklady.js?v=3"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=1"></script>
 </body>

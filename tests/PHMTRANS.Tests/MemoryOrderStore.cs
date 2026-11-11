@@ -79,8 +79,8 @@ public sealed class MemoryOrderStore(IDispatchStore dispatch, IOptions<PohodaOpt
 
     public DistanceEntry? FindDistance(string from, string to) => _distances.Find(from, to);
 
-    public Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken) =>
-        Change(id, (context, _) => OrderWorkflow.Confirm(context), cancellationToken);
+    public Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken, string? missingDocumentsReason = null) =>
+        Change(id, (context, _) => OrderWorkflow.Confirm(context, missingDocumentsReason), cancellationToken);
 
     public Task<OrderMutation> MarkInvoicedAsync(string id, string? invoiceNumber, CancellationToken cancellationToken) =>
         Change(id, (context, _) => OrderWorkflow.MarkInvoiced(invoiceNumber, context), cancellationToken);

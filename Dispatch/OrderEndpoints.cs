@@ -126,8 +126,31 @@ public static class OrderEndpoints
         return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
     }
 
-    private static Task<IResult> ConfirmOrder(string id, IOrderStore store, CancellationToken cancellationToken) =>
-        Execute(async () => ToResult(await store.ConfirmAsync(id, cancellationToken)));
+    // Potvrzení k fakturaci zkontroluje povinné doklady. Když chybí, je potřeba vyplnit důvod.
+    private static Task<IResult> ConfirmOrder(
+        string id,
+        ConfirmOrderRequest? request,
+        IOrderStore store,
+        IConfiguration configuration,
+        CancellationToken cancellationToken) =>
+        Execute(async () =>
+        {
+            var bundle = await store.GetAsync(id, cancellationToken);
+            var order = bundle?.Order;
+            var folder = OrderDocumentEndpoints.Folder(configuration);
+            var files = order is not null && folder is not null ? folder.List(order.Code).Select(document => document.Name) : null;
+            var check = OrderDocumentChecklist.ForConfirm(order, files, request?.MissingDocumentsReason);
+            if (check.NeedsReason)
+                return Results.Json(
+                    new
+                    {
+                        message = $"Chybí doklady: {string.Join(", ", check.Missing)}. Vyplňte důvod, proč chybí.",
+                        needsReason = true,
+                        missingDocuments = check.Missing
+                    },
+                    statusCode: StatusCodes.Status409Conflict);
+            return ToResult(await store.ConfirmAsync(id, cancellationToken, check.Reason));
+        });
 
     private static Task<IResult> MarkInvoiced(
         string id,
@@ -199,6 +222,8 @@ public static class OrderEndpoints
 }
 
 public sealed record MarkInvoicedRequest(string? InvoiceNumber);
+
+public sealed record ConfirmOrderRequest(string? MissingDocumentsReason);
 
 public sealed record DistanceLookupRequest(IReadOnlyList<DistanceQuery>? Pairs);
 

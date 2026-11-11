@@ -78,7 +78,7 @@ public sealed class OrderDocumentTests : IDisposable
 
         Assert.Contains("capture=\"environment\"", html, StringComparison.Ordinal);
         Assert.Contains("Vyfotit doklad", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-doklady.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-doklady.js?v=3", html, StringComparison.Ordinal);
         Assert.Contains("window.loadOrderDocuments = load", js, StringComparison.Ordinal);
         Assert.Contains("/documents", js, StringComparison.Ordinal);
         Assert.Contains("id=\"doc-steps\"", html, StringComparison.Ordinal);
