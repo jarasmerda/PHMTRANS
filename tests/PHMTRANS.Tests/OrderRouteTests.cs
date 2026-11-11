@@ -154,6 +154,26 @@ public sealed class OrderRouteTests
     }
 
     [Fact]
+    public void Sale_lines_send_billed_km_or_liters_with_the_unit_rate()
+    {
+        var byKm = Priced(OrderPricing.ByKm, 31.92m, 0m, 28.5m, 120m, 10000m, false);
+        var line = Assert.Single(OrderLegItems.SaleLines(byKm));
+        Assert.Equal(("km", 120m, 31.92m, 3830.40m), (line.Unit, line.Quantity, line.UnitPrice, line.Amount));
+        var xml = OrderPohodaXml.Build(new PohodaOptions { Ico = "12345678" }, new OrderSyncPlan(OrderSyncAction.Create, null, 2), byKm, null);
+        Assert.Contains("<ord:unit>km</ord:unit>", xml, StringComparison.Ordinal);
+        Assert.Contains(">31.92<", xml, StringComparison.Ordinal);
+
+        var billed = byKm with { Legs = [byKm.Legs![0] with { BilledKilometers = 100m, SalePrice = 3192m }] };
+        Assert.Equal(100m, Assert.Single(OrderLegItems.SaleLines(billed)).Quantity);
+
+        var byLiters = Priced(OrderPricing.ByLiters, 0m, 0.35m, 28.5m, 120m, 10000m, false);
+        Assert.Equal(("l", 10000m, 0.35m), (OrderLegItems.SaleLines(byLiters)[0].Unit, OrderLegItems.SaleLines(byLiters)[0].Quantity, OrderLegItems.SaleLines(byLiters)[0].UnitPrice));
+
+        var manual = Priced(OrderPricing.ByKm, 31.92m, 0m, 28.5m, 120m, 10000m, true);
+        Assert.Equal(("ks", 1m), (OrderLegItems.SaleLines(manual)[0].Unit, OrderLegItems.SaleLines(manual)[0].Quantity));
+    }
+
+    [Fact]
     public void Sale_lines_use_leg_prices_and_skip_cost()
     {
         var order = Blank() with

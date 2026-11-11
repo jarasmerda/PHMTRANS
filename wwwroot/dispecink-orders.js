@@ -350,6 +350,7 @@ function formFields(prefix, order) {
       <button type="button" data-add-stop="${prefix}">Přidat vykládku</button>
       <div id="${prefix}-totals" class="totals"></div>
       <p id="${prefix}-liter-warn" class="route-warn" hidden></p>
+      <p id="${prefix}-sale-warn" class="route-warn" hidden></p>
     </div>
     ${prefix === "create" ? `<div class="wide create-actions"><button type="submit">Založit zakázku</button>
       <p class="note">Doklady (fotky, PDF) přiložíte hned po založení: v detailu zakázky tlačítkem Otevřít doklady.</p></div>` : ""}
@@ -827,6 +828,7 @@ function routeState(prefix) {
     });
     paintKmSource(row);
     row.querySelector("[data-leg-sale]").readOnly = !overridden;
+    row.querySelector("[data-leg-sale]").classList.toggle("zero-sale", !(sale > 0));
     if (!overridden) row.querySelector("[data-leg-sale]").value = sale;
   });
   return { stops, legs, mode, salePerKm, salePerLiter, costPerKm };
@@ -982,6 +984,16 @@ function refreshRoute(prefix) {
     ];
     box.innerHTML = cards.map(([label, value]) =>
       `<article><span>${orderText(label)}</span><strong>${orderText(orderMoney.format(Number(value) || 0))}</strong></article>`).join("");
+  }
+  // Úsek za 0 Kč by do Pohody odešel bez ceny. Zakázku s prodejem 0 Kč nejde potvrdit k fakturaci.
+  const saleWarn = document.querySelector(`#${prefix}-sale-warn`);
+  if (saleWarn) {
+    const zero = state.legs.map((leg, index) => (leg.salePrice > 0 ? null : index + 1)).filter(Boolean);
+    saleWarn.hidden = zero.length === 0;
+    saleWarn.textContent = !zero.length ? ""
+      : totalSale > 0
+        ? `Prodej 0 Kč u úseku ${zero.join(", ")}. Zkontrolujte km, Prodej Kč/km nebo ruční cenu.`
+        : `Prodej je 0 Kč (úsek ${zero.join(", ")}). Doplňte km a Prodej Kč/km nebo ruční cenu, jinak zakázku nepůjde potvrdit k fakturaci.`;
   }
   const total = document.querySelector(`#${prefix}-loads-total`);
   if (total) total.textContent = `Celkem naloženo ${orderLiters.format(loaded)} l`;

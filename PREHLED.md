@@ -172,6 +172,8 @@ VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 
 **Zápis do Pohody.** Zakázka jde do fronty pro Pohodu až při úspěšném **Potvrdit k fakturaci** (nebo při označení jako vyfakturovaná). Založení a úpravy před potvrzením do Pohody nic neposílají a „Odeslat znovu“ je odmítne. Potvrzená zakázka, která v Pohodě ještě není, se po změně údajů pro Pohodu pošle znovu. Zakázka, která už v Pohodě je, se dál aktualizuje nebo opravuje jako dřív. `Pohoda:SyncMode`: `Off` neposílá, `DryRun` jen uloží XML, `Live` (výchozí) volá mServer. Položka je `Leg N: odkud → kam, palivo, litry`. Náklad, vozidlo a řidič v XML nejsou.
 
+- **Položky objednávky:** každý úsek je jedna položka. Při ceně za km má množství = fakturované km (jinak nákladové), jednotku `km` a jednotkovou cenu Prodej Kč/km; při ceně za litr množství = litry, jednotku `l` a cenu Kč/l. Ruční cena úseku, úsek bez km/litrů nebo cena, která na množství × sazbu nesedí na haléř, jde jako 1 `ks` za celou cenu. Příplatky jsou 1 `ks`.
+- Zakázku s prodejem 0 Kč (úseky + příplatky) nejde potvrdit k fakturaci; formulář úsek za 0 Kč zčervená a vypíše upozornění.
 - Neodeslaná změna přepíše otevřenou položku fronty.
 - Odeslaná neuzamčená objednávka se mění smazáním a novým založením (`ord:delete` a `ord:add`). Když smazání projde a založení ne, další pokus už jen zakládá. Doklad, který v Pohodě už není, se bere jako smazaný.
 - Uzamčená (vyfakturovaná) objednávka se nemění. Vznikne opravný doklad `{kód}/{pořadí}`, např. `Z2026-0001/1`, se zápornými položkami. Stejně se dělá storno.

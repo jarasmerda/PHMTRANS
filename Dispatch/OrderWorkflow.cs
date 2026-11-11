@@ -133,6 +133,8 @@ public static class OrderWorkflow
             return new OrderChange.Rejected("Důvod chybějících dokladů může mít nejvýše 500 znaků.");
 
         var changed = context.Current.Status != OrderStatuses.KFakturaci;
+        if (changed && ZeroSale(context.Current) is { } zero)
+            return new OrderChange.Rejected(zero);
         var order = changed
             ? context.Current with
             {
@@ -152,6 +154,15 @@ public static class OrderWorkflow
                 MissingDocumentsReason = reason
             };
         return Finish(order, context.Current, context, changed || reasonChanged, confirmRequested: true);
+    }
+
+    // Do Pohody nesmí odejít objednávka za 0 Kč (nevyplněná sazba nebo km).
+    public static string? ZeroSale(DispatchOrder order)
+    {
+        var total = OrderLegItems.SaleLines(order).Sum(line => line.Quantity * line.UnitPrice) + order.Surcharges;
+        if (total > 0m)
+            return null;
+        return "Zakázka má prodej 0 Kč, do Pohody by odešla bez ceny. Doplňte Prodej Kč/km a km úseků (nebo ruční cenu úseku), uložte a pak potvrďte.";
     }
 
     public static OrderChange MarkInvoiced(string? invoiceNumber, OrderEditContext context)
