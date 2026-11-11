@@ -112,22 +112,38 @@ public sealed class OrderFuelDistanceTests
             Loads = [new OrderLoadInput(1, 10000m), new OrderLoadInput(2, 5000m)]
         };
 
+        // Vyloženo nesedí na naloženo (nafta 10 000 / 8 000, benzín 5 000 / 6 000): zakázka nejde uložit.
+        var wrong = Assert.IsType<OrderMutation.Rejected>(await orders.CreateAsync(request, CancellationToken.None, "Jana"));
+        Assert.Contains("Vyložené litry nesedí na naložené.", wrong.Message);
+        Assert.Contains("vyloženo o 2 000 l méně", wrong.Message.Replace(' ', ' '));
+        Assert.Contains("vyloženo o 1 000 l víc", wrong.Message.Replace(' ', ' '));
+
+        request = request with { Loads = [new OrderLoadInput(1, 8000m), new OrderLoadInput(2, 6000m)] };
         var created = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(request, CancellationToken.None, "Jana")).Order;
 
-        Assert.Equal(15000m, created.Liters);
+        Assert.Equal(14000m, created.Liters);
         Assert.Equal((1, FuelTypeCatalog.Diesel), (created.FuelTypeId, created.FuelType));
         Assert.Equal([FuelTypeCatalog.Diesel, FuelTypeCatalog.Petrol], created.Loads!.Select(load => load.FuelType));
         var petrol = created.Quote!.Fuels!.Single(fuel => fuel.FuelTypeId == 2);
-        Assert.Equal((5000m, 6000m), (petrol.Loaded, petrol.Delivered));
-        Assert.True(created.Quote.DeliveredExceedsLoaded);
+        Assert.Equal((6000m, 6000m), (petrol.Loaded, petrol.Delivered));
+        Assert.False(created.Quote.DeliveredExceedsLoaded);
 
         var detail = await orders.GetAsync(created.Id, CancellationToken.None);
         var reread = OrderRoute.Read(detail!.Versions[0] with { Loads = null }, OrderRoute.Write(created));
         Assert.Equal(2, reread.Loads!.Count);
 
-        var moved = Assert.IsType<OrderMutation.Success>(await orders.UpdateAsync(
+        Assert.IsType<OrderMutation.Rejected>(await orders.UpdateAsync(
             created.Id,
             request with { Loads = [new OrderLoadInput(1, 9000m), new OrderLoadInput(2, 6000m)] },
+            CancellationToken.None,
+            "Jana"));
+        var moved = Assert.IsType<OrderMutation.Success>(await orders.UpdateAsync(
+            created.Id,
+            request with
+            {
+                Stops = [new OrderStopInput("ČS Brno", 9000m, null, null, 1), new OrderStopInput("ČS Olomouc", 6000m, null, null, 2)],
+                Loads = [new OrderLoadInput(1, 9000m), new OrderLoadInput(2, 6000m)]
+            },
             CancellationToken.None,
             "Jana")).Order;
         Assert.Equal(created.CurrentVersion + 1, moved.CurrentVersion);
@@ -235,7 +251,7 @@ public sealed class OrderFuelDistanceTests
         var next = Assert.IsType<OrderMutation.Success>(await orders.CreateAsync(
             Request(
                 [new OrderStopInput("ČS Brno", 8000m, null, null, 2)],
-                [new OrderLegInput(180m, null, false)]),
+                [new OrderLegInput(180m, null, false)]) with { Loads = [new OrderLoadInput(2, 8000m)] },
             CancellationToken.None));
         Assert.Equal(KmSources.Matrix, next.Order.Legs![0].KmSource);
         Assert.Equal(FuelTypeCatalog.Petrol, next.Order.Stops![0].FuelType);
@@ -245,7 +261,7 @@ public sealed class OrderFuelDistanceTests
             next.Order.Id,
             Request(
                 [new OrderStopInput("ČS Brno", 8000m, null, null, 2)],
-                [new OrderLegInput(210m, null, false, KmSources.Manual)]),
+                [new OrderLegInput(210m, null, false, KmSources.Manual)]) with { Loads = [new OrderLoadInput(2, 8000m)] },
             CancellationToken.None,
             "Petr"));
         Assert.Equal(KmSources.Manual, changed.Order.Legs![0].KmSource);

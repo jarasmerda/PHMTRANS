@@ -180,6 +180,25 @@ public static class OrderLoads
         return rows;
     }
 
+    // Vyloženo musí po každém palivu přesně sedět na naloženo. Zakázka bez vykládek se nekontroluje.
+    public static string? CheckBalance(DispatchOrder order)
+    {
+        if (order.Stops is not { Count: > 0 })
+            return null;
+        var wrong = Balance(order).Where(row => row.Loaded != row.Delivered).ToArray();
+        if (wrong.Length == 0)
+            return null;
+        var parts = wrong.Select(row =>
+        {
+            var difference = row.Delivered - row.Loaded;
+            var tail = difference > 0
+                ? $"vyloženo o {difference.ToString("N0", Czech)} l víc"
+                : $"vyloženo o {(-difference).ToString("N0", Czech)} l méně";
+            return $"{row.FuelType}: naloženo {row.Loaded.ToString("N0", Czech)} l, vyloženo {row.Delivered.ToString("N0", Czech)} l ({tail})";
+        });
+        return $"Vyložené litry nesedí na naložené. {string.Join("; ", parts)}.";
+    }
+
     public static bool SameLoads(DispatchOrder left, DispatchOrder right)
     {
         var a = Effective(left);
