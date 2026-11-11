@@ -41,7 +41,7 @@ public sealed class DispatchPageTests
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
         Assert.Contains("dispecink.js?v=14", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=27", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=28", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
@@ -58,6 +58,14 @@ public sealed class DispatchPageTests
         Assert.Contains("reason-row", ordersJs, StringComparison.Ordinal);
         Assert.Contains("<dialog id=\"docs-dialog\">", html, StringComparison.Ordinal);
         Assert.Contains("data-open-docs", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"detail-head\"", html, StringComparison.Ordinal);
+        Assert.Contains("<legend>Termín a posádka</legend>", ordersJs, StringComparison.Ordinal);
+        // Detail končí až za formulářem, okno dokladů má celou sekci.
+        var detail = html[html.IndexOf("<section id=\"order-detail\"", StringComparison.Ordinal)..html.IndexOf("<section id=\"version-page\"", StringComparison.Ordinal)];
+        Assert.Contains("<form id=\"order-edit\"></form>", detail, StringComparison.Ordinal);
+        Assert.Equal(detail.Split("<section").Length, detail.Split("</section>").Length);
+        var docs = html[html.IndexOf("<dialog id=\"docs-dialog\">", StringComparison.Ordinal)..html.IndexOf("<dialog id=\"confirm-docs-dialog\">", StringComparison.Ordinal)];
+        Assert.Equal(docs.Split("<section").Length, docs.Split("</section>").Length);
         Assert.Contains("/api/dispatch/calendar/events?from=", ordersJs, StringComparison.Ordinal);
         var bookingJs = File.ReadAllText(Path.Combine(root, "dispecink-booking.js"));
         Assert.Contains("/api/dispatch/calendar/events?from=", bookingJs, StringComparison.Ordinal);
