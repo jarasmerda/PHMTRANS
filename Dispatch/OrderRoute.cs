@@ -121,6 +121,17 @@ public static class OrderLoads
                 return $"{load.FuelType}: {load.Liters.ToString("N0", Czech)} l se nevejde do přepážek {string.Join(", ", load.Compartments!)} (dohromady {capacity.ToString("N0", Czech)} l).";
         }
 
+        // Když se přepážky přiřazují, musí je mít každé naložené palivo.
+        var missing = (loads ?? []).FirstOrDefault(load => load.Liters > 0m && load.Compartments is not { Count: > 0 });
+        if (missing is not null)
+        {
+            var taken = assigned.SelectMany(load => load.Compartments!).ToHashSet();
+            var free = available.Count(item => !taken.Contains(item.Number));
+            return free == 0
+                ? $"{missing.FuelType}: {missing.Liters.ToString("N0", Czech)} l nemá kam. Všechny přepážky vozidla už mají jiné palivo."
+                : $"{missing.FuelType}: vyberte přepážku. Když se přepážky přiřazují, musí je mít každé palivo.";
+        }
+
         return null;
     }
 
