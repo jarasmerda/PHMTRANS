@@ -82,6 +82,32 @@ body:not(.landing) > header {
   background: #ffffff;
 }
 
+/* Užší hlavička modulů: PHM TRANS a název modulu na jednom řádku. */
+body:not(.landing) > header:not(.login-bar) {
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.5rem 0 0.45rem;
+}
+
+body:not(.landing) > header:not(.login-bar) > div:first-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.75rem;
+}
+
+body:not(.landing) > header:not(.login-bar) > div:first-child h1 {
+  margin: 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--accent);
+  font-size: 1.2rem;
+  line-height: 1.15;
+}
+
+body:not(.landing) > header:not(.login-bar) .site-back {
+  min-height: 34px;
+}
+
 header.login-bar {
   width: min(420px, calc(100% - 2rem));
   align-items: center;
