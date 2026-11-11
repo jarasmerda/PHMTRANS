@@ -522,11 +522,20 @@ function stopItemRow(item, headerFuelId, headerFuelName) {
   const fuelId = item?.fuelTypeId || headerDefault;
   const linked = !item?.fuelTypeId || String(item.fuelTypeId) === String(headerDefault) ? "1" : "0";
   return `<div class="stop-item" data-stop-item>
-      <label>Přepážka <select data-item-comp data-selected="${orderText(item?.compartment ?? "")}"><option value="">—</option></select></label>
       <label>Palivo <select data-stop-fuel data-fuel-linked="${linked}">${fuelOptions(fuelId, item?.fuelType || headerFuelName, false)}</select></label>
       <label>Litry <input data-stop-liters type="number" min="0" step="0.001" value="${orderText(item?.liters ?? "")}"></label>
       <button type="button" class="ghost" data-stop-item-remove title="Odebrat palivo z vykládky">×</button>
+      <div class="item-comp" data-item-comp data-selected="${orderText(itemCompartments(item).join(","))}"></div>
     </div>`;
+}
+
+function itemCompartments(item) {
+  if (item?.compartments?.length) return item.compartments;
+  return item?.compartment ? [item.compartment] : [];
+}
+
+function selectedItemCompartments(box) {
+  return (box?.dataset.selected || "").split(",").map(Number).filter((number) => Number.isInteger(number) && number > 0);
 }
 
 function stopItemsOf(stop) {
@@ -768,11 +777,12 @@ function routeState(prefix) {
     const place = row.querySelector("[data-stop-place]").value.trim();
     const items = [...row.querySelectorAll("[data-stop-item]")].map((itemRow) => {
       const fuel = Number(itemRow.querySelector("[data-stop-fuel]")?.value);
-      const compartment = Number(itemRow.querySelector("[data-item-comp]")?.value);
+      const compartments = selectedItemCompartments(itemRow.querySelector("[data-item-comp]"));
       const litersText = itemRow.querySelector("[data-stop-liters]")?.value.trim() ?? "";
       return {
         fuelTypeId: Number.isInteger(fuel) && fuel > 0 ? fuel : null,
-        compartment: Number.isInteger(compartment) && compartment > 0 ? compartment : null,
+        compartment: compartments[0] ?? null,
+        compartments,
         liters: litersText === "" || !Number.isFinite(Number(litersText)) ? null : Number(litersText)
       };
     });
@@ -826,28 +836,40 @@ function renderStopCompartments(prefix) {
   const owners = new Map();
   readLoads(prefix).forEach((load) => load.compartments.forEach((number) => owners.set(number, load)));
   const numbers = [...owners.keys()].sort((a, b) => a - b);
-  document.querySelectorAll(`#${prefix}-stops [data-item-comp]`).forEach((select) => {
-    const selected = Number(select.value || select.dataset.selected || 0);
-    const itemRow = select.closest("[data-stop-item]");
+  document.querySelectorAll(`#${prefix}-stops [data-item-comp]`).forEach((box) => {
+    const selected = selectedItemCompartments(box);
+    const itemRow = box.closest("[data-stop-item]");
     const fuelSelect = itemRow?.querySelector("[data-stop-fuel]");
+    const liters = Number(itemRow?.querySelector("[data-stop-liters]")?.value || 0);
     if (!numbers.length) {
-      select.innerHTML = `<option value="">${selected ? `${selected} (nakládka nemá přepážky)` : "bez přepážek"}</option>`;
-      if (selected) select.innerHTML = `<option value="">bez přepážek</option><option value="${selected}" selected>${selected} (nakládka nemá přepážky)</option>`;
-      select.classList.remove("missing");
+      box.innerHTML = `<span class="comp-label">Přepážky</span><span class="note">${selected.length
+        ? `Vybrané přepážky ${orderText(selected.join(", "))}: nakládka přepážky nemá, zakázku takhle neuložíte.`
+        : "Nakládka nemá přepážky, u vykládky se nevybírají."}</span>`;
+      box.classList.remove("missing");
       return;
     }
-    const legacy = selected && !owners.has(selected)
-      ? `<option value="${selected}" selected>${selected} (v nakládce se neplní)</option>` : "";
-    select.innerHTML = `<option value=""${selected ? "" : " selected"}>— vyberte —</option>${legacy}` + numbers.map((number) =>
-      `<option value="${number}"${number === selected ? " selected" : ""}>${number} · ${orderText(owners.get(number).fuelType || "")}</option>`).join("");
-    const liters = Number(itemRow?.querySelector("[data-stop-liters]")?.value || 0);
-    select.classList.toggle("missing", !select.value && liters > 0);
     // Palivo se řídí přepážkou: v přepážce je palivo z nakládky.
-    const owner = owners.get(Number(select.value));
+    const owner = owners.get(selected[0]);
     if (owner?.fuelTypeId && fuelSelect && fuelSelect.value !== String(owner.fuelTypeId)) {
       fuelSelect.value = String(owner.fuelTypeId);
       fuelSelect.dataset.fuelLinked = "0";
     }
+    const fuelId = Number(fuelSelect?.value || 0);
+    const chips = numbers.map((number) => {
+      const load = owners.get(number);
+      const mine = selected.includes(number);
+      // Do jednoho řádku patří jen přepážky se stejným palivem.
+      const other = !mine && selected.length > 0 && load.fuelTypeId && fuelId && load.fuelTypeId !== fuelId;
+      return `<label class="comp-chip${mine ? " on" : ""}${other ? " taken" : ""}" title="${orderText(`${load.fuelType || ""}${other ? " – jiné palivo než v řádku" : ""}`)}">
+        <input type="checkbox" data-item-comp-number="${number}"${mine ? " checked" : ""}${other ? " disabled" : ""}>
+        <b>${number}</b> <small>${orderText(load.fuelType || "")}</small></label>`;
+    }).join("");
+    const strangers = selected.filter((number) => !owners.has(number));
+    const status = strangers.length
+      ? `<span class="note warn">Přepážka ${orderText(strangers.join(", "))} se v nakládce neplní.</span>`
+      : !selected.length && liters > 0 ? `<span class="note warn">Vyberte přepážku (i víc), ze které se vykládá.</span>` : "";
+    box.classList.toggle("missing", !selected.length && liters > 0);
+    box.innerHTML = `<span class="comp-label">Z přepážek</span>${chips}${status}`;
   });
 }
 
@@ -1119,7 +1141,7 @@ function versionLines(version) {
     const km = leg.kilometers === null || leg.kilometers === undefined || leg.kilometers === "" ? "—" : `${orderLiters.format(Number(leg.kilometers))} km${source}`;
     const billed = leg.billedKilometers === null || leg.billedKilometers === undefined ? "= nákladové" : `${orderLiters.format(Number(leg.billedKilometers))} km`;
     const fuel = stop.items?.length
-      ? stop.items.map((item) => `${item.fuelType || ""}${item.compartment ? ` (p. ${item.compartment})` : ""} ${orderLiters.format(Number(item.liters || 0))} l`).join(", ")
+      ? stop.items.map((item) => `${item.fuelType || ""}${itemCompartments(item).length ? ` (p. ${itemCompartments(item).join(", ")})` : ""} ${orderLiters.format(Number(item.liters || 0))} l`).join(", ")
       : stop.fuelType || version.fuelType || "";
     return `<tr>
       <td>${orderText(leg.sequence || index + 1)}</td>
@@ -1463,6 +1485,8 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
   }
   const route = event.target.closest("[data-route]");
   if (!route) return;
+  // Přepážky vykládky obslouží událost change (překreslení při kliknutí by výběr zrušilo).
+  if (event.target.closest("[data-item-comp]")) return;
   const prefix = route.dataset.route;
   const row = event.target.closest("[data-stop-row]");
   if (event.target.closest("[data-add-stop]")) {
@@ -1518,7 +1542,7 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
 
 document.querySelector("#orders-view").addEventListener("input", (event) => {
   // Zaškrtnutí přepážky řeší posluchač "change".
-  if (event.target.matches("[data-comp-number]")) return;
+  if (event.target.matches("[data-comp-number], [data-item-comp-number]")) return;
   if (event.target.matches("[id$='-customer']") && !event.target.id.endsWith("-customer-id")) {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
     const idField = document.querySelector(`#${prefix}-customer-id`);
@@ -1586,8 +1610,13 @@ document.querySelector("#orders-view").addEventListener("change", (event) => {
       refreshRoute(prefix);
     }
   }
-  if (event.target.matches("[data-item-comp]")) {
-    event.target.dataset.selected = event.target.value;
+  if (event.target.matches("[data-item-comp-number]")) {
+    const box = event.target.closest("[data-item-comp]");
+    const numbers = new Set(selectedItemCompartments(box));
+    const number = Number(event.target.dataset.itemCompNumber);
+    if (event.target.checked) numbers.add(number);
+    else numbers.delete(number);
+    box.dataset.selected = [...numbers].sort((a, b) => a - b).join(",");
     const prefix = event.target.closest("[data-route]")?.dataset.route;
     if (prefix) refreshRoute(prefix);
     return;

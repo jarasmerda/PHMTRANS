@@ -100,6 +100,39 @@ public sealed class OrderCompartmentTests
     }
 
     [Fact]
+    public void One_unloading_row_can_take_several_compartments()
+    {
+        var catalog = Catalog();
+        var diesel = new OrderLoad(1, Fuels[0].Id, Fuels[0].Name, 14000m, [1, 2]);
+        var petrol = new OrderLoad(2, Fuels[1].Id, Fuels[1].Name, 5000m, [3]);
+        DispatchOrder With(params OrderStopItem[] items) => Order([diesel, petrol]) with
+        {
+            VehicleId = "veh-1",
+            Stops = [new OrderStop("s1", 1, "ČS 1", items.Sum(item => item.Liters), null, null, items[0].FuelTypeId, items[0].FuelType, items)]
+        };
+        OrderStopItem Diesel(decimal liters, params int[] numbers) => new(Fuels[0].Id, Fuels[0].Name, numbers[0], liters, numbers);
+        var petrolRow = new OrderStopItem(Fuels[1].Id, Fuels[1].Name, 3, 5000m);
+
+        Assert.Null(OrderLoads.CheckUnloadCompartments(With(Diesel(14000m, 1, 2), petrolRow), catalog));
+        Assert.Equal([1, 2], OrderStopItems.Numbers(Diesel(1m, 1, 2)));
+        Assert.Contains("pojmou jen 14", OrderLoads.CheckUnloadCompartments(With(Diesel(14001m, 1, 2), petrolRow), catalog));
+        Assert.Contains("v přepážce 3 je", OrderLoads.CheckUnloadCompartments(With(Diesel(14000m, 1, 3)), catalog));
+        Assert.False(OrderStopItems.Same(With(Diesel(1m, 1, 2)).Stops![0], With(Diesel(1m, 1)).Stops![0]));
+        Assert.True(OrderStopItems.Same(With(Diesel(1m, 1, 2)).Stops![0], With(Diesel(1m, 1, 2)).Stops![0]));
+
+        var request = new OrderSaveRequest(
+            42, "Zákazník", "Sklad", null, new DateOnly(2026, 11, 4), new DateOnly(2026, 11, 4), Fuels[0].Name, 14000m, null, 0m,
+            null, null, null, null, OrderStatuses.Nova, null, OrderPricing.ByKm, 0m, 0m, 0m,
+            [new OrderStopInput("ČS 1", null, null, null, Items: [new(Fuels[0].Id, null, 14000m, [2, 1, 2])])],
+            [new OrderLegInput(10m, null, false)]);
+        var item = Assert.Single(OrderRoute.Materialize(Order([]), request, catalog).Order!.Stops![0].Items!);
+        Assert.Equal([1, 2], item.Compartments!);
+        Assert.Equal(1, item.Compartment);
+        var overlap = request with { Stops = [new OrderStopInput("ČS 1", null, null, null, Items: [new(Fuels[0].Id, null, 1m, [1, 2]), new(Fuels[0].Id, null, 1m, [2])])] };
+        Assert.Contains("přepážka 2", OrderRoute.Materialize(Order([]), overlap, catalog).Error);
+    }
+
+    [Fact]
     public void Stop_items_are_built_from_the_request_and_round_trip_as_json()
     {
         var request = new OrderSaveRequest(
@@ -113,7 +146,7 @@ public sealed class OrderCompartmentTests
         Assert.Equal(15000m, stop.Liters);
         Assert.Equal(2, stop.Items!.Count);
         Assert.Equal(3, stop.Items[1].Compartment);
-        Assert.Equal(stop.Items, OrderStopItems.Read(OrderStopItems.Write(stop.Items))!);
+        Assert.Equal(OrderStopItems.Write(stop.Items), OrderStopItems.Write(OrderStopItems.Read(OrderStopItems.Write(stop.Items))));
 
         var twice = request with { Stops = [new OrderStopInput("ČS 1", null, null, null, Items: [new(Fuels[0].Id, 1, 1m), new(Fuels[0].Id, 1, 2m)])] };
         Assert.Contains("je tam dvakrát", OrderRoute.Materialize(Order([]), twice, catalog).Error);
