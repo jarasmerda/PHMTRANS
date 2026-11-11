@@ -264,7 +264,7 @@ function formFields(prefix, order) {
   const legs = order?.legs || [];
   const legacy = !!order && !order.customerPohodaId;
   return `
-    <fieldset class="wide form-card">
+    <fieldset class="wide form-card card-customer">
       <legend>Zákazník</legend>
       <div class="card-grid">
         <label class="wide">Zákazník z adresáře Pohody
@@ -283,7 +283,7 @@ function formFields(prefix, order) {
       <input type="hidden" id="${prefix}-customer-email" value="${orderText(order?.customerEmail || "")}">
       <input type="hidden" id="${prefix}-customer-phone" value="${orderText(order?.customerPhone || "")}">
     </fieldset>
-    <fieldset class="wide form-card">
+    <fieldset class="wide form-card card-schedule">
       <legend>Termín a posádka</legend>
       <div class="card-grid">
         ${loadingField(prefix, order?.loadingPlace || "")}
@@ -309,7 +309,7 @@ function formFields(prefix, order) {
         <div id="${prefix}-availability" class="avail-panel" hidden></div>
       </div>
     </fieldset>
-    <fieldset class="wide form-card">
+    <fieldset class="wide form-card card-price">
       <legend>Cena a náklady</legend>
       <div class="card-grid">
         <label>Režim prodeje
@@ -324,13 +324,16 @@ function formFields(prefix, order) {
         <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
       </div>
     </fieldset>
-    <fieldset class="wide form-card">
+    <fieldset class="wide form-card card-state">
       <legend>Stav a evidence</legend>
       <div class="card-grid">
         <label>Stav <select id="${prefix}-status">${orderStatusOptions(status)}</select></label>
         <label>Číslo CMR <input id="${prefix}-cmr" maxlength="40" value="${orderText(order?.cmrNumber || "")}"></label>
         <label>Číslo faktury <input id="${prefix}-invoice" maxlength="40" value="${orderText(order?.pohodaInvoiceNumber || "")}"></label>
         <label class="wide">Poznámka <input id="${prefix}-note" maxlength="500" value="${orderText(order?.note || "")}"></label>
+        ${prefix === "edit" ? `<label class="wide docs-reason-field">Důvod chybějících dokladů
+          <textarea id="${prefix}-docs-reason" rows="2" maxlength="500" placeholder="Vyplní se při potvrzení k fakturaci bez všech dokladů. Můžete ho tu upravit nebo smazat.">${orderText(order?.missingDocumentsReason || "")}</textarea>
+        </label>` : ""}
       </div>
     </fieldset>
     <div class="wide loads" data-loads="${prefix}">
@@ -873,6 +876,7 @@ function readForm(prefix) {
   return {
     customerPohodaId: idText === "" ? null : Number(idText),
     customerName: value("customer"),
+    missingDocumentsReason: document.querySelector(`#${prefix}-docs-reason`) ? value("docs-reason") : null,
     customerIco: value("customer-ico"),
     customerDic: value("customer-dic"),
     customerStreet: value("customer-street"),
@@ -1621,6 +1625,18 @@ document.querySelector("#order-cancel").addEventListener("click", async () => {
   orderShow(orderMessage, "Zakázka je stornovaná.");
   await loadOrders();
   await openOrder(saved.id, false);
+});
+
+// Detail zakázky je ve vlastním okně (dialog). Otevře se, když se detail ukáže, a zavře, když se skryje.
+const orderDetailDialog = document.querySelector("#order-detail-dialog");
+new MutationObserver(() => {
+  const visible = !document.querySelector("#order-detail").hidden;
+  if (visible && !orderDetailDialog.open) orderDetailDialog.showModal();
+  if (!visible && orderDetailDialog.open) orderDetailDialog.close();
+}).observe(document.querySelector("#order-detail"), { attributes: true, attributeFilter: ["hidden"] });
+orderDetailDialog.addEventListener("close", () => {
+  // Zavření okna (Esc, Zavřít) zavře i zakázku.
+  if (!document.querySelector("#order-detail").hidden) closeOrderDetail();
 });
 
 function closeOrderDetail() {

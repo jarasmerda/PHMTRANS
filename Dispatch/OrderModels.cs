@@ -177,7 +177,9 @@ public sealed record OrderSaveRequest(
     int? FuelTypeId = null,
     IReadOnlyList<OrderLoadInput>? Loads = null,
     string? LoadingTime = null,
-    string? UnloadingTime = null);
+    string? UnloadingTime = null,
+    // null = beze změny, prázdný text = smazat.
+    string? MissingDocumentsReason = null);
 
 public sealed record OrderSyncEntry(
     long Id,

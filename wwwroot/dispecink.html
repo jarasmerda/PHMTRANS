@@ -161,6 +161,18 @@
     .bk-ghost { border-style: dashed; }
     .date-time { display: flex; gap: 0.3rem; }
     /* ---------- Vzhled detailu a formuláře zakázky ---------- */
+    #order-detail-dialog { width: min(80rem, calc(100% - 1rem)); max-height: calc(100% - 1rem); padding: 0; border: 0; border-radius: 16px; background: #f4f6fa; }
+    #order-detail-dialog #order-detail { width: auto; max-width: none; margin: 0; border: 0; border-radius: 16px; box-shadow: none; }
+    #order-detail-dialog .detail-head { position: sticky; top: 0; z-index: 6; border-radius: 0; box-shadow: 0 2px 8px rgba(16, 24, 40, 0.08); }
+    .card-customer { --card-bg: #f1f0fd; --card-line: #5b55c9; }
+    .card-schedule { --card-bg: #e7f6f7; --card-line: #11808b; }
+    .card-price { --card-bg: #fff8dc; --card-line: #b48700; }
+    .card-state { --card-bg: #f4eefb; --card-line: #7c4dbd; }
+    .form-card.card-customer, .form-card.card-schedule, .form-card.card-price, .form-card.card-state { background: var(--card-bg); border-color: var(--card-line); border-left-width: 6px; }
+    .form-card.card-customer > legend, .form-card.card-schedule > legend, .form-card.card-price > legend, .form-card.card-state > legend {
+      background: var(--card-line); color: #fff; border-radius: 999px; padding: 0.15rem 0.75rem; margin-left: -0.2rem; font-size: 0.85rem; }
+    .docs-reason-field textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 0.9rem; padding: 0.5rem 0.6rem; border: 1px solid #cfd5df; border-radius: 8px; background: #fff; color: var(--ink); resize: vertical; }
+    .docs-reason-field:has(textarea:not(:placeholder-shown)) textarea { border-color: #c77f28; background: #fffaf2; }
     #order-detail, #order-create-wrap { background: #fff; border: 1px solid #dfe3ea; border-radius: 16px; padding: 0 1.2rem 1.2rem; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px rgba(16, 24, 40, 0.06); }
     #order-create-wrap { padding-top: 1rem; border: 0; box-shadow: none; }
     .detail-head { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; justify-content: space-between;
@@ -232,7 +244,7 @@
     .doc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
     /* Barvy: doklady oranžově, nakládka modře, vykládky zeleně na střídačku. */
     :root { --docs-bg: #fdf1e2; --docs-line: #c77f28; --load-bg: #eaf2fd; --load-line: #2f6fdf;
-      --unload-a-bg: #e8f6ed; --unload-a-line: #2e9e5b; --unload-b-bg: #d3eedd; --unload-b-line: #1d7a45; }
+      --unload-a-bg: #e4f7ea; --unload-a-line: #2e9e5b; --unload-b-bg: #c4e9d1; --unload-b-line: #0f6a37; }
     .docs-summary { margin: 0.6rem 0 0.8rem; padding: 0.7rem 0.9rem; border: 1px solid var(--docs-line); border-left-width: 6px; border-radius: 12px; background: var(--docs-bg); }
     .docs-summary-head { display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; align-items: baseline; }
     .docs-summary-head strong { font-size: 1.05rem; }
@@ -248,6 +260,12 @@
     .loads { background: var(--load-bg); border: 1px solid var(--load-line); border-left-width: 6px; border-radius: 12px; padding: 0.4rem 0.8rem 0.6rem; }
     [data-route] > [id$="-stops"] > .stop-row { padding: 0.6rem 0.7rem; border: 1px solid var(--unload-a-line); border-left-width: 6px; border-radius: 12px; background: var(--unload-a-bg); }
     [data-route] > [id$="-stops"] > .stop-row:nth-child(even) { border-color: var(--unload-b-line); background: var(--unload-b-bg); }
+    [data-route] > [id$="-stops"] { counter-reset: unload; }
+    [data-route] > [id$="-stops"] > .stop-row { counter-increment: unload; position: relative; border-left-width: 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06); }
+    [data-route] > [id$="-stops"] > .stop-row .stop-pair { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+    [data-route] > [id$="-stops"] > .stop-row .stop-pair::before { content: "Vykládka " counter(unload); flex: none; padding: 0.15rem 0.7rem; border-radius: 999px; background: var(--unload-a-line); color: #fff; font-weight: 800; }
+    [data-route] > [id$="-stops"] > .stop-row:nth-child(even) .stop-pair::before { background: var(--unload-b-line); }
+    .doc-group.unload-a, .doc-group.unload-b { border-left-width: 10px; }
     .reason-row td { padding-top: 0; background: #fff8ef; border-top: 0; }
     .reason-row .reason-label { font-weight: 700; color: #a35a00; margin-right: 0.3rem; }
     tr.has-reason td { border-bottom: 0; }
@@ -447,50 +465,52 @@
       </div>
       <p id="orders-empty" hidden></p>
     </section>
-    <section id="order-detail" hidden>
-      <div class="detail-head">
-        <div class="detail-title">
-          <h2 id="order-detail-title">Zakázka</h2>
-          <span id="order-detail-status" class="status-pill"></span>
+    <section id="version-page" hidden></section>
+    <dialog id="order-detail-dialog">
+      <section id="order-detail" hidden>
+        <div class="detail-head">
+          <div class="detail-title">
+            <h2 id="order-detail-title">Zakázka</h2>
+            <span id="order-detail-status" class="status-pill"></span>
+          </div>
+          <div class="order-actions">
+            <button type="button" id="order-save">Uložit změny</button>
+            <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
+            <button type="button" id="order-invoice" class="ghost">Označit jako vyfakturované</button>
+            <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
+            <button type="button" id="order-cancel" class="ghost">Stornovat</button>
+            <button type="button" id="order-close" class="ghost">Zavřít</button>
+          </div>
         </div>
-        <div class="order-actions">
-          <button type="button" id="order-save">Uložit změny</button>
-          <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
-          <button type="button" id="order-invoice" class="ghost">Označit jako vyfakturované</button>
-          <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
-          <button type="button" id="order-cancel" class="ghost">Stornovat</button>
-          <button type="button" id="order-close" class="ghost">Zavřít</button>
-        </div>
-      </div>
-      <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
-      <p id="order-cancel-note" class="note warn" hidden></p>
-      <p id="order-sync-warning" class="note warn" hidden></p>
-      <p id="order-docs-reason" class="note warn" hidden></p>
-      <section id="order-docs-summary" class="docs-summary">
-        <div class="docs-summary-head">
-          <strong>Doklady</strong>
-          <span id="doc-summary-text" class="note"></span>
-        </div>
-        <p id="doc-summary-missing" class="note"></p>
-        <div class="docs-summary-actions">
-          <button type="button" data-open-docs>Otevřít doklady</button>
+        <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
+        <p id="order-cancel-note" class="note warn" hidden></p>
+        <p id="order-sync-warning" class="note warn" hidden></p>
+        <p id="order-docs-reason" class="note warn" hidden></p>
+        <section id="order-docs-summary" class="docs-summary">
+          <div class="docs-summary-head">
+            <strong>Doklady</strong>
+            <span id="doc-summary-text" class="note"></span>
+          </div>
+          <p id="doc-summary-missing" class="note"></p>
+          <div class="docs-summary-actions">
+            <button type="button" data-open-docs>Otevřít doklady</button>
+          </div>
+        </section>
+        <form id="order-edit"></form>
+        <div class="detail-extra">
+          <section class="form-card">
+            <h3>Historie verzí</h3>
+            <p class="note">Starší uložené snímky. Aktuální údaje jsou ve formuláři nahoře.</p>
+            <ul id="version-links" class="version-links"></ul>
+            <p id="version-empty" class="note" hidden>Starší verze zatím nejsou.</p>
+          </section>
+          <section class="form-card">
+            <h3>Synchronizace do Pohody</h3>
+            <div id="order-sync"></div>
+          </section>
         </div>
       </section>
-      <form id="order-edit"></form>
-      <div class="detail-extra">
-        <section class="form-card">
-          <h3>Historie verzí</h3>
-          <p class="note">Starší uložené snímky. Aktuální údaje jsou ve formuláři nahoře.</p>
-          <ul id="version-links" class="version-links"></ul>
-          <p id="version-empty" class="note" hidden>Starší verze zatím nejsou.</p>
-        </section>
-        <section class="form-card">
-          <h3>Synchronizace do Pohody</h3>
-          <div id="order-sync"></div>
-        </section>
-      </div>
-    </section>
-    <section id="version-page" hidden></section>
+    </dialog>
     <dialog id="order-create-dialog">
       <section id="order-create-wrap">
         <div class="dialog-head">
@@ -634,7 +654,7 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=28"></script>
+  <script src="/dispecink-orders.js?v=29"></script>
   <script src="/dispecink-doklady.js?v=4"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=1"></script>
