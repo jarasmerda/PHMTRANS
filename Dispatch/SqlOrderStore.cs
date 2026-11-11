@@ -959,12 +959,12 @@ public sealed class SqlOrderStore(
         {
             await connection.ExecuteAsync(Command(
                 """
-                INSERT INTO dbo.Disp_OrderStop (Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt, FuelTypeId)
-                VALUES (@Id, @OrderId, @Sequence, @Place, @Liters, @Note, @ArrivalAt, @FuelTypeId)
+                INSERT INTO dbo.Disp_OrderStop (Id, OrderId, Sequence, Place, Liters, Note, ArrivalAt, FuelTypeId, Items)
+                VALUES (@Id, @OrderId, @Sequence, @Place, @Liters, @Note, @ArrivalAt, @FuelTypeId, @Items)
                 """,
                 transaction,
                 cancellationToken,
-                new { stop.Id, OrderId = order.Id, stop.Sequence, stop.Place, stop.Liters, stop.Note, stop.ArrivalAt, stop.FuelTypeId }));
+                new { stop.Id, OrderId = order.Id, stop.Sequence, stop.Place, stop.Liters, stop.Note, stop.ArrivalAt, stop.FuelTypeId, Items = OrderStopItems.Write(stop.Items) }));
         }
 
         foreach (var leg in order.Legs ?? [])
@@ -1007,7 +1007,7 @@ public sealed class SqlOrderStore(
         var ids = orders.Select(order => order.Id).ToArray();
         var stops = (await connection.QueryAsync<RouteStopRow>(Command(
             """
-            SELECT s.Id, s.OrderId, s.Sequence, s.Place, s.Liters, s.Note, s.ArrivalAt, s.FuelTypeId, f.Name AS FuelType
+            SELECT s.Id, s.OrderId, s.Sequence, s.Place, s.Liters, s.Note, s.ArrivalAt, s.FuelTypeId, f.Name AS FuelType, s.Items
             FROM dbo.Disp_OrderStop s
             LEFT JOIN dbo.Disp_FuelType f ON f.Id = s.FuelTypeId
             WHERE s.OrderId IN @Ids
@@ -1055,9 +1055,9 @@ public sealed class SqlOrderStore(
         DispatchOrder order,
         CancellationToken cancellationToken)
     {
-        var stops = (await connection.QueryAsync<OrderStop>(Command(
+        var stops = (await connection.QueryAsync<RouteStopRow>(Command(
             """
-            SELECT s.Id, s.Sequence, s.Place, s.Liters, s.Note, s.ArrivalAt, s.FuelTypeId, f.Name AS FuelType
+            SELECT s.Id, s.OrderId, s.Sequence, s.Place, s.Liters, s.Note, s.ArrivalAt, s.FuelTypeId, f.Name AS FuelType, s.Items
             FROM dbo.Disp_OrderStop s
             LEFT JOIN dbo.Disp_FuelType f ON f.Id = s.FuelTypeId
             WHERE s.OrderId = @Id
@@ -1065,7 +1065,7 @@ public sealed class SqlOrderStore(
             """,
             transaction,
             cancellationToken,
-            new { order.Id }))).AsList();
+            new { order.Id }))).Select(stop => stop.ToStop()).ToArray();
         var legs = (await connection.QueryAsync<RouteLegRow>(Command(
             """
             SELECT Id, OrderId, Sequence, FromPlace, ToPlace, Liters, Kilometers, SalePrice, SaleOverridden, CostPrice, KmSource, BilledKm
@@ -1207,8 +1207,9 @@ public sealed class SqlOrderStore(
         public DateTimeOffset? ArrivalAt { get; set; }
         public int? FuelTypeId { get; set; }
         public string? FuelType { get; set; }
+        public string? Items { get; set; }
 
-        public OrderStop ToStop() => new(Id, Sequence, Place, Liters, Note, ArrivalAt, FuelTypeId, FuelType);
+        public OrderStop ToStop() => new(Id, Sequence, Place, Liters, Note, ArrivalAt, FuelTypeId, FuelType, OrderStopItems.Read(Items));
     }
 
     private sealed class RouteLegRow

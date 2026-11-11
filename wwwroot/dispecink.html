@@ -47,6 +47,7 @@
     }
     .view-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
     .view-tabs button[aria-current="page"] { background: var(--ink); color: #fff; }
+    .view-tabs #tab-queue { margin-left: auto; }
     #order-cards { grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); }
     #orders, #version-lines, #queue { min-width: 64rem; }
     .version-links { list-style: none; margin: 0.4rem 0 0; padding: 0; }
@@ -347,6 +348,13 @@
     .stop-row .stop-km .km-source, .stop-row .stop-km .km-save { grid-column: 1 / -1; }
     .stop-row .stop-override { display: flex; align-items: center; gap: 0.35rem; font-weight: 400; }
     .stop-row .stop-override input { width: auto; }
+    .stop-row .stop-items { grid-column: 2 / 4; display: grid; gap: 0.3rem; align-content: start; }
+    .stop-row [data-stop-items] { display: grid; gap: 0.3rem; }
+    .stop-item { display: grid; grid-template-columns: minmax(6.5rem, 0.9fr) minmax(7rem, 1.2fr) minmax(5.5rem, 0.8fr) auto; gap: 0.35rem; align-items: end; padding: 0.3rem 0.4rem; border-radius: 8px; background: rgba(255, 255, 255, 0.65); }
+    .stop-item button { padding: 0.3rem 0.6rem; }
+    .stop-items [data-add-stop-item] { justify-self: start; padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+    .stop-items .note:empty { display: none; }
+    select[data-item-comp].missing { border-color: var(--alert); box-shadow: 0 0 0 2px rgba(196, 60, 60, 0.2); }
     .stop-row .stop-note { grid-column: 1 / 3; }
     .stop-row .stop-arrival { grid-column: 3 / 5; }
     .stop-row .stop-actions { grid-column: 5 / 6; align-self: end; }
@@ -356,7 +364,9 @@
     .stop-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; justify-content: flex-end; }
     @media (max-width: 760px) {
       .stop-row { grid-template-columns: 1fr 1fr; }
-      .stop-row .stop-note, .stop-row .stop-arrival, .stop-row .stop-actions { grid-column: 1 / -1; }
+      .stop-row .stop-note, .stop-row .stop-arrival, .stop-row .stop-actions, .stop-row .stop-items { grid-column: 1 / -1; }
+      .stop-item { grid-template-columns: 1fr 1fr; }
+      .stop-item button { justify-self: start; }
       .stop-row .stop-actions { justify-content: flex-start; }
     }
     .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 0.45rem; margin-top: 0.6rem; }
@@ -447,6 +457,8 @@
     .dv-stop.b { border-left-color: var(--unload-b-line, #0f6a37); background: var(--unload-b-bg, #c4e9d1); }
     .dv-stop.b .dv-badge { background: var(--unload-b-line, #0f6a37); }
     .dv-stop .note { flex-basis: 100%; margin: 0; }
+    .dv-stop-note { flex-basis: 100%; margin: 0.1rem 0; padding: 0.35rem 0.6rem; border-radius: 8px; background: #fff8dc; border: 1px solid #f0d98a; font-weight: 700; }
+    .dv-stop-items { flex-basis: 100%; margin: 0; padding-left: 1.1rem; }
     .dv-note { padding: 0.4rem 0.6rem; border-radius: 8px; background: #fff8dc; }
     @media (max-width: 760px) {
       .driver-wrap { padding: 0.7rem 0.6rem; }
@@ -485,8 +497,9 @@
   </header>
   <section class="view-tabs" aria-label="Pohledy dispečinku">
     <button type="button" id="tab-orders" aria-current="page">Zakázky</button>
-    <button type="button" id="tab-queue" class="ghost">Fronta Pohody</button>
     <button type="button" id="tab-driver" class="ghost">Pohled řidiče</button>
+    <button type="button" id="tab-week" class="ghost" data-open-week="" title="Otevře týdenní kalendář řidičů po hodinách v novém okně">Vytíženost po hodinách ↗</button>
+    <button type="button" id="tab-queue" class="ghost">Fronta Pohody</button>
   </section>
   <div id="orders-view">
     <p id="order-sync-note" class="note"></p>
@@ -744,10 +757,10 @@
     </dialog>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=15"></script>
-  <script src="/dispecink-orders.js?v=32"></script>
+  <script src="/dispecink-orders.js?v=33"></script>
   <script src="/dispecink-doklady.js?v=5"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=2"></script>
-  <script src="/dispecink-ridic.js?v=2"></script>
+  <script src="/dispecink-ridic.js?v=3"></script>
 </body>
 </html>

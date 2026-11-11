@@ -86,6 +86,8 @@ public static class OrderWorkflow
             return new OrderChange.Rejected(routed.Error);
         if (OrderLoads.CheckBalance(routed.Order!) is { } createBalance)
             return new OrderChange.Rejected(createBalance);
+        if (OrderLoads.CheckUnloadCompartments(routed.Order!, context.Catalog) is { } createUnload)
+            return new OrderChange.Rejected(createUnload);
         return WithDistances(Finish(routed.Order!, previous: null, context, versionAdded: true, confirmRequested: false), routed.Distances);
     }
 
@@ -110,6 +112,8 @@ public static class OrderWorkflow
             return new OrderChange.Rejected(routed.Error);
         if (OrderLoads.CheckBalance(routed.Order!) is { } saveBalance)
             return new OrderChange.Rejected(saveBalance);
+        if (OrderLoads.CheckUnloadCompartments(routed.Order!, context.Catalog) is { } saveUnload)
+            return new OrderChange.Rejected(saveUnload);
         if (OrderPohodaFields.SameDocument(context.Current, routed.Order!))
             return WithDistances(new OrderChange.Saved(context.Current, false, null), routed.Distances);
 

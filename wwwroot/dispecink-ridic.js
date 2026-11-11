@@ -103,6 +103,17 @@
     return order.loads?.length ? order.loads : [{ fuelTypeId: order.fuelTypeId, fuelType: order.fuelType, liters: order.liters }];
   }
 
+  // Co se na vykládce vykládá: palivo, litry a přepážka (u starších zakázek přepážky paliva z nakládky).
+  function stopItemsHtml(order, stop) {
+    if (stop.items?.length) {
+      return `<ul class="dv-stop-items">${stop.items.map((item) => `<li><strong>${esc(item.fuelType || "palivo")}</strong> ${esc(liters.format(Number(item.liters || 0)))} l${
+        item.compartment ? ` <span class="dv-chip comp">z přepážky ${esc(item.compartment)}</span>` : ""}</li>`).join("")}</ul>`;
+    }
+    const compartments = stopCompartments(order, stop);
+    return `<span>${esc(stop.fuelType || loadsOf(order)[0]?.fuelType || "")} ${esc(liters.format(Number(stop.liters || 0)))} l${
+      compartments.length ? ` <span class="dv-chip comp">z přepážek ${esc(compartments.join(", "))}</span>` : ""}</span>`;
+  }
+
   // Přepážky, ze kterých se vykládá palivo této vykládky.
   function stopCompartments(order, stop) {
     const loads = loadsOf(order);
@@ -144,15 +155,13 @@
       const arrivalText = arrival && !Number.isNaN(arrival.getTime())
         ? ` · příjezd ${arrival.toLocaleString("cs-CZ", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}`
         : "";
-      const compartments = stopCompartments(order, stop);
       return `<li class="dv-stop ${index % 2 ? "b" : "a"}">
         <div class="dv-stop-head">
           <span class="dv-badge">Vykládka ${index + 1}</span>
-          <strong>${esc(stop.place || "—")}</strong>
+          <strong>${esc(stop.place || "—")}</strong>${arrivalText ? `<span>${esc(arrivalText.replace(/^ · /, ""))}</span>` : ""}
         </div>
-        <span>${esc(stop.fuelType || loadsOf(order)[0]?.fuelType || "")} ${esc(liters.format(Number(stop.liters || 0)))} l${esc(arrivalText)}${
-          compartments.length ? ` <span class="dv-chip comp">z přepážek ${esc(compartments.join(", "))}</span>` : ""}</span>
-        ${stop.note ? `<span class="dv-place-note">${esc(stop.note)}</span>` : ""}
+        ${stop.note ? `<p class="dv-stop-note">📝 Poznámka k vykládce: ${esc(stop.note)}</p>` : ""}
+        ${stopItemsHtml(order, stop)}
         ${placeInfo(stop.place)}
       </li>`;
     }).join("");
@@ -186,7 +195,7 @@
         <ol class="dv-stops">${stopsHtml(order)}</ol>
       </section>
       ${order.customerName ? `<p class="note">Zákazník: ${esc(order.customerName)}</p>` : ""}
-      ${order.note ? `<p class="dv-note">Poznámka: ${esc(order.note)}</p>` : ""}
+      ${order.note ? `<p class="dv-note">📝 Poznámka k zakázce: ${esc(order.note)}</p>` : ""}
       ${order.missingDocumentsReason ? `<p class="dv-note">Chybějící doklady: ${esc(order.missingDocumentsReason)}</p>` : ""}
       <div class="dv-actions">
         <button type="button" class="dv-docs" data-dv-docs="${esc(order.id)}">📷 Doklady</button>

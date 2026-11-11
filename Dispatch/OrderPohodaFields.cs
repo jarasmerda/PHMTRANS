@@ -58,7 +58,8 @@ public static class OrderPohodaFields
                 || leftStops[index].Place != rightStops[index].Place
                 || leftStops[index].Liters != rightStops[index].Liters
                 || leftStops[index].FuelTypeId != rightStops[index].FuelTypeId
-                || leftStops[index].FuelType != rightStops[index].FuelType)
+                || leftStops[index].FuelType != rightStops[index].FuelType
+                || !OrderStopItems.Same(leftStops[index], rightStops[index]))
                 return false;
         }
 

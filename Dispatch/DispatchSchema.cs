@@ -364,6 +364,8 @@ public static class DispatchSchema
             ALTER TABLE dbo.Disp_Order ADD CustomerPhone nvarchar(40) NULL;
         IF COL_LENGTH(N'dbo.Disp_OrderLoad', N'Compartments') IS NULL
             ALTER TABLE dbo.Disp_OrderLoad ADD Compartments nvarchar(40) NULL;
+        IF COL_LENGTH(N'dbo.Disp_OrderStop', N'Items') IS NULL
+            ALTER TABLE dbo.Disp_OrderStop ADD Items nvarchar(max) NULL;
         IF COL_LENGTH(N'dbo.Disp_Point', N'Address') IS NULL
             ALTER TABLE dbo.Disp_Point ADD Address nvarchar(300) NULL;
         IF COL_LENGTH(N'dbo.Disp_Point', N'Latitude') IS NULL

@@ -7,7 +7,7 @@ const orderTime = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeSty
 const orderStatuses = ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno"];
 const orderMessage = document.querySelector("#order-message");
 const queueMessage = document.querySelector("#queue-message");
-let orderCatalog = { vehicles: [], drivers: [], fuelTypes: [], loadingPlaces: [], points: [] };
+let orderCatalog = { vehicles: [], drivers: [], fuelTypes: [], loadingPlaces: [], points: [], defaultCostPerKm: 0 };
 const distanceCache = new Map();
 const distanceTimers = {};
 const distanceGeneration = {};
@@ -320,7 +320,8 @@ function formFields(prefix, order) {
         </label>
         <label>Prodej Kč/km <input id="${prefix}-sale-km" type="number" min="0" step="0.0001" value="${orderText(order?.salePerKm ?? 0)}"></label>
         <label>Prodej Kč/l <input id="${prefix}-sale-liter" type="number" min="0" step="0.0001" value="${orderText(order?.salePerLiter ?? 0)}"></label>
-        <label>Náklad Kč/km <input id="${prefix}-cost-km" type="number" min="0" step="0.0001" value="${orderText(order?.costPerKm ?? "")}"></label>
+        <label>Náklad Kč/km <input id="${prefix}-cost-km" type="number" min="0" step="0.0001" value="${orderText(order?.costPerKm ?? "")}">
+          <span class="note" id="${prefix}-cost-note"></span></label>
         <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
       </div>
     </fieldset>
@@ -515,17 +516,35 @@ function distanceEntry(ok, hit) {
   return { km: Number(hit.km), billed: hit.billedKm === null || hit.billedKm === undefined ? null : Number(hit.billedKm) };
 }
 
+// Jeden řádek vykládky: přepážka × palivo × litry. Vykládka jich může mít víc.
+function stopItemRow(item, headerFuelId, headerFuelName) {
+  const headerDefault = stopFuelId(null, headerFuelId, headerFuelName);
+  const fuelId = item?.fuelTypeId || headerDefault;
+  const linked = !item?.fuelTypeId || String(item.fuelTypeId) === String(headerDefault) ? "1" : "0";
+  return `<div class="stop-item" data-stop-item>
+      <label>Přepážka <select data-item-comp data-selected="${orderText(item?.compartment ?? "")}"><option value="">—</option></select></label>
+      <label>Palivo <select data-stop-fuel data-fuel-linked="${linked}">${fuelOptions(fuelId, item?.fuelType || headerFuelName, false)}</select></label>
+      <label>Litry <input data-stop-liters type="number" min="0" step="0.001" value="${orderText(item?.liters ?? "")}"></label>
+      <button type="button" class="ghost" data-stop-item-remove title="Odebrat palivo z vykládky">×</button>
+    </div>`;
+}
+
+function stopItemsOf(stop) {
+  if (stop?.items?.length) return stop.items;
+  return [{ fuelTypeId: stop?.fuelTypeId || null, fuelType: stop?.fuelType || "", compartment: null, liters: stop?.liters ?? "" }];
+}
+
 function stopRow(prefix, stop, leg, headerFuelId, headerFuelName) {
   const arrival = stop?.arrivalAt ? toOrderLocal(stop.arrivalAt) : "";
-  const headerDefault = stopFuelId(null, headerFuelId, headerFuelName);
-  const fuelId = stop?.fuelTypeId || headerDefault;
-  const linked = !stop?.fuelTypeId || String(stop.fuelTypeId) === String(headerDefault) ? "1" : "0";
   const source = leg?.kmSource === "Matrix" || leg?.kmSource === "Manual" ? leg.kmSource : "";
   return `<div class="stop-row" data-stop-row data-km-source="${orderText(source)}">
       <p class="stop-pair" data-stop-pair></p>
       ${stopPlaceField(stop?.place || "")}
-      <label>Palivo <select data-stop-fuel data-fuel-linked="${linked}">${fuelOptions(fuelId, stop?.fuelType || headerFuelName, false)}</select></label>
-      <label>Litry <input data-stop-liters type="number" min="0" step="0.001" value="${orderText(stop?.liters ?? "")}"></label>
+      <div class="stop-items">
+        <div data-stop-items>${stopItemsOf(stop).map((item) => stopItemRow(item, headerFuelId, headerFuelName)).join("")}</div>
+        <button type="button" class="ghost" data-add-stop-item>+ Další palivo / přepážka</button>
+        <span class="note" data-stop-items-total></span>
+      </div>
       <div class="stop-km">
         <label>Nákladové km <input data-leg-km type="number" min="0" step="0.001" value="${orderText(leg?.kilometers ?? "")}"></label>
         <label>Fakturované km <input data-leg-billed type="number" min="0" step="0.001" placeholder="= nákladové" value="${orderText(leg?.billedKilometers ?? "")}"></label>
@@ -747,12 +766,23 @@ function routeState(prefix) {
   const legs = [];
   rows.forEach((row, index) => {
     const place = row.querySelector("[data-stop-place]").value.trim();
-    const liters = Number(row.querySelector("[data-stop-liters]").value);
+    const items = [...row.querySelectorAll("[data-stop-item]")].map((itemRow) => {
+      const fuel = Number(itemRow.querySelector("[data-stop-fuel]")?.value);
+      const compartment = Number(itemRow.querySelector("[data-item-comp]")?.value);
+      const litersText = itemRow.querySelector("[data-stop-liters]")?.value.trim() ?? "";
+      return {
+        fuelTypeId: Number.isInteger(fuel) && fuel > 0 ? fuel : null,
+        compartment: Number.isInteger(compartment) && compartment > 0 ? compartment : null,
+        liters: litersText === "" || !Number.isFinite(Number(litersText)) ? null : Number(litersText)
+      };
+    });
+    const liters = items.reduce((sum, item) => sum + Number(item.liters || 0), 0);
+    const itemsTotal = row.querySelector("[data-stop-items-total]");
+    if (itemsTotal) itemsTotal.textContent = items.length > 1 ? `Vykládka celkem ${orderLiters.format(liters)} l` : "";
     const kmText = row.querySelector("[data-leg-km]").value.trim();
     const kilometers = kmText === "" ? null : Number(kmText);
     const billedText = row.querySelector("[data-leg-billed]")?.value.trim() ?? "";
     const billedKilometers = billedText === "" || !Number.isFinite(Number(billedText)) ? null : Number(billedText);
-    const fuelValue = Number(row.querySelector("[data-stop-fuel]")?.value);
     const overridden = row.querySelector("[data-leg-override]").checked;
     const overridePrice = Number(row.querySelector("[data-leg-sale]").value || 0);
     const from = index === 0 ? loading : stops[index - 1].place;
@@ -767,7 +797,8 @@ function routeState(prefix) {
     stops.push({
       place,
       liters: Number.isFinite(liters) ? liters : null,
-      fuelTypeId: Number.isInteger(fuelValue) && fuelValue > 0 ? fuelValue : null,
+      fuelTypeId: items[0]?.fuelTypeId ?? null,
+      items,
       note: row.querySelector("[data-stop-note]").value,
       arrivalAt: row.querySelector("[data-stop-arrival]").value
         ? new Date(row.querySelector("[data-stop-arrival]").value).toISOString()
@@ -790,9 +821,69 @@ function routeState(prefix) {
   return { stops, legs, mode, salePerKm, salePerLiter, costPerKm };
 }
 
+// Přepážky u vykládky: nabízí jen přepážky, které se v nakládce plní, s palivem, které v nich je.
+function renderStopCompartments(prefix) {
+  const owners = new Map();
+  readLoads(prefix).forEach((load) => load.compartments.forEach((number) => owners.set(number, load)));
+  const numbers = [...owners.keys()].sort((a, b) => a - b);
+  document.querySelectorAll(`#${prefix}-stops [data-item-comp]`).forEach((select) => {
+    const selected = Number(select.value || select.dataset.selected || 0);
+    const itemRow = select.closest("[data-stop-item]");
+    const fuelSelect = itemRow?.querySelector("[data-stop-fuel]");
+    if (!numbers.length) {
+      select.innerHTML = `<option value="">${selected ? `${selected} (nakládka nemá přepážky)` : "bez přepážek"}</option>`;
+      if (selected) select.innerHTML = `<option value="">bez přepážek</option><option value="${selected}" selected>${selected} (nakládka nemá přepážky)</option>`;
+      select.classList.remove("missing");
+      return;
+    }
+    const legacy = selected && !owners.has(selected)
+      ? `<option value="${selected}" selected>${selected} (v nakládce se neplní)</option>` : "";
+    select.innerHTML = `<option value=""${selected ? "" : " selected"}>— vyberte —</option>${legacy}` + numbers.map((number) =>
+      `<option value="${number}"${number === selected ? " selected" : ""}>${number} · ${orderText(owners.get(number).fuelType || "")}</option>`).join("");
+    const liters = Number(itemRow?.querySelector("[data-stop-liters]")?.value || 0);
+    select.classList.toggle("missing", !select.value && liters > 0);
+    // Palivo se řídí přepážkou: v přepážce je palivo z nakládky.
+    const owner = owners.get(Number(select.value));
+    if (owner?.fuelTypeId && fuelSelect && fuelSelect.value !== String(owner.fuelTypeId)) {
+      fuelSelect.value = String(owner.fuelTypeId);
+      fuelSelect.dataset.fuelLinked = "0";
+    }
+  });
+}
+
+// Náklad Kč/km: když ho nikdo nevyplnil (prázdné nebo 0), doplní se sazba vozidla,
+// jinak výchozí sazba. Obě se zadávají v SQL (Disp_Vehicle.CostPerKm, Disp_Setting CostPerKm).
+function applyCostDefault(prefix) {
+  const field = document.querySelector(`#${prefix}-cost-km`);
+  const note = document.querySelector(`#${prefix}-cost-note`);
+  if (!field) return;
+  const vehicleId = document.querySelector(`#${prefix}-vehicle`)?.value || "";
+  const vehicle = (orderCatalog.vehicles || []).find((item) => item.id === vehicleId);
+  const vehicleRate = vehicle?.costPerKm === null || vehicle?.costPerKm === undefined ? null : Number(vehicle.costPerKm);
+  const rate = vehicleRate ?? Number(orderCatalog.defaultCostPerKm || 0);
+  const source = vehicleRate !== null ? `sazba vozidla ${vehicle.plate || ""}`.trim() : "výchozí sazba";
+  const locked = prefix === "edit" && !!orderDetail?.order?.isLocked;
+  const blank = field.value.trim() === "" || Number(field.value) === 0;
+  if (!field.disabled && !locked && !field.dataset.touched && (blank || field.dataset.auto === "1")) {
+    field.value = rate > 0 ? String(rate) : "";
+    field.dataset.auto = rate > 0 ? "1" : "";
+  }
+  if (!note) return;
+  if (rate <= 0)
+    note.textContent = "Sazba není zadaná. Doplňte ji v SQL (Disp_Vehicle.CostPerKm) nebo ji napište sem.";
+  else if (field.dataset.auto === "1")
+    note.textContent = `Doplněno: ${source}.`;
+  else if (Number(field.value) !== rate)
+    note.textContent = `${source[0].toUpperCase()}${source.slice(1)}: ${orderMoney.format(rate)} Kč/km.`;
+  else
+    note.textContent = "";
+}
+
 function refreshRoute(prefix) {
+  applyCostDefault(prefix);
   paintPairs(prefix);
   renderCompartments(prefix);
+  renderStopCompartments(prefix);
   const state = routeState(prefix);
   const loads = readLoads(prefix);
   const loaded = loads.reduce((sum, load) => sum + Number(load.liters || 0), 0);
@@ -835,13 +926,13 @@ function refreshRoute(prefix) {
       item.loaded += Number(load.liters || 0);
       balance.set(k, item);
     }
-    for (const stop of state.stops) {
-      const k = stop.fuelTypeId ? key(stop.fuelTypeId) : key(first?.fuelTypeId, first?.fuelType);
-      const name = stop.fuelTypeId
-        ? ((orderCatalog.fuelTypes || []).find((item) => item.id === stop.fuelTypeId)?.name || "")
+    for (const part of state.stops.flatMap((stop) => stop.items)) {
+      const k = part.fuelTypeId ? key(part.fuelTypeId) : key(first?.fuelTypeId, first?.fuelType);
+      const name = part.fuelTypeId
+        ? ((orderCatalog.fuelTypes || []).find((item) => item.id === part.fuelTypeId)?.name || "")
         : first?.fuelType;
       const item = balance.get(k) || { name, loaded: 0, delivered: 0 };
-      item.delivered += Number(stop.liters || 0);
+      item.delivered += Number(part.liters || 0);
       balance.set(k, item);
     }
     // Vyloženo musí po každém palivu sedět na naloženo, jinak server zakázku neuloží.
@@ -1027,7 +1118,9 @@ function versionLines(version) {
     const source = leg.kmSource === "Matrix" ? " · z matice" : leg.kmSource === "Manual" ? " · ručně" : "";
     const km = leg.kilometers === null || leg.kilometers === undefined || leg.kilometers === "" ? "—" : `${orderLiters.format(Number(leg.kilometers))} km${source}`;
     const billed = leg.billedKilometers === null || leg.billedKilometers === undefined ? "= nákladové" : `${orderLiters.format(Number(leg.billedKilometers))} km`;
-    const fuel = stop.fuelType || version.fuelType || "";
+    const fuel = stop.items?.length
+      ? stop.items.map((item) => `${item.fuelType || ""}${item.compartment ? ` (p. ${item.compartment})` : ""} ${orderLiters.format(Number(item.liters || 0))} l`).join(", ")
+      : stop.fuelType || version.fuelType || "";
     return `<tr>
       <td>${orderText(leg.sequence || index + 1)}</td>
       <td>${orderText(leg.fromPlace || "")}</td>
@@ -1195,13 +1288,15 @@ async function orderFetch(url, options) {
 }
 
 async function fetchCatalog() {
-  const [vehicles, drivers, fuels, loadingPlaces, points] = await Promise.all([
+  const [vehicles, drivers, fuels, loadingPlaces, points, rates] = await Promise.all([
     orderFetch("/api/dispatch/vehicles"),
     orderFetch("/api/dispatch/drivers"),
     orderFetch("/api/dispatch/fuel-types"),
     orderFetch("/api/dispatch/loading-places"),
-    orderFetch("/api/dispatch/points")
+    orderFetch("/api/dispatch/points"),
+    orderFetch("/api/dispatch/rates")
   ]);
+  if (rates.ok) orderCatalog.defaultCostPerKm = Number(rates.data?.defaultCostPerKm || 0);
   if (Array.isArray(vehicles.data)) orderCatalog.vehicles = vehicles.data;
   if (Array.isArray(drivers.data)) orderCatalog.drivers = drivers.data;
   if (Array.isArray(fuels.data)) orderCatalog.fuelTypes = fuels.data;
@@ -1381,6 +1476,18 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     refreshRoute(prefix);
     return;
   }
+  if (event.target.closest("[data-add-stop-item]")) {
+    const headerFuel = firstLoadFuel(prefix);
+    row.querySelector("[data-stop-items]").insertAdjacentHTML("beforeend", stopItemRow({ liters: "" }, headerFuel.id, headerFuel.name));
+    refreshRoute(prefix);
+    return;
+  }
+  if (event.target.closest("[data-stop-item-remove]")) {
+    const items = row.querySelectorAll("[data-stop-item]");
+    if (items.length > 1) event.target.closest("[data-stop-item]").remove();
+    refreshRoute(prefix);
+    return;
+  }
   if (event.target.closest("[data-km-save]")) {
     saveKmToMatrix(prefix, row);
     return;
@@ -1420,7 +1527,10 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
       scheduleCustomerSearch(prefix);
     }
   }
-  if (event.target.matches("[id$='-cost-km']")) event.target.dataset.touched = "1";
+  if (event.target.matches("[id$='-cost-km']")) {
+    event.target.dataset.touched = "1";
+    event.target.dataset.auto = "";
+  }
   if (event.target.matches("[data-leg-billed]")) {
     const billedRow = event.target.closest("[data-stop-row]");
     if (billedRow) {
@@ -1475,6 +1585,12 @@ document.querySelector("#orders-view").addEventListener("change", (event) => {
       });
       refreshRoute(prefix);
     }
+  }
+  if (event.target.matches("[data-item-comp]")) {
+    event.target.dataset.selected = event.target.value;
+    const prefix = event.target.closest("[data-route]")?.dataset.route;
+    if (prefix) refreshRoute(prefix);
+    return;
   }
   if (event.target.matches("[data-stop-fuel]")) {
     const prefix = event.target.closest("[data-route]")?.dataset.route;

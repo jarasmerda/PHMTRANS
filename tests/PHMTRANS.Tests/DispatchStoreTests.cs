@@ -41,7 +41,7 @@ public sealed class DispatchPageTests
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
         Assert.Contains("dispecink.js?v=15", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=32", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=33", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
@@ -55,7 +55,7 @@ public sealed class DispatchPageTests
         Assert.Contains("data-toggle-booking", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-comp-number", ordersJs, StringComparison.Ordinal);
         Assert.Contains("closeOrderDetail();", ordersJs, StringComparison.Ordinal);
-        Assert.Contains("dispecink-ridic.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-ridic.js?v=3", html, StringComparison.Ordinal);
         Assert.Contains("id=\"tab-driver\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver-view\" hidden", html, StringComparison.Ordinal);
         Assert.Contains("#ridic", ordersJs, StringComparison.Ordinal);
@@ -109,6 +109,10 @@ public sealed class DispatchPageTests
         Assert.Contains("/api/dispatch/calendar?", js, StringComparison.Ordinal);
         Assert.Contains("window.showOrder(order.dataset.calOrder)", js, StringComparison.Ordinal);
         Assert.DoesNotContain("/api/dispatch/rates", js, StringComparison.Ordinal);
+        Assert.Contains("id=\"tab-week\" class=\"ghost\" data-open-week", html, StringComparison.Ordinal);
+        Assert.True(html.IndexOf("id=\"tab-week\"", StringComparison.Ordinal) < html.IndexOf("id=\"tab-queue\"", StringComparison.Ordinal));
+        Assert.Contains("data-item-comp", ordersJs, StringComparison.Ordinal);
+        Assert.Contains("applyCostDefault", ordersJs, StringComparison.Ordinal);
         Assert.Contains("showView(\"calendar\")", ordersJs, StringComparison.Ordinal);
         Assert.Contains("#kalendar", ordersJs, StringComparison.Ordinal);
         Assert.Contains("param: \"zakazky\"", ordersJs, StringComparison.Ordinal);
@@ -205,7 +209,8 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(49, Count(script, "ALTER TABLE"));
+        Assert.Equal(50, Count(script, "ALTER TABLE"));
+        Assert.Contains("ALTER TABLE dbo.Disp_OrderStop ADD Items nvarchar(max) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Point ADD Latitude decimal(9,6) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Order ADD MissingDocumentsReason nvarchar(500) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_OrderLoad ADD Compartments nvarchar(40) NULL", script, StringComparison.Ordinal);

@@ -15,7 +15,8 @@ public static class OrderLegItems
             .Select(leg =>
             {
                 var stop = stops.FirstOrDefault(item => item.Sequence == leg.Sequence);
-                var fuel = string.IsNullOrWhiteSpace(stop?.FuelType) ? order.FuelType : stop.FuelType;
+                var stopFuel = stop is null ? "" : OrderStopItems.FuelText(stop);
+                var fuel = string.IsNullOrWhiteSpace(stopFuel) ? order.FuelType : stopFuel;
                 return new OrderXmlLine(Text(leg, fuel), 1m, leg.SalePrice);
             })
             .ToArray();
