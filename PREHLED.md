@@ -170,7 +170,7 @@ VALUES (N'id-vozidla', 1, 8000), (N'id-vozidla', 2, 6000);
 
 **Verze.** Každá obchodní změna přidá řádek `Disp_OrderVersion` se sazbami, vykládkami a úseky v `RouteJson`. Starší verze jde otevřít jen ke čtení. Přiřazení vozidla a řidiče verzi ani frontu nedělá.
 
-**Zápis do Pohody.** `Pohoda:SyncMode`: `Off` neposílá, `DryRun` jen uloží XML, `Live` (výchozí) volá mServer. Položka je `Leg N: odkud → kam, palivo, litry`. Náklad, vozidlo a řidič v XML nejsou.
+**Zápis do Pohody.** Zakázka jde do fronty pro Pohodu až při úspěšném **Potvrdit k fakturaci** (nebo při označení jako vyfakturovaná). Založení a úpravy před potvrzením do Pohody nic neposílají a „Odeslat znovu“ je odmítne. Potvrzená zakázka, která v Pohodě ještě není, se po změně údajů pro Pohodu pošle znovu. Zakázka, která už v Pohodě je, se dál aktualizuje nebo opravuje jako dřív. `Pohoda:SyncMode`: `Off` neposílá, `DryRun` jen uloží XML, `Live` (výchozí) volá mServer. Položka je `Leg N: odkud → kam, palivo, litry`. Náklad, vozidlo a řidič v XML nejsou.
 
 - Neodeslaná změna přepíše otevřenou položku fronty.
 - Odeslaná neuzamčená objednávka se mění smazáním a novým založením (`ord:delete` a `ord:add`). Když smazání projde a založení ne, další pokus už jen zakládá. Doklad, který v Pohodě už není, se bere jako smazaný.

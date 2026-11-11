@@ -175,6 +175,8 @@ public static class OrderWorkflow
             return new OrderChange.Rejected("Zakázka neexistuje.");
         if (context.Current.Status == OrderStatuses.Stornovano)
             return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
+        if (latest is null && context.Current.PohodaOrderId is null && !OrderSyncPlanner.IsConfirmed(context.Current))
+            return new OrderChange.Rejected("Do Pohody se zakázka posílá až po potvrzení k fakturaci.");
 
         if (latest is not null && latest.Status is OrderQueueStatuses.Failed or OrderQueueStatuses.DryRun or OrderQueueStatuses.Pending)
         {
