@@ -17,9 +17,30 @@ public static class OrderLegItems
                 var stop = stops.FirstOrDefault(item => item.Sequence == leg.Sequence);
                 var stopFuel = stop is null ? "" : OrderStopItems.FuelText(stop);
                 var fuel = string.IsNullOrWhiteSpace(stopFuel) ? order.FuelType : stopFuel;
-                return new OrderXmlLine(Text(leg, fuel), 1m, leg.SalePrice);
+                return Line(order, leg, Text(leg, fuel));
             })
             .ToArray();
+    }
+
+    // Do Pohody jde množství a cena za jednotku: fakturované km × Kč/km, nebo litry × Kč/l.
+    // Ruční cena úseku, úsek bez km/litrů nebo cena, která na množství × sazbu nesedí na haléř,
+    // jde jako 1 ks za celou cenu, aby součet v Pohodě vždy seděl.
+    public static OrderXmlLine Line(DispatchOrder order, OrderLeg leg, string text)
+    {
+        if (!leg.SaleOverridden)
+        {
+            var unit = order.PricingMode switch
+            {
+                OrderPricing.ByLiters when leg.Liters > 0m => new OrderXmlLine(text, leg.Liters, order.SalePerLiter, "l"),
+                OrderPricing.ByKm when (leg.BilledKilometers ?? leg.Kilometers) is > 0m and var km =>
+                    new OrderXmlLine(text, km, order.SalePerKm, "km"),
+                _ => null
+            };
+            if (unit is not null && unit.Amount == leg.SalePrice)
+                return unit;
+        }
+
+        return new OrderXmlLine(text, 1m, leg.SalePrice);
     }
 
     public static string Text(OrderLeg leg, string? fuel = null)

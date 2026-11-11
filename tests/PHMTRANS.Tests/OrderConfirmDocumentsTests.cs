@@ -72,6 +72,20 @@ public sealed class OrderConfirmDocumentsTests
         Assert.Null(cleared.MissingDocumentsReason);
     }
 
+    [Fact]
+    public async Task Order_with_zero_sale_cannot_be_confirmed()
+    {
+        var store = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(new PohodaOptions { SyncMode = "DryRun" }));
+        var free = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request() with { AgreedPrice = 0m }, CancellationToken.None)).Order;
+
+        var rejected = Assert.IsType<OrderMutation.Rejected>(await store.ConfirmAsync(free.Id, CancellationToken.None));
+        Assert.Contains("prodej 0 Kč", rejected.Message);
+        Assert.Equal(OrderStatuses.Nova, (await store.GetAsync(free.Id, CancellationToken.None))!.Order.Status);
+
+        var withSurcharge = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request() with { AgreedPrice = 0m, Surcharges = 500m }, CancellationToken.None)).Order;
+        Assert.IsType<OrderMutation.Success>(await store.ConfirmAsync(withSurcharge.Id, CancellationToken.None));
+    }
+
     private static DispatchOrder Order(string status, params string[] places) =>
         new("o1", "Z2026-0001", 42, "Zákazník", "Sklad", places[^1], Day, Day, "nafta", 1000m, 0m, 0m, null, null, null, null,
             status, false, 1, null, null, null, null, DateTimeOffset.Now, DateTimeOffset.Now,

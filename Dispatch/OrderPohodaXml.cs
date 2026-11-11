@@ -4,7 +4,8 @@ using PHMTRANS.Pohoda;
 
 namespace PHMTRANS.Dispatch;
 
-public sealed record OrderXmlLine(string Text, decimal Quantity, decimal UnitPrice)
+// Unit: "km" a cena za km, "l" a cena za litr, nebo "ks" s celkovou cenou (ruční cena, příplatky).
+public sealed record OrderXmlLine(string Text, decimal Quantity, decimal UnitPrice, string Unit = "ks")
 {
     public decimal Amount => decimal.Round(Quantity * UnitPrice, 2, MidpointRounding.AwayFromZero);
 }
@@ -59,7 +60,7 @@ public static class OrderPohodaXml
 
             var lines = new List<OrderXmlLine>();
             foreach (var line in SaleItems(lastSent))
-                lines.Add(new OrderXmlLine("Storno: " + line.Text, -line.Quantity, line.UnitPrice));
+                lines.Add(new OrderXmlLine("Storno: " + line.Text, -line.Quantity, line.UnitPrice, line.Unit));
             if (action == OrderSyncAction.Correction)
                 lines.AddRange(SaleItems(current));
             return lines;
@@ -464,12 +465,12 @@ public static class OrderPohodaXml
         new(Ord + "orderItem",
             new XElement(Ord + "text", Trim(line.Text, ItemTextMax)),
             new XElement(Ord + "quantity", line.Quantity.ToString("0.###", CultureInfo.InvariantCulture)),
-            new XElement(Ord + "unit", "ks"),
+            new XElement(Ord + "unit", line.Unit),
             new XElement(Ord + "payVAT", "false"),
             // Sazbu DPH teď neřešíme. none = položka bez rozlišení daně.
             new XElement(Ord + "rateVAT", "none"),
             new XElement(Ord + "homeCurrency",
-                new XElement(Typ + "unitPrice", line.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture))));
+                new XElement(Typ + "unitPrice", line.UnitPrice.ToString("0.00##", CultureInfo.InvariantCulture))));
 
     private static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
