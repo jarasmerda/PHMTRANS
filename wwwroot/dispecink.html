@@ -188,6 +188,14 @@
     .load-row { display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(8rem, 0.8fr) auto; gap: 0.5rem 0.6rem; align-items: end; margin-bottom: 0.5rem; }
     .load-row input, .load-row select { width: 100%; min-width: 0; box-sizing: border-box; }
     .loads > .note { margin-left: 0.6rem; }
+    .load-comp { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: -0.1rem; }
+    .load-comp .note { margin: 0 0 0 0.3rem; }
+    .comp-label { font-size: 0.85rem; font-weight: 700; margin-right: 0.2rem; }
+    .comp-chip { display: inline-flex; gap: 0.3rem; align-items: center; padding: 0.25rem 0.55rem; border: 1px solid var(--border); border-radius: 999px; background: #fff; font-size: 0.85rem; cursor: pointer; }
+    .comp-chip input { width: auto !important; margin: 0; }
+    .comp-chip small { color: var(--text-secondary); }
+    .comp-chip.on { border-color: var(--accent); background: #fdf1e2; }
+    .comp-chip.taken { opacity: 0.45; cursor: not-allowed; text-decoration: line-through; }
     @media (max-width: 760px) { .load-row { grid-template-columns: 1fr 1fr; } .load-row button { grid-column: 1 / -1; justify-self: start; } }
     .stop-row {
       display: grid;
@@ -354,7 +362,8 @@
         </div>
         <p id="doc-message" class="note" hidden></p>
         <ul id="doc-list" class="doc-list"></ul>
-      </section>      <form id="order-edit"></form>
+      </section>
+      <form id="order-edit"></form>
       <div class="order-actions">
         <button type="button" id="order-save">Uložit změny</button>
         <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
@@ -473,7 +482,7 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=22"></script>
+  <script src="/dispecink-orders.js?v=23"></script>
   <script src="/dispecink-doklady.js?v=1"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=1"></script>

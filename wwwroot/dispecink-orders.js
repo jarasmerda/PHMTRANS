@@ -341,6 +341,7 @@ function loadRow(load, preferFirst) {
       <label>Palivo <select data-load-fuel required>${fuelOptions(load?.fuelTypeId, load?.fuelType, preferFirst)}</select></label>
       <label>Naložené litry <input data-load-liters type="number" min="0" step="0.001" required value="${orderText(load?.liters ?? "")}"></label>
       <button type="button" class="ghost" data-load-remove>Odebrat</button>
+      <div class="load-comp" data-load-comp data-selected="${orderText((load?.compartments || []).join(","))}"></div>
     </div>`;
 }
 
@@ -352,7 +353,8 @@ function readLoads(prefix) {
     return {
       fuelTypeId: Number.isInteger(id) && id > 0 ? id : null,
       fuelType: select?.selectedOptions?.[0]?.textContent?.trim() || "",
-      liters: litersText === "" ? null : Number(litersText)
+      liters: litersText === "" ? null : Number(litersText),
+      compartments: rowCompartments(row)
     };
   });
 }
@@ -362,9 +364,63 @@ function firstLoadFuel(prefix) {
   return { id: first?.fuelTypeId || "", name: first?.fuelType || "" };
 }
 
+// Přepážky vozidla u řádku nakládky. Jedna přepážka může mít jen jedno palivo.
+function vehicleCompartmentsOf(prefix) {
+  const id = document.querySelector(`#${prefix}-vehicle`)?.value;
+  return [...((orderCatalog.vehicles || []).find((item) => item.id === id)?.compartments ?? [])]
+    .sort((a, b) => a.number - b.number);
+}
+
+function rowCompartments(row) {
+  return (row.querySelector("[data-load-comp]")?.dataset.selected || "")
+    .split(",").map(Number).filter((number) => Number.isInteger(number) && number > 0);
+}
+
+function renderCompartments(prefix) {
+  const rows = [...document.querySelectorAll(`#${prefix}-loads [data-load-row]`)];
+  const vehicleSelect = document.querySelector(`#${prefix}-vehicle`);
+  const list = vehicleCompartmentsOf(prefix);
+  const locked = !!vehicleSelect?.disabled;
+  const owner = new Map();
+  rows.forEach((row, index) => rowCompartments(row).forEach((number) => owner.set(number, index)));
+  rows.forEach((row, index) => {
+    const box = row.querySelector("[data-load-comp]");
+    if (!box) return;
+    let selected = rowCompartments(row);
+    if (!list.length) {
+      const hint = vehicleSelect?.value ? "Vozidlo nemá zadané přepážky (doplníte je v sazbách vozidel)." : "Nejdřív vyberte vozidlo.";
+      box.innerHTML = `<span class="comp-label">Přepážky</span><span class="note">${orderText(hint)}</span>`
+        + (selected.length ? ` <span class="note warn">Vybrané přepážky ${orderText(selected.join(", "))} bez vozidla neuložíte.</span>` : "");
+      return;
+    }
+    // Po změně vozidla zůstanou jen přepážky, které nové vozidlo má.
+    const kept = selected.filter((number) => list.some((item) => item.number === number));
+    if (kept.length !== selected.length) {
+      selected = kept;
+      box.dataset.selected = kept.join(",");
+    }
+    const liters = Number(row.querySelector("[data-load-liters]")?.value || 0);
+    const capacity = list.filter((item) => selected.includes(item.number))
+      .reduce((sum, item) => sum + Number(item.capacityLiters || 0), 0);
+    const chips = list.map((item) => {
+      const mine = selected.includes(item.number);
+      const taken = !mine && owner.has(item.number) && owner.get(item.number) !== index;
+      return `<label class="comp-chip${mine ? " on" : ""}${taken ? " taken" : ""}" title="${orderText(`${orderLiters.format(Number(item.capacityLiters || 0))} l${taken ? " – už má jiné palivo" : ""}`)}">
+        <input type="checkbox" data-comp-number="${item.number}"${mine ? " checked" : ""}${taken || locked ? " disabled" : ""}>
+        <b>${item.number}</b> <small>${orderText(orderLiters.format(Number(item.capacityLiters || 0)))} l</small></label>`;
+    }).join("");
+    let status = "";
+    if (selected.length)
+      status = liters > capacity
+        ? `<span class="note warn">Nevejde se: ${orderText(orderLiters.format(liters))} l, přepážky pojmou ${orderText(orderLiters.format(capacity))} l.</span>`
+        : `<span class="note">Přepážky pojmou ${orderText(orderLiters.format(capacity))} l.</span>`;
+    box.innerHTML = `<span class="comp-label">Přepážky</span>${chips}${status}`;
+  });
+}
+
 function loadsText(order) {
   return orderLoadsOf(order)
-    .map((load) => `${load.fuelType || "—"} ${orderLiters.format(Number(load.liters || 0))} l`)
+    .map((load) => `${load.fuelType || "—"} ${orderLiters.format(Number(load.liters || 0))} l${load.compartments?.length ? ` (přepážky ${load.compartments.join(", ")})` : ""}`)
     .join(", ");
 }
 
@@ -708,6 +764,7 @@ function routeState(prefix) {
 
 function refreshRoute(prefix) {
   paintPairs(prefix);
+  renderCompartments(prefix);
   const state = routeState(prefix);
   const loads = readLoads(prefix);
   const loaded = loads.reduce((sum, load) => sum + Number(load.liters || 0), 0);
@@ -803,7 +860,7 @@ function readForm(prefix) {
     fuelType: firstLoad.fuelType || "",
     fuelTypeId: firstLoad.fuelTypeId || null,
     liters: Number.isFinite(liters) ? liters : null,
-    loads: loads.map((load) => ({ fuelTypeId: load.fuelTypeId, liters: load.liters })),
+    loads: loads.map((load) => ({ fuelTypeId: load.fuelTypeId, liters: load.liters, compartments: load.compartments.length ? load.compartments : null })),
     agreedPrice: agreed,
     surcharges: Number.isFinite(surcharges) ? surcharges : null,
     vehicleId: value("vehicle"),
@@ -1300,6 +1357,8 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
 });
 
 document.querySelector("#orders-view").addEventListener("input", (event) => {
+  // Zaškrtnutí přepážky řeší posluchač "change".
+  if (event.target.matches("[data-comp-number]")) return;
   if (event.target.matches("[id$='-customer']") && !event.target.id.endsWith("-customer-id")) {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
     const idField = document.querySelector(`#${prefix}-customer-id`);
@@ -1330,6 +1389,21 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
 });
 
 document.querySelector("#orders-view").addEventListener("change", (event) => {
+  if (event.target.matches("[data-comp-number]")) {
+    const box = event.target.closest("[data-load-comp]");
+    const prefix = event.target.closest("[data-loads]")?.dataset.loads;
+    if (box && prefix) {
+      const numbers = new Set(rowCompartments(event.target.closest("[data-load-row]")));
+      const number = Number(event.target.dataset.compNumber);
+      if (event.target.checked) numbers.add(number);
+      else numbers.delete(number);
+      box.dataset.selected = [...numbers].sort((a, b) => a - b).join(",");
+      renderCompartments(prefix);
+    }
+    return;
+  }
+  if (event.target.matches("select[id$='-vehicle']"))
+    renderCompartments(event.target.id.startsWith("edit-") ? "edit" : "create");
   if (event.target.matches("[id$='-loading-date'], [id$='-unloading-date'], [id$='-loading-time'], [id$='-unloading-time']"))
     scheduleAvailability(event.target.id.startsWith("edit-") ? "edit" : "create");
   if (event.target.matches("select[id$='-driver']"))
