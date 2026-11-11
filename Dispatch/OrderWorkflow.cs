@@ -138,7 +138,16 @@ public static class OrderWorkflow
                 MissingDocumentsReason = reason
             }
             : context.Current;
-        return Finish(order, context.Current, context, changed, confirmRequested: true);
+        // Už potvrzená zakázka: nový důvod chybějících dokladů se uloží jako nová verze.
+        var reasonChanged = !changed && reason is not null && reason != context.Current.MissingDocumentsReason;
+        if (reasonChanged)
+            order = context.Current with
+            {
+                CurrentVersion = context.Current.CurrentVersion + 1,
+                UpdatedAt = context.Now,
+                MissingDocumentsReason = reason
+            };
+        return Finish(order, context.Current, context, changed || reasonChanged, confirmRequested: true);
     }
 
     public static OrderChange MarkInvoiced(string? invoiceNumber, OrderEditContext context)
@@ -341,7 +350,7 @@ public static class OrderWorkflow
             Loads: draft.Loads,
             LoadingTime: draft.LoadingTime,
             UnloadingTime: draft.UnloadingTime,
-            MissingDocumentsReason: current?.MissingDocumentsReason);
+            MissingDocumentsReason: draft.MissingDocumentsReason);
     }
 
     private static (string Status, bool Locked, string? Invoice) ResolveState(
@@ -465,6 +474,10 @@ public static class OrderWorkflow
         var invoiceError = CheckLength(request.PohodaInvoiceNumber, 40, "Číslo faktury může mít nejvýše 40 znaků.");
         if (invoiceError is not null)
             return Draft.Fail(invoiceError);
+        var reasonError = CheckLength(request.MissingDocumentsReason, 500, "Důvod chybějících dokladů může mít nejvýše 500 znaků.");
+        if (reasonError is not null)
+            return Draft.Fail(reasonError);
+        var documentsReason = request.MissingDocumentsReason is null ? current?.MissingDocumentsReason : Blank(request.MissingDocumentsReason);
 
         var status = string.IsNullOrWhiteSpace(request.Status) ? current?.Status ?? OrderStatuses.Nova : request.Status.Trim();
         if (!OrderStatuses.IsKnown(status))
@@ -500,7 +513,8 @@ public static class OrderWorkflow
             fuel.Item1,
             loads,
             loadingTime.Value,
-            unloadingTime.Value);
+            unloadingTime.Value,
+            documentsReason);
     }
 
     private static OrderChange WithDistances(OrderChange change, IReadOnlyList<DistanceWrite>? distances)
@@ -604,7 +618,8 @@ public static class OrderWorkflow
         int? FuelTypeId = null,
         IReadOnlyList<OrderLoad>? Loads = null,
         string? LoadingTime = null,
-        string? UnloadingTime = null)
+        string? UnloadingTime = null,
+        string? MissingDocumentsReason = null)
     {
         public static Draft Fail(string error) => new(error, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }

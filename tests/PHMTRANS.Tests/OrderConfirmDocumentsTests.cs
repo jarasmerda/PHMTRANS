@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using PHMTRANS.Dispatch;
 using PHMTRANS.Pohoda;
 using Xunit;
@@ -57,6 +57,19 @@ public sealed class OrderConfirmDocumentsTests
         Assert.Equal(OrderStatuses.KFakturaci, confirmed.Status);
         Assert.Equal("řidič dodá zítra", confirmed.MissingDocumentsReason);
         Assert.Equal("řidič dodá zítra", (await store.GetAsync(created.Id, CancellationToken.None))!.Order.MissingDocumentsReason);
+
+        // Už potvrzená zakázka: nový důvod se uloží jako nová verze.
+        var again = Assert.IsType<OrderMutation.Success>(await store.ConfirmAsync(created.Id, CancellationToken.None, "zákazník pošle e-mailem")).Order;
+        Assert.Equal("zákazník pošle e-mailem", again.MissingDocumentsReason);
+        Assert.Equal(confirmed.CurrentVersion + 1, again.CurrentVersion);
+
+        // Ve formuláři jde důvod upravit i smazat, bez pole zůstane beze změny.
+        var kept = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(created.Id, Request() with { Status = OrderStatuses.KFakturaci, Note = "jiná poznámka" }, CancellationToken.None)).Order;
+        Assert.Equal("zákazník pošle e-mailem", kept.MissingDocumentsReason);
+        var edited = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(created.Id, Request() with { Status = OrderStatuses.KFakturaci, Note = "jiná poznámka", MissingDocumentsReason = " doloženo později " }, CancellationToken.None)).Order;
+        Assert.Equal("doloženo později", edited.MissingDocumentsReason);
+        var cleared = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(created.Id, Request() with { Status = OrderStatuses.KFakturaci, Note = "jiná poznámka", MissingDocumentsReason = "" }, CancellationToken.None)).Order;
+        Assert.Null(cleared.MissingDocumentsReason);
     }
 
     private static DispatchOrder Order(string status, params string[] places) =>
