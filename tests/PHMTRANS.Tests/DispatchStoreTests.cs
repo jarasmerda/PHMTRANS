@@ -41,7 +41,7 @@ public sealed class DispatchPageTests
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
         Assert.Contains("dispecink.js?v=15", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=33", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=34", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
@@ -55,7 +55,7 @@ public sealed class DispatchPageTests
         Assert.Contains("data-toggle-booking", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-comp-number", ordersJs, StringComparison.Ordinal);
         Assert.Contains("closeOrderDetail();", ordersJs, StringComparison.Ordinal);
-        Assert.Contains("dispecink-ridic.js?v=3", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-ridic.js?v=4", html, StringComparison.Ordinal);
         Assert.Contains("id=\"tab-driver\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver-view\" hidden", html, StringComparison.Ordinal);
         Assert.Contains("#ridic", ordersJs, StringComparison.Ordinal);

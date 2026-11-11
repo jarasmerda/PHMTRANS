@@ -103,11 +103,17 @@
     return order.loads?.length ? order.loads : [{ fuelTypeId: order.fuelTypeId, fuelType: order.fuelType, liters: order.liters }];
   }
 
+  function compartmentsText(item) {
+    const numbers = item.compartments?.length ? item.compartments : item.compartment ? [item.compartment] : [];
+    if (!numbers.length) return "";
+    return ` <span class="dv-chip comp">${numbers.length > 1 ? "z přepážek" : "z přepážky"} ${esc(numbers.join(", "))}</span>`;
+  }
+
   // Co se na vykládce vykládá: palivo, litry a přepážka (u starších zakázek přepážky paliva z nakládky).
   function stopItemsHtml(order, stop) {
     if (stop.items?.length) {
       return `<ul class="dv-stop-items">${stop.items.map((item) => `<li><strong>${esc(item.fuelType || "palivo")}</strong> ${esc(liters.format(Number(item.liters || 0)))} l${
-        item.compartment ? ` <span class="dv-chip comp">z přepážky ${esc(item.compartment)}</span>` : ""}</li>`).join("")}</ul>`;
+        compartmentsText(item)}</li>`).join("")}</ul>`;
     }
     const compartments = stopCompartments(order, stop);
     return `<span>${esc(stop.fuelType || loadsOf(order)[0]?.fuelType || "")} ${esc(liters.format(Number(stop.liters || 0)))} l${
