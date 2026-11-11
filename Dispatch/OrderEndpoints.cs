@@ -23,6 +23,7 @@ public static class OrderEndpoints
         api.MapPost("/orders/{id}/cancel", CancelOrder);
         api.MapGet("/sync", ListSync);
         api.MapGet("/customers", FindCustomers);
+        api.MapGet("/customers/{id:int}/margin", CustomerMargin);
         app.MapOrderDocuments();
     }
 
@@ -176,6 +177,22 @@ public static class OrderEndpoints
             var items = await store.ListQueueAsync(cancellationToken);
             return Results.Ok(new OrderSyncResponse(mode, OrderSyncMode.Describe(mode), items));
         });
+
+    // Marže zákazníka z adresáře Pohody pro výpočet prodejní sazby za km.
+    private static async Task<IResult> CustomerMargin(
+        int id,
+        IPohodaAddressBook addressBook,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Results.Ok(await addressBook.MarginAsync(id, cancellationToken));
+        }
+        catch (PohodaAddressBookException exception)
+        {
+            return Results.Ok(new PohodaCustomerMargin(null, exception.Message));
+        }
+    }
 
     private static async Task<IResult> FindCustomers(
         string? q,

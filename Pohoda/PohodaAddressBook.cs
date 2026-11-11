@@ -25,6 +25,9 @@ public sealed class PohodaAddressBookException(string message, bool permissionDe
 
 public sealed record PohodaAddressGroup(int Id, string? Ico, string? Group, string? Name = null);
 
+// Marže zákazníka v procentech z adresáře Pohody. Message vysvětlí, proč chybí.
+public sealed record PohodaCustomerMargin(decimal? Percent, string? Message = null);
+
 public interface IPohodaAddressBook
 {
     Task<IReadOnlyList<PohodaAddress>> SearchAsync(string query, CancellationToken cancellationToken);
@@ -34,6 +37,10 @@ public interface IPohodaAddressBook
         IReadOnlyCollection<int> ids,
         IReadOnlyCollection<string> icos,
         CancellationToken cancellationToken);
+
+    /// <summary>Marže zákazníka v % z jeho cenové hladiny: dbo.AD.CenyIDS → dbo.SkCeny.IDS → SkCeny.Marze.</summary>
+    Task<PohodaCustomerMargin> MarginAsync(int id, CancellationToken cancellationToken) =>
+        Task.FromResult(new PohodaCustomerMargin(null, "Marže zákazníka není k dispozici."));
 }
 
 // Jen čtení. Do dbo.AD se nezapisuje.
@@ -74,6 +81,19 @@ public static partial class PohodaAddressSql
         SELECT ID, ICO, Skupina, Firma, Jmeno
         FROM {QualifiedTable(database)}
         WHERE ID IN @Ids OR ICO IN @Icos
+        """;
+
+    public static string MarginPermissionMessage(string database) =>
+        $"Účet {Login} nemá oprávnění SELECT na cenové hladiny Pohody {database}.dbo.SkCeny. " +
+        $"Správce databáze musí spustit: GRANT SELECT ON [{database}].dbo.SkCeny TO {Login};";
+
+    // Marže je u cenové hladiny zákazníka (Pohoda: Cena → Výchozí nastavení), ne přímo v adresáři.
+    public static string MarginSql(string database) =>
+        $"""
+        SELECT TOP (1) a.CenyIDS, TRY_CONVERT(decimal(18,4), c.Marze) AS Marze
+        FROM {QualifiedTable(database)} a
+        LEFT JOIN [{database}].dbo.SkCeny c ON c.IDS = a.CenyIDS
+        WHERE a.ID = @Id
         """;
 
     public static string Like(string query)
@@ -145,6 +165,24 @@ public sealed class PohodaAddressGroupRow
         : null;
 }
 
+public sealed class PohodaMarginRow
+{
+    public string? CenyIDS { get; set; }
+    public decimal? Marze { get; set; }
+
+    public static PohodaCustomerMargin ToMargin(PohodaMarginRow? row)
+    {
+        if (row is null)
+            return new PohodaCustomerMargin(null, "Zákazník v adresáři Pohody není.");
+        var level = row.CenyIDS?.Trim();
+        if (string.IsNullOrEmpty(level))
+            return new PohodaCustomerMargin(null, "Zákazník nemá v Pohodě cenovou hladinu (Cena → Výchozí nastavení).");
+        return row.Marze is null
+            ? new PohodaCustomerMargin(null, $"Cenová hladina {level} nemá v Pohodě vyplněnou marži.")
+            : new PohodaCustomerMargin(row.Marze, $"Cenová hladina {level}.");
+    }
+}
+
 public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<PohodaOptions> options) : IPohodaAddressBook
 {
     private readonly string? _connectionString = configuration.GetConnectionString("Dispatch");
@@ -171,6 +209,22 @@ public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<
             new { Ids = ids.ToArray(), Icos = icos.ToArray() },
             cancellationToken);
         return rows.Select(row => new PohodaAddressGroup(row.ID, row.ICO?.Trim(), row.Skupina?.Trim(), row.Name)).ToArray();
+    }
+
+    public async Task<PohodaCustomerMargin> MarginAsync(int id, CancellationToken cancellationToken)
+    {
+        IEnumerable<PohodaMarginRow> rows;
+        try
+        {
+            rows = await QueryAsync<PohodaMarginRow>(PohodaAddressSql.MarginSql, new { Id = id }, cancellationToken);
+        }
+        catch (PohodaAddressBookException exception) when (exception.PermissionDenied)
+        {
+            var database = PohodaAddressSql.DatabaseName(options.Value.AddressBookDatabase);
+            throw new PohodaAddressBookException(PohodaAddressSql.MarginPermissionMessage(database), permissionDenied: true);
+        }
+
+        return PohodaMarginRow.ToMargin(rows.FirstOrDefault());
     }
 
     private async Task<IEnumerable<T>> QueryAsync<T>(Func<string, string> sqlFor, object parameters, CancellationToken cancellationToken)
