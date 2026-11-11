@@ -909,7 +909,7 @@ function renderOrders(data) {
   document.querySelector("#ocount-vyfakturovano").textContent = orderCount(data, "Vyfakturováno");
   document.querySelector("#ocount-stornovano").textContent = orderCount(data, "Stornováno");
   document.querySelector("#order-cards").hidden = false;
-  document.querySelector("#order-rows").innerHTML = orderList.map((order) => `<tr>
+  document.querySelector("#order-rows").innerHTML = orderList.map((order) => `<tr${order.missingDocumentsReason ? ` class="has-reason"` : ""}>
       <td>${orderText(order.code)}<br><span class="route-to">v${orderText(order.currentVersion)}</span></td>
       <td>${orderText(order.customerName)}</td>
       <td>${orderText(order.loadingPlace)}<br><span class="route-to">→ ${orderText(order.unloadingPlace)}</span></td>
@@ -919,7 +919,9 @@ function renderOrders(data) {
       <td>${orderText(order.status)}${order.isLocked ? `<br><span class="pill">Zámek</span>` : ""}</td>
       <td>${orderText(order.pohodaOrderNumber || "—")}<br>${order.latestSyncStatus ? syncPill(order.latestSyncStatus) : `<span class="pill">neodesláno</span>`}${order.latestSyncWarning ? `<div class="note warn">${orderText(order.latestSyncWarning)}</div>` : ""}${order.latestSyncError ? `<div class="note">${orderText(order.latestSyncError)}</div>` : ""}</td>
       <td><button type="button" data-open="${orderText(order.id)}">Otevřít</button></td>
-    </tr>`).join("");
+    </tr>${order.missingDocumentsReason
+      ? `<tr class="reason-row"><td colspan="9"><span class="reason-label">Chybějící doklady, důvod:</span>${orderText(order.missingDocumentsReason)}</td></tr>`
+      : ""}`).join("");
   document.querySelector("#order-table-wrap").hidden = false;
   const empty = document.querySelector("#orders-empty");
   empty.hidden = orderList.length > 0;
