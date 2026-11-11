@@ -411,7 +411,7 @@ function renderCompartments(prefix) {
     if (!box) return;
     let selected = rowCompartments(row);
     if (!list.length) {
-      const hint = vehicleSelect?.value ? "Vozidlo nemá zadané přepážky (doplníte je v sazbách vozidel)." : "Nejdřív vyberte vozidlo.";
+      const hint = vehicleSelect?.value ? "Vozidlo nemá zadané přepážky (doplní se v SQL, tabulka Disp_VehicleCompartment)." : "Nejdřív vyberte vozidlo.";
       box.innerHTML = `<span class="comp-label">Přepážky</span><span class="note">${orderText(hint)}</span>`
         + (selected.length ? ` <span class="note warn">Vybrané přepážky ${orderText(selected.join(", "))} bez vozidla neuložíte.</span>` : "");
       return;

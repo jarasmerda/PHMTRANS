@@ -91,7 +91,7 @@
       font-size: 0.78rem;
     }
     #order-message, #queue-message, .route-warn, .note.warn { color: var(--alert); font-weight: 700; }
-    #rates-wrap, #calendar-wrap {
+    #calendar-wrap {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
@@ -379,7 +379,6 @@
       #create > label { flex-basis: 100%; }
       #create-order-list { min-height: 7.5rem; }
     }
-    #vehicle-rates { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0; }
     @media (max-width: 900px) {
       #order-cards { grid-template-columns: 1fr 1fr; }
     }
@@ -563,15 +562,6 @@
         </div>
       </form>
     </dialog>
-    <section id="rates-wrap">
-      <h2>Nákladová sazba</h2>
-      <p class="note">Výchozí sazba platí, když vozidlo nemá vlastní. Na zakázce ji lze přepsat a uloží se do verze.</p>
-      <form id="rates">
-        <label>Výchozí Kč/km <input id="default-cost" type="number" min="0" step="0.0001" required></label>
-        <div id="vehicle-rates"></div>
-        <button type="submit">Uložit sazby</button>
-      </form>
-    </section>
   </div>
   <div id="calendar-view" hidden>
     <section id="calendar-wrap">
@@ -653,8 +643,8 @@
     </div>
   </div>
   <script src="/multi-filter.js?v=1"></script>
-  <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=29"></script>
+  <script src="/dispecink.js?v=15"></script>
+  <script src="/dispecink-orders.js?v=30"></script>
   <script src="/dispecink-doklady.js?v=4"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=1"></script>

@@ -1,52 +1,13 @@
-// Dispečink: společné pomůcky, nákladové sazby a kalendář vytíženosti řidičů.
+// Dispečink: společné pomůcky a kalendář vytíženosti řidičů. Nákladové sazby se mění v SQL.
 // Zakázky a frontu Pohody obsluhuje dispecink-orders.js.
 const text = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
 }[char]));
 const litersLabel = (value) => new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 }).format(Number(value || 0));
 const dayLabel = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" });
-let rates = null;
-let ratesSaving = false;
 let calendarSeq = 0;
 
 window.keepQuery = (hash) => `${location.pathname}${location.search}${hash || ""}`;
-
-function ratesMessage(value) {
-  const box = document.querySelector("#order-message");
-  if (!box) return;
-  box.hidden = !value;
-  box.textContent = value ?? "";
-}
-
-function compartmentsText(vehicle) {
-  const list = vehicle.compartments ?? [];
-  if (!list.length) return "přepážky nezadané";
-  const total = list.reduce((sum, item) => sum + Number(item.capacityLiters || 0), 0);
-  const word = list.length === 1 ? "přepážka" : list.length < 5 ? "přepážky" : "přepážek";
-  return `${list.length} ${word} · ${litersLabel(total)} l (${list.map((item) => litersLabel(item.capacityLiters)).join(" / ")})`;
-}
-
-function renderRates() {
-  if (!rates) return;
-  document.querySelector("#default-cost").value = rates.defaultCostPerKm ?? 0;
-  document.querySelector("#vehicle-rates").innerHTML = (rates.vehicles ?? []).map((vehicle) =>
-    `<label>${text(vehicle.plate)} · ${text(vehicle.label)}
-      <small class="note">${text(compartmentsText(vehicle))}</small>
-      <input data-vehicle-cost="${text(vehicle.id)}" type="number" min="0" step="0.0001" placeholder="výchozí" value="${vehicle.costPerKm ?? ""}">
-    </label>`).join("");
-}
-
-async function loadRates() {
-  const response = await fetch("/api/dispatch/rates", { cache: "no-store" }).catch(() => null);
-  if (!response) return;
-  if (response.status === 401) {
-    location.href = "/login.html";
-    return;
-  }
-  if (!response.ok) return;
-  rates = await response.json().catch(() => null);
-  renderRates();
-}
 
 // ---------- Kalendář řidičů ----------
 
@@ -169,29 +130,3 @@ document.querySelector("#logout").addEventListener("click", async () => {
 for (const button of document.querySelectorAll("[data-close-dialog]")) {
   button.addEventListener("click", () => button.closest("dialog")?.close());
 }
-
-document.querySelector("#rates").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (ratesSaving) return;
-  const vehicles = [...document.querySelectorAll("[data-vehicle-cost]")].map((input) => ({
-    id: input.dataset.vehicleCost,
-    costPerKm: input.value.trim() === "" ? null : Number(input.value)
-  }));
-  ratesSaving = true;
-  const response = await fetch("/api/dispatch/rates", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ defaultCostPerKm: Number(document.querySelector("#default-cost").value), vehicles })
-  }).catch(() => null);
-  ratesSaving = false;
-  const data = response ? await response.json().catch(() => ({})) : {};
-  if (!response || !response.ok) {
-    ratesMessage(data.message || "Sazby se nepodařilo uložit.");
-    return;
-  }
-  rates = data;
-  renderRates();
-  ratesMessage("Sazby jsou uložené.");
-});
-
-loadRates();
