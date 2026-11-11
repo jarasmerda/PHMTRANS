@@ -7,7 +7,7 @@ const orderTime = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeSty
 const orderStatuses = ["Nová", "Naplánovaná", "Na cestě", "Doručeno", "K fakturaci", "Vyfakturováno"];
 const orderMessage = document.querySelector("#order-message");
 const queueMessage = document.querySelector("#queue-message");
-let orderCatalog = { vehicles: [], drivers: [], fuelTypes: [], loadingPlaces: [], points: [], defaultCostPerKm: 0 };
+let orderCatalog = { vehicles: [], fuelTypes: [], loadingPlaces: [], points: [], defaultCostPerKm: 0 };
 const distanceCache = new Map();
 const distanceTimers = {};
 const distanceGeneration = {};
@@ -59,7 +59,7 @@ function orderOptions(items, selected, emptyLabel, labelOf) {
   return head + extra + body;
 }
 
-// Dostupnost řidičů podle data nakládky a vykládky: výběr Řidič a kalendář ve formuláři.
+// Dostupnost vozidel podle data a času nakládky a vykládky: výběr Vozidlo a kalendář ve formuláři.
 const availabilityTimers = {};
 const availabilityGeneration = {};
 const availabilityBusy = {};
@@ -94,10 +94,10 @@ function renderAvailabilityPanel(prefix) {
   const { range, data, ownId } = info;
   const dates = data.dates ?? [];
   const inRange = (date) => date >= range.from && date <= range.to;
-  const selected = document.querySelector(`#${prefix}-driver`)?.value || "";
-  const head = `<tr><th>Řidič</th>${dates.map((date) =>
+  const selected = document.querySelector(`#${prefix}-vehicle`)?.value || "";
+  const head = `<tr><th>Vozidlo</th>${dates.map((date) =>
     `<th class="${inRange(date) ? "pick" : ""}">${orderText(availabilityDay.format(new Date(`${date}T00:00:00Z`)))}</th>`).join("")}</tr>`;
-  const rows = (data.drivers ?? []).filter((row) => row.driverId).map((row) => {
+  const rows = (data.vehicles ?? []).filter((row) => row.vehicleId).map((row) => {
     const cells = (row.days ?? []).map((day) => {
       const orders = day.orders ?? [];
       const others = orders.filter((order) => order.id !== ownId);
@@ -107,12 +107,12 @@ function renderAvailabilityPanel(prefix) {
         `<span title="${orderText(order.customer)}">${orderText(order.id === ownId ? "tato" : order.code)}</span>`).join("");
       return `<td class="${pick ? "pick " : ""}${state}">${body}</td>`;
     }).join("");
-    const busy = availabilityBusy[prefix]?.has(row.driverId);
-    return `<tr${row.driverId === selected ? ` class="chosen"` : ""}>
-      <td><button type="button" class="linkish" data-pick-driver="${orderText(row.driverId)}" data-prefix="${prefix}">${orderText(row.name)}</button>
-      <small class="note">${busy ? "obsazený" : "volný"}</small></td>${cells}</tr>`;
-  }).join("") || `<tr><td>V dispečinku zatím nejsou řidiči.</td></tr>`;
-  panel.innerHTML = `<p class="note">Orámované sloupce jsou dny této zakázky: zeleně volno, červeně jiná zakázka. Klepnutím na jméno řidiče ho vyberete.</p>
+    const busy = availabilityBusy[prefix]?.has(row.vehicleId);
+    return `<tr${row.vehicleId === selected ? ` class="chosen"` : ""}>
+      <td><button type="button" class="linkish" data-pick-vehicle="${orderText(row.vehicleId)}" data-prefix="${prefix}">${orderText(row.name)}</button>
+      <small class="note">${busy ? "obsazené" : "volné"}</small></td>${cells}</tr>`;
+  }).join("") || `<tr><td>V dispečinku zatím nejsou vozidla.</td></tr>`;
+  panel.innerHTML = `<p class="note">Orámované sloupce jsou dny této zakázky: zeleně volno, červeně jiná zakázka. Klepnutím na vozidlo ho vyberete.</p>
     <div class="avail-scroll"><table class="avail"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -122,7 +122,7 @@ function scheduleAvailability(prefix) {
 }
 
 async function refreshAvailability(prefix) {
-  if (!document.querySelector(`#${prefix}-driver`)) return;
+  if (!document.querySelector(`#${prefix}-vehicle`)) return;
   const generation = (availabilityGeneration[prefix] || 0) + 1;
   availabilityGeneration[prefix] = generation;
   const range = availabilityRange(prefix);
@@ -137,25 +137,25 @@ async function refreshAvailability(prefix) {
   const ownId = prefix === "edit" ? orderDetail?.order?.id : null;
   const busy = new Map();
   if (events.ok && Array.isArray(events.data?.events)) {
-    // Obsazenost po hodinách: zakázka řidiče se překrývá s časem od–do této zakázky.
+    // Obsazenost po hodinách: zakázka vozidla se překrývá s časem od–do této zakázky.
     const time = (id, fallback) => document.querySelector(`#${prefix}-${id}`)?.value || fallback;
     const start = `${range.from}T${time("loading-time", "06:00")}`;
     const end = `${document.querySelector(`#${prefix}-unloading-date`)?.value || range.from}T${time("unloading-time", "14:00")}`;
     for (const event of events.data.events) {
-      if (!event.driverId || event.id === ownId) continue;
+      if (!event.vehicleId || event.id === ownId) continue;
       if (String(event.start).slice(0, 16) >= end || String(event.end).slice(0, 16) <= start) continue;
-      busy.set(event.driverId, [...new Set([...(busy.get(event.driverId) ?? []), event.code])]);
+      busy.set(event.vehicleId, [...new Set([...(busy.get(event.vehicleId) ?? []), event.code])]);
     }
   } else {
-    for (const row of (result.ok ? result.data?.drivers : null) ?? []) {
-      if (!row.driverId) continue;
+    for (const row of (result.ok ? result.data?.vehicles : null) ?? []) {
+      if (!row.vehicleId) continue;
       const codes = new Set();
       for (const day of row.days ?? []) {
         if (day.date < range.from || day.date > range.to) continue;
         for (const order of day.orders ?? [])
           if (order.id !== ownId) codes.add(order.code);
       }
-      if (codes.size) busy.set(row.driverId, [...codes]);
+      if (codes.size) busy.set(row.vehicleId, [...codes]);
     }
   }
   availabilityBusy[prefix] = result.ok ? busy : null;
@@ -163,28 +163,30 @@ async function refreshAvailability(prefix) {
   applyAvailability(prefix);
 }
 
+const vehicleLabel = (item) => `${item.plate} · ${item.label}`;
+
 function applyAvailability(prefix) {
-  const select = document.querySelector(`#${prefix}-driver`);
-  const note = document.querySelector(`#${prefix}-driver-note`);
+  const select = document.querySelector(`#${prefix}-vehicle`);
+  const note = document.querySelector(`#${prefix}-vehicle-note`);
   if (!select || !note) return;
   const busy = availabilityBusy[prefix];
   const selected = select.value;
   if (!busy) {
-    select.innerHTML = orderOptions(orderCatalog.drivers, selected, "— nepřiřazeno —", (item) => item.name);
+    select.innerHTML = orderOptions(orderCatalog.vehicles, selected, "— nepřiřazeno —", vehicleLabel);
     note.hidden = true;
     renderAvailabilityPanel(prefix);
     return;
   }
-  const free = orderCatalog.drivers.filter((item) => !busy.has(item.id));
-  const taken = orderCatalog.drivers.filter((item) => busy.has(item.id));
+  const free = orderCatalog.vehicles.filter((item) => !busy.has(item.id));
+  const taken = orderCatalog.vehicles.filter((item) => busy.has(item.id));
   select.innerHTML = orderOptions([...free, ...taken], selected, "— nepřiřazeno —", (item) =>
-    busy.has(item.id) ? `${item.name} – obsazený (${busy.get(item.id).join(", ")})` : `${item.name} – volný`);
+    busy.has(item.id) ? `${vehicleLabel(item)} – obsazené (${busy.get(item.id).join(", ")})` : `${vehicleLabel(item)} – volné`);
   const clash = busy.get(select.value);
   note.hidden = false;
   note.classList.toggle("warn", !!clash);
   note.textContent = clash
-    ? `Pozor, řidič má v tu dobu i zakázku ${clash.join(", ")}.`
-    : `Volní řidiči v tu dobu: ${free.length} z ${orderCatalog.drivers.length}.`;
+    ? `Pozor, vozidlo má v tu dobu i zakázku ${clash.join(", ")}.`
+    : `Volná vozidla v tu dobu: ${free.length} z ${orderCatalog.vehicles.length}.`;
   renderAvailabilityPanel(prefix);
 }
 
@@ -195,15 +197,15 @@ document.addEventListener("click", (event) => {
     const panel = document.querySelector(`#${prefix}-availability`);
     if (!panel) return;
     panel.hidden = !panel.hidden;
-    toggle.textContent = panel.hidden ? "Kalendář řidičů" : "Skrýt kalendář";
+    toggle.textContent = panel.hidden ? "Kalendář vozidel" : "Skrýt kalendář";
     renderAvailabilityPanel(prefix);
     return;
   }
-  const pick = event.target.closest("[data-pick-driver]");
+  const pick = event.target.closest("[data-pick-vehicle]");
   if (pick) {
-    const select = document.querySelector(`#${pick.dataset.prefix}-driver`);
+    const select = document.querySelector(`#${pick.dataset.prefix}-vehicle`);
     if (!select || select.disabled) return;
-    select.value = pick.dataset.pickDriver;
+    select.value = pick.dataset.pickVehicle;
     select.dispatchEvent(new Event("change", { bubbles: true }));
   }
 });
@@ -255,7 +257,6 @@ function priceText(order) {
 
 function formFields(prefix, order) {
   const vehicle = order?.vehicleId || "";
-  const driver = order?.driverId || "";
   const status = order?.status || "Nová";
   const mode = order?.pricingMode === "Liters" ? "Liters" : "Km";
   const stops = order?.stops?.length
@@ -298,13 +299,12 @@ function formFields(prefix, order) {
             <input id="${prefix}-unloading-time" type="time" step="900" aria-label="Čas vykládky" value="${orderText(order ? order.unloadingTime || "" : "14:00")}">
           </span></label>
         <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
-        <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
       </div>
       <div class="availability">
-        <button type="button" data-toggle-booking="${prefix}">Naplánovat čas řidiče</button>
-        <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář řidičů</button>
+        <button type="button" data-toggle-booking="${prefix}">Naplánovat čas vozidla</button>
+        <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář vozidel</button>
         <button type="button" class="ghost" data-open-week="${prefix}">Vytíženost po hodinách ↗</button>
-        <span class="note" id="${prefix}-driver-note" hidden></span>
+        <span class="note" id="${prefix}-vehicle-note" hidden></span>
         <div id="${prefix}-booking" class="avail-panel" hidden></div>
         <div id="${prefix}-availability" class="avail-panel" hidden></div>
       </div>
@@ -1070,7 +1070,6 @@ function readForm(prefix) {
     agreedPrice: agreed,
     surcharges: Number.isFinite(surcharges) ? surcharges : null,
     vehicleId: value("vehicle"),
-    driverId: value("driver"),
     status: value("status"),
     cmrNumber: value("cmr"),
     pohodaInvoiceNumber: value("invoice"),
@@ -1171,7 +1170,7 @@ function renderDetail(data) {
   showOrderChrome();
   renderVersionLinks(data);
   document.querySelector("#order-sync").innerHTML = (data.sync ?? []).length === 0
-    ? `<p class="note">Do Pohody se zatím nic neposílalo. Poznámka, řidič a CMR se do fronty nedávají.</p>`
+    ? `<p class="note">Do Pohody se zatím nic neposílalo. Poznámka, vozidlo a CMR se do fronty nedávají.</p>`
     : (data.sync ?? []).map((item) => `<article>
         <p><strong>${orderText(actionLabel(item.action))}</strong> verze ${orderText(item.versionFrom ?? "—")} → ${orderText(item.versionTo)}
         ${syncPill(item.status)} pokus ${orderText(item.attempts)}${item.pohodaDocNumber ? `, doklad ${orderText(item.pohodaDocNumber)}` : ""}</p>
@@ -1338,8 +1337,8 @@ function showView(name) {
   document.querySelector("#orders-view").hidden = name !== "orders";
   document.querySelector("#calendar-view").hidden = name !== "calendar";
   document.querySelector("#queue-view").hidden = name !== "queue";
-  const driverView = document.querySelector("#driver-view");
-  if (driverView) driverView.hidden = name !== "driver";
+  const vehicleView = document.querySelector("#vehicle-view");
+  if (vehicleView) vehicleView.hidden = name !== "vehicle";
   for (const button of document.querySelectorAll(".view-tabs button"))
     button.removeAttribute("aria-current");
   // Kalendář patří pod záložku Zakázky.
@@ -1350,9 +1349,9 @@ function showView(name) {
   if (name === "orders") history.replaceState(null, "", window.keepQuery("#zakazky"));
   if (name === "calendar") history.replaceState(null, "", window.keepQuery("#kalendar"));
   if (name === "queue") history.replaceState(null, "", window.keepQuery("#fronta"));
-  if (name === "driver") {
-    history.replaceState(null, "", window.keepQuery("#ridic"));
-    if (typeof window.loadDriverView === "function") window.loadDriverView();
+  if (name === "vehicle") {
+    history.replaceState(null, "", window.keepQuery("#vozidlo"));
+    if (typeof window.loadVehicleView === "function") window.loadVehicleView();
   }
 }
 
@@ -1372,9 +1371,8 @@ async function orderFetch(url, options) {
 }
 
 async function fetchCatalog() {
-  const [vehicles, drivers, fuels, loadingPlaces, points, rates] = await Promise.all([
+  const [vehicles, fuels, loadingPlaces, points, rates] = await Promise.all([
     orderFetch("/api/dispatch/vehicles"),
-    orderFetch("/api/dispatch/drivers"),
     orderFetch("/api/dispatch/fuel-types"),
     orderFetch("/api/dispatch/loading-places"),
     orderFetch("/api/dispatch/points"),
@@ -1382,7 +1380,6 @@ async function fetchCatalog() {
   ]);
   if (rates.ok) orderCatalog.defaultCostPerKm = Number(rates.data?.defaultCostPerKm || 0);
   if (Array.isArray(vehicles.data)) orderCatalog.vehicles = vehicles.data;
-  if (Array.isArray(drivers.data)) orderCatalog.drivers = drivers.data;
   if (Array.isArray(fuels.data)) orderCatalog.fuelTypes = fuels.data;
   if (Array.isArray(loadingPlaces.data)) orderCatalog.loadingPlaces = loadingPlaces.data;
   if (Array.isArray(points.data)) orderCatalog.points = points.data;
@@ -1658,7 +1655,7 @@ document.querySelector("#orders-view").addEventListener("change", (event) => {
     renderCompartments(event.target.id.startsWith("edit-") ? "edit" : "create");
   if (event.target.matches("[id$='-loading-date'], [id$='-unloading-date'], [id$='-loading-time'], [id$='-unloading-time']"))
     scheduleAvailability(event.target.id.startsWith("edit-") ? "edit" : "create");
-  if (event.target.matches("select[id$='-driver']"))
+  if (event.target.matches("select[id$='-vehicle']"))
     applyAvailability(event.target.id.startsWith("edit-") ? "edit" : "create");
   if (event.target.matches("select[id$='-loading']")) {
     const prefix = event.target.id.startsWith("edit-") ? "edit" : "create";
@@ -1744,16 +1741,16 @@ function openMissingDocs(missing) {
   document.querySelector("#confirm-docs-reason").focus();
 }
 
-// Zakázka, která se právě potvrzuje (detail nebo pohled řidiče).
+// Zakázka, která se právě potvrzuje (detail nebo pohled vozidla).
 let confirmTargetId = null;
 
-function driverViewOpen() {
-  const view = document.querySelector("#driver-view");
+function vehicleViewOpen() {
+  const view = document.querySelector("#vehicle-view");
   return !!view && !view.hidden;
 }
 
 function confirmNotice(text) {
-  if (driverViewOpen() && typeof window.driverViewNotice === "function") window.driverViewNotice(text);
+  if (vehicleViewOpen() && typeof window.vehicleViewNotice === "function") window.vehicleViewNotice(text);
   else orderShow(orderMessage, text);
 }
 
@@ -1785,8 +1782,8 @@ async function confirmOrder(reason) {
   const done = reason
     ? `Zakázka ${result.data.code || ""} je potvrzená k fakturaci. Důvod chybějících dokladů je uložený.`
     : `Zakázka ${result.data.code || ""} je potvrzená k fakturaci.`;
-  if (driverViewOpen()) {
-    if (typeof window.loadDriverView === "function") await window.loadDriverView();
+  if (vehicleViewOpen()) {
+    if (typeof window.loadVehicleView === "function") await window.loadVehicleView();
     confirmNotice(done);
     return;
   }
@@ -1917,8 +1914,6 @@ function openCreate(prefill) {
       set("loading-time", prefill.time);
       set("unloading-time", `${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`);
     }
-    if (prefill.driver && orderCatalog.drivers.some((driver) => driver.id === prefill.driver))
-      set("driver", prefill.driver);
     if (prefill.vehicle && orderCatalog.vehicles.some((vehicle) => vehicle.id === prefill.vehicle)) {
       set("vehicle", prefill.vehicle);
       refreshRoute("create");
@@ -1931,7 +1926,7 @@ function openCreate(prefill) {
 
 document.querySelector("#open-order-create")?.addEventListener("click", () => openCreate());
 
-// Odkazy z hodinového kalendáře: #zakazka=ID otevře zakázku, #nova=RRRR-MM-DDTHH:MM&vozidlo=ID (nebo &ridic=ID) založí novou.
+// Odkazy z hodinového kalendáře: #zakazka=ID otevře zakázku, #nova=RRRR-MM-DDTHH:MM&vozidlo=ID založí novou.
 function handleLinkHash() {
   const hash = decodeURIComponent(location.hash);
   if (hash.startsWith("#zakazka=")) {
@@ -1947,7 +1942,6 @@ function handleLinkHash() {
     openCreate({
       date: /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : null,
       time: /^\d{2}:\d{2}$/.test(time || "") ? time : null,
-      driver: params.get("ridic"),
       vehicle: params.get("vozidlo")
     });
     return true;
@@ -1963,7 +1957,7 @@ loadCatalog().then(() => {
   if (location.hash.startsWith("#tyden")) return;
   if (handleLinkHash()) return;
   if (location.hash === "#fronta") showView("queue");
-  else if (location.hash === "#ridic") showView("driver");
+  else if (location.hash === "#vozidlo" || location.hash === "#ridic") showView("vehicle");
   else if (location.hash === "#kalendar") showView("calendar");
   else showView("orders");
 });

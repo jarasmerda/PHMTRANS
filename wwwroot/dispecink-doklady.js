@@ -315,7 +315,7 @@
   }
 
   window.loadOrderDocuments = load;
-  // Otevře okno dokladů pro zakázku (pohled řidiče).
+  // Otevře okno dokladů pro zakázku (pohled vozidla).
   window.openOrderDocuments = async (order) => {
     await load(order);
     if (!dialog.open) dialog.showModal();

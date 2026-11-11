@@ -1,4 +1,4 @@
-// Dispečink: společné pomůcky a kalendář vytíženosti řidičů. Nákladové sazby se mění v SQL.
+// Dispečink: společné pomůcky a kalendář vytíženosti vozidel. Nákladové sazby se mění v SQL.
 // Zakázky a frontu Pohody obsluhuje dispecink-orders.js.
 const text = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
@@ -9,7 +9,7 @@ let calendarSeq = 0;
 
 window.keepQuery = (hash) => `${location.pathname}${location.search}${hash || ""}`;
 
-// ---------- Kalendář řidičů ----------
+// ---------- Kalendář vozidel ----------
 
 function isoDate(date) {
   const pad = (value) => String(value).padStart(2, "0");
@@ -49,23 +49,23 @@ function cellClass(date, count) {
 
 function renderCalendar(data) {
   const dates = data.dates ?? [];
-  document.querySelector("#calendar-head").innerHTML = `<tr><th>Řidič</th>${dates.map((date) =>
+  document.querySelector("#calendar-head").innerHTML = `<tr><th>Vozidlo</th>${dates.map((date) =>
     `<th class="${cellClass(date, 0)}">${text(dayLabel.format(parseIso(date)))}</th>`).join("")}</tr>`;
-  const rows = data.drivers ?? [];
+  const rows = data.vehicles ?? [];
   document.querySelector("#calendar-rows").innerHTML = rows.map((row) => {
-    const head = `<td><strong>${text(row.name)}</strong>${row.phone ? `<br><small class="note">${text(row.phone)}</small>` : ""}
-      <small class="note">${row.driverId ? `${row.busyDays} z ${dates.length} dní · ${row.percent} %` : "nepřiřazené zakázky"}</small>
-      ${row.driverId ? `<span class="load-bar" aria-hidden="true"><i style="width:${Math.min(100, Number(row.percent) || 0)}%"></i></span>` : ""}</td>`;
+    const head = `<td><strong>${text(row.name)}</strong>
+      <small class="note">${row.vehicleId ? `${row.busyDays} z ${dates.length} dní · ${row.percent} %` : "nepřiřazené zakázky"}</small>
+      ${row.vehicleId ? `<span class="load-bar" aria-hidden="true"><i style="width:${Math.min(100, Number(row.percent) || 0)}%"></i></span>` : ""}</td>`;
     const cells = (row.days ?? []).map((day) => {
       const orders = day.orders ?? [];
       const body = orders.map((order) =>
         `<button type="button" class="linkish cal-order" data-cal-order="${text(order.id)}" title="${text(order.status)}">${text(order.code)}
-          <small>${text(order.customer)} · ${litersLabel(order.liters)} l${order.vehicle ? ` · ${text(order.vehicle)}` : ""}</small></button>`).join("");
-      return `<td class="${cellClass(day.date, row.driverId ? orders.length : 0)}">${body}</td>`;
+          <small>${text(order.customer)} · ${litersLabel(order.liters)} l</small></button>`).join("");
+      return `<td class="${cellClass(day.date, row.vehicleId ? orders.length : 0)}">${body}</td>`;
     }).join("");
     return `<tr>${head}${cells}</tr>`;
-  }).join("") || `<tr><td colspan="${dates.length + 1}">V dispečinku zatím nejsou řidiči.</td></tr>`;
-  const clashes = rows.filter((row) => row.driverId && (row.days ?? []).some((day) => (day.orders ?? []).length > 1));
+  }).join("") || `<tr><td colspan="${dates.length + 1}">V dispečinku zatím nejsou vozidla.</td></tr>`;
+  const clashes = rows.filter((row) => row.vehicleId && (row.days ?? []).some((day) => (day.orders ?? []).length > 1));
   calendarShow(clashes.length
     ? `Pozor: ${clashes.map((row) => row.name).join(", ")} má v některý den víc zakázek najednou (červeně).`
     : "");
