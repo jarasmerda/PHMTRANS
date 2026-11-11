@@ -40,8 +40,8 @@ public sealed class DispatchPageTests
         var js = File.ReadAllText(Path.Combine(root, "dispecink.js"));
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
-        Assert.Contains("dispecink.js?v=14", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=29", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=15", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=30", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
@@ -86,7 +86,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"open-calendar\"", html, StringComparison.Ordinal);
         Assert.Contains("Kalendář řidičů", html, StringComparison.Ordinal);
         Assert.Contains("id=\"calendar-view\"", html, StringComparison.Ordinal);
-        Assert.Contains("id=\"rates-wrap\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("id=\"rates-wrap\"", html, StringComparison.Ordinal);
         Assert.Contains("Potvrdit k fakturaci", html, StringComparison.Ordinal);
         Assert.Contains("Fronta Pohody", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Jízd", html, StringComparison.Ordinal);
@@ -95,7 +95,7 @@ public sealed class DispatchPageTests
         Assert.DoesNotContain("trip", ordersJs, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("/api/dispatch/calendar?", js, StringComparison.Ordinal);
         Assert.Contains("window.showOrder(order.dataset.calOrder)", js, StringComparison.Ordinal);
-        Assert.Contains("/api/dispatch/rates", js, StringComparison.Ordinal);
+        Assert.DoesNotContain("/api/dispatch/rates", js, StringComparison.Ordinal);
         Assert.Contains("showView(\"calendar\")", ordersJs, StringComparison.Ordinal);
         Assert.Contains("#kalendar", ordersJs, StringComparison.Ordinal);
         Assert.Contains("param: \"zakazky\"", ordersJs, StringComparison.Ordinal);
