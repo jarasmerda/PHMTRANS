@@ -410,7 +410,12 @@ function renderCompartments(prefix) {
         <b>${item.number}</b> <small>${orderText(orderLiters.format(Number(item.capacityLiters || 0)))} l</small></label>`;
     }).join("");
     let status = "";
-    if (selected.length)
+    if (!selected.length && owner.size && liters > 0) {
+      const free = list.filter((item) => !owner.has(item.number)).length;
+      status = free
+        ? `<span class="note warn">Vyberte přepážku. Ostatní paliva přepážky mají, toto taky musí.</span>`
+        : `<span class="note warn">Nemá kam: všechny přepážky už mají jiné palivo. Zakázku takhle nepůjde uložit.</span>`;
+    } else if (selected.length)
       status = liters > capacity
         ? `<span class="note warn">Nevejde se: ${orderText(orderLiters.format(liters))} l, přepážky pojmou ${orderText(orderLiters.format(capacity))} l.</span>`
         : `<span class="note">Přepážky pojmou ${orderText(orderLiters.format(capacity))} l.</span>`;

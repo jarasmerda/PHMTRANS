@@ -48,6 +48,20 @@ public sealed class OrderCompartmentTests
     }
 
     [Fact]
+    public void Every_loaded_fuel_needs_a_compartment_once_compartments_are_used()
+    {
+        var catalog = Catalog();
+        var diesel = new OrderLoad(1, Fuels[0].Id, Fuels[0].Name, 10000m, [1, 2]);
+        var petrol = new OrderLoad(2, Fuels[1].Id, Fuels[1].Name, 2000m);
+
+        Assert.Contains("vyberte přepážku", OrderLoads.CheckCompartments([diesel, petrol], "veh-1", catalog));
+        var full = diesel with { Compartments = [1, 2, 3] };
+        Assert.Contains("Všechny přepážky vozidla už mají jiné palivo", OrderLoads.CheckCompartments([full, petrol], "veh-1", catalog));
+        Assert.Null(OrderLoads.CheckCompartments([diesel, petrol with { Liters = 0m }], "veh-1", catalog));
+        Assert.Null(OrderLoads.CheckCompartments([diesel, petrol with { Compartments = [3] }], "veh-1", catalog));
+    }
+
+    [Fact]
     public void Compartment_text_round_trips_and_counts_as_a_change()
     {
         Assert.Equal("1,3", OrderLoads.CompartmentsText([1, 3]));
