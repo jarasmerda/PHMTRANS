@@ -1161,6 +1161,8 @@ function showView(name) {
   document.querySelector("#orders-view").hidden = name !== "orders";
   document.querySelector("#calendar-view").hidden = name !== "calendar";
   document.querySelector("#queue-view").hidden = name !== "queue";
+  const driverView = document.querySelector("#driver-view");
+  if (driverView) driverView.hidden = name !== "driver";
   for (const button of document.querySelectorAll(".view-tabs button"))
     button.removeAttribute("aria-current");
   // Kalendář patří pod záložku Zakázky.
@@ -1171,6 +1173,10 @@ function showView(name) {
   if (name === "orders") history.replaceState(null, "", window.keepQuery("#zakazky"));
   if (name === "calendar") history.replaceState(null, "", window.keepQuery("#kalendar"));
   if (name === "queue") history.replaceState(null, "", window.keepQuery("#fronta"));
+  if (name === "driver") {
+    history.replaceState(null, "", window.keepQuery("#ridic"));
+    if (typeof window.loadDriverView === "function") window.loadDriverView();
+  }
 }
 
 async function orderFetch(url, options) {
@@ -1716,6 +1722,7 @@ loadCatalog().then(() => {
   if (location.hash.startsWith("#tyden")) return;
   if (handleLinkHash()) return;
   if (location.hash === "#fronta") showView("queue");
+  else if (location.hash === "#ridic") showView("driver");
   else if (location.hash === "#kalendar") showView("calendar");
   else showView("orders");
 });

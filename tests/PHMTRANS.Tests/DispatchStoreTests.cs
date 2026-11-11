@@ -41,7 +41,7 @@ public sealed class DispatchPageTests
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
         Assert.Contains("dispecink.js?v=15", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=30", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=31", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
@@ -55,6 +55,13 @@ public sealed class DispatchPageTests
         Assert.Contains("data-toggle-booking", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-comp-number", ordersJs, StringComparison.Ordinal);
         Assert.Contains("closeOrderDetail();", ordersJs, StringComparison.Ordinal);
+        Assert.Contains("dispecink-ridic.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"tab-driver\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"driver-view\" hidden", html, StringComparison.Ordinal);
+        Assert.Contains("#ridic", ordersJs, StringComparison.Ordinal);
+        var driverJs = File.ReadAllText(Path.Combine(root, "dispecink-ridic.js"));
+        Assert.DoesNotContain("agreedPrice", driverJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("salePer", driverJs, StringComparison.Ordinal);
         Assert.Contains("reason-row", ordersJs, StringComparison.Ordinal);
         Assert.Contains("<dialog id=\"docs-dialog\">", html, StringComparison.Ordinal);
         Assert.Contains("data-open-docs", html, StringComparison.Ordinal);
