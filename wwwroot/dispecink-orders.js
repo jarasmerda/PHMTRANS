@@ -1533,10 +1533,23 @@ function openMissingDocs(missing) {
   document.querySelector("#confirm-docs-reason").focus();
 }
 
+// Zakázka, která se právě potvrzuje (detail nebo pohled řidiče).
+let confirmTargetId = null;
+
+function driverViewOpen() {
+  const view = document.querySelector("#driver-view");
+  return !!view && !view.hidden;
+}
+
+function confirmNotice(text) {
+  if (driverViewOpen() && typeof window.driverViewNotice === "function") window.driverViewNotice(text);
+  else orderShow(orderMessage, text);
+}
+
 async function confirmOrder(reason) {
-  if (!orderDetail?.order || orderSaving) return;
+  if (!confirmTargetId || orderSaving) return;
   orderSaving = true;
-  const result = await orderFetch(`/api/dispatch/orders/${encodeURIComponent(orderDetail.order.id)}/confirm`, {
+  const result = await orderFetch(`/api/dispatch/orders/${encodeURIComponent(confirmTargetId)}/confirm`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(reason ? { missingDocumentsReason: reason } : {})
@@ -1553,27 +1566,39 @@ async function confirmOrder(reason) {
       message.hidden = false;
       message.textContent = text;
     } else {
-      orderShow(orderMessage, text);
+      confirmNotice(text);
     }
     return;
   }
   if (missingDocsDialog.open) missingDocsDialog.close();
-  orderShow(orderMessage, reason
-    ? "Zakázka je potvrzená k fakturaci. Důvod chybějících dokladů je uložený."
-    : "Zakázka je potvrzená k fakturaci.");
+  const done = reason
+    ? `Zakázka ${result.data.code || ""} je potvrzená k fakturaci. Důvod chybějících dokladů je uložený.`
+    : `Zakázka ${result.data.code || ""} je potvrzená k fakturaci.`;
+  if (driverViewOpen()) {
+    if (typeof window.loadDriverView === "function") await window.loadDriverView();
+    confirmNotice(done);
+    return;
+  }
+  orderShow(orderMessage, done);
   await loadOrders();
-  await openOrder(result.data.id, false);
+  if (orderDetail?.order?.id === result.data.id) await openOrder(result.data.id, false);
 }
 
-document.querySelector("#order-confirm").addEventListener("click", () => {
-  if (!orderDetail?.order) return;
-  const missing = typeof window.missingOrderDocuments === "function" ? window.missingOrderDocuments() : null;
+// Potvrdit k fakturaci: zkontroluje doklady (když jsou načtené), při chybějících se ptá na důvod.
+window.confirmOrderToInvoice = (id) => {
+  if (!id) return;
+  confirmTargetId = id;
+  const missing = typeof window.missingOrderDocuments === "function" ? window.missingOrderDocuments(id) : null;
   if (missing?.length) {
     openMissingDocs(missing);
     return;
   }
   if (!window.confirm("Potvrdit zakázku k fakturaci a zařadit ji do Pohody?")) return;
   confirmOrder(null);
+};
+
+document.querySelector("#order-confirm").addEventListener("click", () => {
+  if (orderDetail?.order) window.confirmOrderToInvoice(orderDetail.order.id);
 });
 
 document.querySelector("#confirm-docs-form").addEventListener("submit", (event) => {

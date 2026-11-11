@@ -405,7 +405,25 @@
     .driver-tools select { width: 100%; max-width: none; min-height: 2.6rem; font-size: 1rem; }
     .driver-range { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
     .driver-agenda { display: grid; gap: 0.4rem; }
-    .dv-day { display: grid; grid-template-columns: 9.5rem 1fr; gap: 0.5rem; padding: 0.5rem 0.7rem; border: 1px solid #dfe3ea; border-radius: 10px; background: #fbfcfe; }
+    .dv-day { display: grid; gap: 0.3rem; padding: 0.5rem 0.7rem 0.6rem; border: 1px solid #dfe3ea; border-radius: 10px; background: #fbfcfe; }
+    .dv-bar { position: relative; height: 2rem; border-radius: 6px; background-color: #eef1f6;
+      background-image: repeating-linear-gradient(to right, rgba(16, 24, 40, 0.12) 0, rgba(16, 24, 40, 0.12) 1px, transparent 1px, transparent calc(100% / 24)); }
+    .dv-block { position: absolute; top: 3px; bottom: 3px; padding: 0 0.3rem; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 0.72rem; font-weight: 800;
+      border: 0; border-radius: 5px; background: var(--unload-a-line, #2e9e5b); color: #fff; }
+    .dv-block.b { background: var(--unload-b-line, #0f6a37); }
+    .dv-block.estimated { background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.25) 0 6px, transparent 6px 12px); }
+    .dv-block:hover { color: #fff; filter: brightness(1.1); }
+    .dv-now { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #d33; pointer-events: none; }
+    .dv-scale { display: flex; justify-content: space-between; font-size: 0.68rem; color: var(--text-secondary); margin-top: -0.15rem; }
+    .dv-place { display: flex; flex-direction: column; gap: 0.15rem; flex-basis: 100%; margin-top: 0.2rem; font-size: 0.88rem; }
+    .dv-gps { font-family: Consolas, monospace; font-size: 0.82rem; }
+    .dv-place-note { flex-basis: 100%; padding: 0.25rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.7); font-size: 0.85rem; }
+    .dv-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; }
+    .dv-nav a { display: inline-block; padding: 0.35rem 0.75rem; border-radius: 999px; background: #fff; border: 1px solid #cfd5df; color: var(--ink); font-weight: 700; font-size: 0.85rem; text-decoration: none; }
+    .dv-stop-head { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; flex-basis: 100%; }
+    .dv-chip.comp { background: #fdf1e2; color: #8a4f00; }
+    .dv-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid #dfe3ea; }
+    .dv-actions button { flex: 1 1 10rem; min-height: 2.8rem; }
     .dv-day.today { border-color: var(--accent); background: #fff8ef; }
     .dv-day.free { opacity: 0.75; }
     .dv-day-name { font-weight: 800; text-transform: capitalize; }
@@ -432,7 +450,7 @@
     .dv-note { padding: 0.4rem 0.6rem; border-radius: 8px; background: #fff8dc; }
     @media (max-width: 760px) {
       .driver-wrap { padding: 0.7rem 0.6rem; }
-      .dv-day { grid-template-columns: 1fr; gap: 0.25rem; }
+      .dv-day { padding: 0.45rem 0.5rem 0.55rem; }
     }
     /* Sekce v oknech nemají šířku stránky (erp.css), ale celou šířku okna. */
     dialog section { width: auto; max-width: none; box-sizing: border-box; }
@@ -584,48 +602,6 @@
         <form id="order-create"></form>
       </section>
     </dialog>
-    <dialog id="docs-dialog">
-        <section id="order-docs" class="docs">
-          <div class="dialog-head">
-            <h2 id="docs-dialog-title">Doklady</h2>
-            <button type="button" class="ghost" data-close-dialog>Zavřít</button>
-          </div>
-          <p class="note">Postupujte po krocích. Fotky a PDF se ukládají do složky zakázky na serveru, odkud je OneDrive synchronizuje.</p>
-          <p id="doc-progress" class="doc-progress" hidden></p>
-          <p id="doc-message" class="note" hidden></p>
-          <div id="doc-steps" class="doc-steps"></div>
-          <div id="doc-confirm" class="doc-confirm" hidden></div>
-          <section class="doc-group">
-            <h4>Ostatní doklady <span class="note">nepovinné</span></h4>
-            <div class="doc-actions">
-              <button type="button" id="doc-camera-button" class="ghost">Vyfotit doklad</button>
-              <button type="button" id="doc-file-button" class="ghost">Přiložit soubor</button>
-              <input type="file" id="doc-camera" accept="image/*" capture="environment" hidden>
-              <input type="file" id="doc-file" accept="image/*,application/pdf,.heic,.heif" multiple hidden>
-            </div>
-            <p id="doc-others-empty" class="note">Zatím žádné.</p>
-            <ul id="doc-list" class="doc-list"></ul>
-          </section>
-        </section>
-    </dialog>
-    <dialog id="confirm-docs-dialog">
-      <form id="confirm-docs-form">
-        <div class="dialog-head">
-          <h2>Chybí doklady</h2>
-          <button type="button" class="ghost" data-close-dialog>Zavřít</button>
-        </div>
-        <p>Zakázka nemá nahrané tyto povinné doklady:</p>
-        <ul id="confirm-docs-missing" class="missing-docs"></ul>
-        <label class="reason-field">Důvod, proč doklady chybí
-          <textarea id="confirm-docs-reason" rows="3" maxlength="500" placeholder="Např. zákazník potvrzení nevydal, stáčecí list dodá řidič zítra…"></textarea>
-        </label>
-        <p id="confirm-docs-message" class="note warn" hidden></p>
-        <div class="dialog-actions">
-          <button type="submit">Potvrdit k fakturaci s důvodem</button>
-          <button type="button" class="ghost" data-close-dialog data-open-docs>Zpět k dokladům</button>
-        </div>
-      </form>
-    </dialog>
   </div>
   <div id="calendar-view" hidden>
     <section id="calendar-wrap">
@@ -724,12 +700,54 @@
       <div id="week-grid" class="week-grid"></div>
     </div>
   </div>
+    <dialog id="docs-dialog">
+        <section id="order-docs" class="docs">
+          <div class="dialog-head">
+            <h2 id="docs-dialog-title">Doklady</h2>
+            <button type="button" class="ghost" data-close-dialog>Zavřít</button>
+          </div>
+          <p class="note">Postupujte po krocích. Fotky a PDF se ukládají do složky zakázky na serveru, odkud je OneDrive synchronizuje.</p>
+          <p id="doc-progress" class="doc-progress" hidden></p>
+          <p id="doc-message" class="note" hidden></p>
+          <div id="doc-steps" class="doc-steps"></div>
+          <div id="doc-confirm" class="doc-confirm" hidden></div>
+          <section class="doc-group">
+            <h4>Ostatní doklady <span class="note">nepovinné</span></h4>
+            <div class="doc-actions">
+              <button type="button" id="doc-camera-button" class="ghost">Vyfotit doklad</button>
+              <button type="button" id="doc-file-button" class="ghost">Přiložit soubor</button>
+              <input type="file" id="doc-camera" accept="image/*" capture="environment" hidden>
+              <input type="file" id="doc-file" accept="image/*,application/pdf,.heic,.heif" multiple hidden>
+            </div>
+            <p id="doc-others-empty" class="note">Zatím žádné.</p>
+            <ul id="doc-list" class="doc-list"></ul>
+          </section>
+        </section>
+    </dialog>
+    <dialog id="confirm-docs-dialog">
+      <form id="confirm-docs-form">
+        <div class="dialog-head">
+          <h2>Chybí doklady</h2>
+          <button type="button" class="ghost" data-close-dialog>Zavřít</button>
+        </div>
+        <p>Zakázka nemá nahrané tyto povinné doklady:</p>
+        <ul id="confirm-docs-missing" class="missing-docs"></ul>
+        <label class="reason-field">Důvod, proč doklady chybí
+          <textarea id="confirm-docs-reason" rows="3" maxlength="500" placeholder="Např. zákazník potvrzení nevydal, stáčecí list dodá řidič zítra…"></textarea>
+        </label>
+        <p id="confirm-docs-message" class="note warn" hidden></p>
+        <div class="dialog-actions">
+          <button type="submit">Potvrdit k fakturaci s důvodem</button>
+          <button type="button" class="ghost" data-close-dialog data-open-docs>Zpět k dokladům</button>
+        </div>
+      </form>
+    </dialog>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=15"></script>
-  <script src="/dispecink-orders.js?v=31"></script>
-  <script src="/dispecink-doklady.js?v=4"></script>
+  <script src="/dispecink-orders.js?v=32"></script>
+  <script src="/dispecink-doklady.js?v=5"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=2"></script>
-  <script src="/dispecink-ridic.js?v=1"></script>
+  <script src="/dispecink-ridic.js?v=2"></script>
 </body>
 </html>

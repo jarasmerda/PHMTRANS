@@ -3,8 +3,18 @@ namespace PHMTRANS.Dispatch;
 // Nakládací místo (sklad, rafinerie) z dbo.Disp_LoadingPlace.
 public sealed record LoadingPlaceItem(int Id, string Name);
 
-// Bod trasy z dbo.Disp_Point: nakládka, vykládka, nebo obojí.
-public sealed record PointItem(int Id, string Name, bool IsLoading, bool IsUnloading);
+// Bod trasy z dbo.Disp_Point: nakládka, vykládka, nebo obojí. Adresa, GPS, kontakt a poznámka
+// (příjezd, otevírací doba…) se vyplňují v SQL a vidí je řidič.
+public sealed record PointItem(
+    int Id,
+    string Name,
+    bool IsLoading,
+    bool IsUnloading,
+    string? Address = null,
+    decimal? Latitude = null,
+    decimal? Longitude = null,
+    string? Contact = null,
+    string? Note = null);
 
 public sealed record FuelTypeItem(int Id, string Name);
 

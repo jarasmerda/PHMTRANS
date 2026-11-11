@@ -103,7 +103,7 @@ public sealed class SqlOrderStore(
         InConnection(async (connection, _, token) =>
         {
             var rows = await connection.QueryAsync<PointItem>(Command(
-                "SELECT Id, Name, IsLoading, IsUnloading FROM dbo.Disp_Point WHERE Active = 1 ORDER BY Name",
+                "SELECT Id, Name, IsLoading, IsUnloading, Address, Latitude, Longitude, Contact, Note FROM dbo.Disp_Point WHERE Active = 1 ORDER BY Name",
                 null,
                 token));
             return (IReadOnlyList<PointItem>)rows.AsList();

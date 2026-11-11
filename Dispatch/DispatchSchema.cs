@@ -364,6 +364,16 @@ public static class DispatchSchema
             ALTER TABLE dbo.Disp_Order ADD CustomerPhone nvarchar(40) NULL;
         IF COL_LENGTH(N'dbo.Disp_OrderLoad', N'Compartments') IS NULL
             ALTER TABLE dbo.Disp_OrderLoad ADD Compartments nvarchar(40) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Point', N'Address') IS NULL
+            ALTER TABLE dbo.Disp_Point ADD Address nvarchar(300) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Point', N'Latitude') IS NULL
+            ALTER TABLE dbo.Disp_Point ADD Latitude decimal(9,6) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Point', N'Longitude') IS NULL
+            ALTER TABLE dbo.Disp_Point ADD Longitude decimal(9,6) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Point', N'Contact') IS NULL
+            ALTER TABLE dbo.Disp_Point ADD Contact nvarchar(200) NULL;
+        IF COL_LENGTH(N'dbo.Disp_Point', N'Note') IS NULL
+            ALTER TABLE dbo.Disp_Point ADD Note nvarchar(500) NULL;
         IF COL_LENGTH(N'dbo.Disp_Order', N'MissingDocumentsReason') IS NULL
             ALTER TABLE dbo.Disp_Order ADD MissingDocumentsReason nvarchar(500) NULL;
         IF COL_LENGTH(N'dbo.Disp_Order', N'LoadingTime') IS NULL
