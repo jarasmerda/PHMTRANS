@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace PHMTRANS.Dispatch;
@@ -33,15 +34,17 @@ public sealed record OrderStopInput(
     int? FuelTypeId = null);
 
 // Nakládka jednoho paliva. Zakázka jich může mít víc (nafta, benzín …).
-public sealed record OrderLoad(int Sequence, int? FuelTypeId, string FuelType, decimal Liters);
+// Compartments = čísla přepážek vozidla, do kterých se palivo nalévá (nepovinné).
+public sealed record OrderLoad(int Sequence, int? FuelTypeId, string FuelType, decimal Liters, IReadOnlyList<int>? Compartments = null);
 
-public sealed record OrderLoadInput(int? FuelTypeId, decimal? Liters);
+public sealed record OrderLoadInput(int? FuelTypeId, decimal? Liters, IReadOnlyList<int>? Compartments = null);
 
 public sealed record FuelBalance(int? FuelTypeId, string FuelType, decimal Loaded, decimal Delivered);
 
 public static class OrderLoads
 {
     public const int MaxCount = 10;
+    private static readonly CultureInfo Czech = CultureInfo.GetCultureInfo("cs-CZ");
 
     public static IReadOnlyList<OrderLoad> Effective(DispatchOrder order) =>
         order.Loads is { Count: > 0 }
@@ -60,6 +63,7 @@ public static class OrderLoads
             return (null, "Číselník paliv je prázdný.");
 
         var loads = new List<OrderLoad>(inputs.Count);
+        var used = new Dictionary<int, string>();
         foreach (var input in inputs)
         {
             var fuel = input.FuelTypeId is null ? null : FuelTypeCatalog.Find(fuelTypes, input.FuelTypeId, null);
@@ -71,10 +75,69 @@ public static class OrderLoads
                 return (null, "Naložené litry musí být od 0 do 1 000 000.");
             if (loads.Any(load => load.FuelTypeId == fuel.Id))
                 return (null, $"Palivo {fuel.Name} je v nakládce dvakrát. Litry sečtěte do jednoho řádku.");
-            loads.Add(new OrderLoad(loads.Count + 1, fuel.Id, fuel.Name, OrderPricing.Liters(input.Liters.Value)));
+            int[]? compartments = null;
+            if (input.Compartments is { Count: > 0 })
+            {
+                if (input.Compartments.Any(number => number is < 1 or > VehicleCompartments.MaxCount))
+                    return (null, $"Přepážky se číslují 1 až {VehicleCompartments.MaxCount}.");
+                compartments = input.Compartments.Distinct().Order().ToArray();
+                foreach (var number in compartments)
+                {
+                    if (used.TryGetValue(number, out var other))
+                        return (null, $"Přepážka {number} je u dvou paliv ({other} a {fuel.Name}). Jedna přepážka může mít jen jedno palivo.");
+                    used[number] = fuel.Name;
+                }
+            }
+
+            loads.Add(new OrderLoad(loads.Count + 1, fuel.Id, fuel.Name, OrderPricing.Liters(input.Liters.Value), compartments));
         }
 
         return (loads, null);
+    }
+
+    // Přepážky musí vozidlo mít a naložené litry se do nich musí vejít.
+    public static string? CheckCompartments(IReadOnlyList<OrderLoad>? loads, string? vehicleId, OrderCatalog catalog)
+    {
+        var assigned = (loads ?? []).Where(load => load.Compartments is { Count: > 0 }).ToArray();
+        if (assigned.Length == 0)
+            return null;
+        if (vehicleId is null)
+            return "Přepážky patří k vozidlu. Vyberte vozidlo, nebo přepážky u nakládky zrušte.";
+        if (catalog.VehicleCompartments is null || !catalog.VehicleCompartments.TryGetValue(vehicleId, out var available) || available.Count == 0)
+            return "Vybrané vozidlo nemá zadané přepážky. Doplňte je u vozidla, nebo přepážky u nakládky zrušte.";
+
+        foreach (var load in assigned)
+        {
+            var capacity = 0m;
+            foreach (var number in load.Compartments!)
+            {
+                var compartment = available.FirstOrDefault(item => item.Number == number);
+                if (compartment is null)
+                    return $"Vozidlo nemá přepážku {number}.";
+                capacity += compartment.CapacityLiters;
+            }
+
+            if (load.Liters > capacity)
+                return $"{load.FuelType}: {load.Liters.ToString("N0", Czech)} l se nevejde do přepážek {string.Join(", ", load.Compartments!)} (dohromady {capacity.ToString("N0", Czech)} l).";
+        }
+
+        return null;
+    }
+
+    public static string CompartmentsText(IReadOnlyList<int>? compartments) =>
+        compartments is { Count: > 0 } ? string.Join(",", compartments) : "";
+
+    public static IReadOnlyList<int>? ParseCompartments(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var numbers = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => int.TryParse(part, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) ? number : 0)
+            .Where(number => number is >= 1 and <= VehicleCompartments.MaxCount)
+            .Distinct()
+            .Order()
+            .ToArray();
+        return numbers.Length > 0 ? numbers : null;
     }
 
     // Naloženo a vyloženo po palivech. Vykládka bez paliva patří k prvnímu palivu nakládky.
@@ -116,7 +179,8 @@ public static class OrderLoads
         {
             if (a[index].FuelTypeId != b[index].FuelTypeId
                 || a[index].FuelType != b[index].FuelType
-                || a[index].Liters != b[index].Liters)
+                || a[index].Liters != b[index].Liters
+                || CompartmentsText(a[index].Compartments) != CompartmentsText(b[index].Compartments))
                 return false;
         }
 
@@ -161,7 +225,11 @@ public static class OrderCatalogs
             snapshot.Vehicles.Select(vehicle => vehicle.Id).ToHashSet(StringComparer.Ordinal),
             snapshot.Drivers.Select(driver => driver.Id).ToHashSet(StringComparer.Ordinal),
             defaultCostPerKm,
-            rates);
+            rates,
+            VehicleCompartments: snapshot.Vehicles.ToDictionary(
+                vehicle => vehicle.Id,
+                vehicle => vehicle.Compartments ?? [],
+                StringComparer.Ordinal));
     }
 }
 

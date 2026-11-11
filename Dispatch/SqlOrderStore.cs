@@ -534,13 +534,25 @@ public sealed class SqlOrderStore(
             "SELECT Id, Name FROM dbo.Disp_FuelType ORDER BY Id",
             transaction,
             cancellationToken))).AsList();
+        var compartments = (await connection.QueryAsync<CompartmentSqlRow>(Command(
+            "SELECT VehicleId, Number, CapacityLiters FROM dbo.Disp_VehicleCompartment",
+            transaction,
+            cancellationToken))).AsList();
         return new OrderCatalog(
             vehicles.Select(vehicle => vehicle.Id).ToHashSet(StringComparer.Ordinal),
             drivers.ToHashSet(StringComparer.Ordinal),
             defaultCost,
             vehicles.Where(vehicle => vehicle.CostPerKm is not null)
                 .ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.CostPerKm!.Value, StringComparer.Ordinal),
-            fuels);
+            fuels,
+            vehicles.ToDictionary(
+                vehicle => vehicle.Id,
+                vehicle => (IReadOnlyList<VehicleCompartment>)compartments
+                    .Where(row => row.VehicleId == vehicle.Id)
+                    .OrderBy(row => row.Number)
+                    .Select(row => new VehicleCompartment(row.Number, row.CapacityLiters))
+                    .ToArray(),
+                StringComparer.Ordinal));
     }
 
     private static async Task<Dictionary<string, decimal>> LoadDistancesAsync(
@@ -926,12 +938,20 @@ public sealed class SqlOrderStore(
         {
             await connection.ExecuteAsync(Command(
                 """
-                INSERT INTO dbo.Disp_OrderLoad (OrderId, Sequence, FuelTypeId, FuelType, Liters)
-                VALUES (@OrderId, @Sequence, @FuelTypeId, @FuelType, @Liters)
+                INSERT INTO dbo.Disp_OrderLoad (OrderId, Sequence, FuelTypeId, FuelType, Liters, Compartments)
+                VALUES (@OrderId, @Sequence, @FuelTypeId, @FuelType, @Liters, @Compartments)
                 """,
                 transaction,
                 cancellationToken,
-                new { OrderId = order.Id, load.Sequence, load.FuelTypeId, load.FuelType, load.Liters }));
+                new
+                {
+                    OrderId = order.Id,
+                    load.Sequence,
+                    load.FuelTypeId,
+                    load.FuelType,
+                    load.Liters,
+                    Compartments = load.Compartments is { Count: > 0 } ? OrderLoads.CompartmentsText(load.Compartments) : null
+                }));
         }
 
         foreach (var stop in order.Stops ?? [])
@@ -1007,7 +1027,7 @@ public sealed class SqlOrderStore(
             new { Ids = ids }))).AsList();
         var loads = (await connection.QueryAsync<RouteLoadRow>(Command(
             """
-            SELECT OrderId, Sequence, FuelTypeId, FuelType, Liters
+            SELECT OrderId, Sequence, FuelTypeId, FuelType, Liters, Compartments
             FROM dbo.Disp_OrderLoad
             WHERE OrderId IN @Ids
             ORDER BY Sequence
@@ -1057,7 +1077,7 @@ public sealed class SqlOrderStore(
             new { order.Id }))).Select(leg => leg.ToLeg()).ToArray();
         var loads = (await connection.QueryAsync<RouteLoadRow>(Command(
             """
-            SELECT OrderId, Sequence, FuelTypeId, FuelType, Liters
+            SELECT OrderId, Sequence, FuelTypeId, FuelType, Liters, Compartments
             FROM dbo.Disp_OrderLoad
             WHERE OrderId = @Id
             ORDER BY Sequence
@@ -1170,8 +1190,9 @@ public sealed class SqlOrderStore(
         public int? FuelTypeId { get; set; }
         public string FuelType { get; set; } = "";
         public decimal Liters { get; set; }
+        public string? Compartments { get; set; }
 
-        public OrderLoad ToLoad() => new(Sequence, FuelTypeId, FuelType, Liters);
+        public OrderLoad ToLoad() => new(Sequence, FuelTypeId, FuelType, Liters, OrderLoads.ParseCompartments(Compartments));
     }
 
     private sealed class RouteStopRow
@@ -1269,6 +1290,13 @@ public sealed class SqlOrderStore(
         public string ToPlace { get; set; } = "";
         public decimal Km { get; set; }
         public decimal? BilledKm { get; set; }
+    }
+
+    private sealed class CompartmentSqlRow
+    {
+        public string VehicleId { get; set; } = "";
+        public int Number { get; set; }
+        public decimal CapacityLiters { get; set; }
     }
 
     private sealed class VehicleCostRow

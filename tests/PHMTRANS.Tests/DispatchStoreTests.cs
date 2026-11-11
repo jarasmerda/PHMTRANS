@@ -41,7 +41,7 @@ public sealed class DispatchPageTests
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
         Assert.Contains("dispecink.js?v=14", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=22", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=23", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
@@ -53,6 +53,7 @@ public sealed class DispatchPageTests
         Assert.Contains("data-open-week", ordersJs, StringComparison.Ordinal);
         Assert.Contains("dispecink-booking.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("data-toggle-booking", ordersJs, StringComparison.Ordinal);
+        Assert.Contains("data-comp-number", ordersJs, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar/events?from=", ordersJs, StringComparison.Ordinal);
         var bookingJs = File.ReadAllText(Path.Combine(root, "dispecink-booking.js"));
         Assert.Contains("/api/dispatch/calendar/events?from=", bookingJs, StringComparison.Ordinal);
@@ -176,7 +177,8 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(42, Count(script, "ALTER TABLE"));
+        Assert.Equal(43, Count(script, "ALTER TABLE"));
+        Assert.Contains("ALTER TABLE dbo.Disp_OrderLoad ADD Compartments nvarchar(40) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Order ADD LoadingTime time(0) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_OrderVersion ADD UnloadingTime time(0) NULL", script, StringComparison.Ordinal);
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Order', N'CancelReason') IS NULL", script, StringComparison.Ordinal);

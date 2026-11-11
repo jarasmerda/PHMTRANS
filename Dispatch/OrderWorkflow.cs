@@ -7,7 +7,8 @@ public sealed record OrderCatalog(
     IReadOnlySet<string> DriverIds,
     decimal DefaultCostPerKm = 0m,
     IReadOnlyDictionary<string, decimal>? VehicleCostPerKm = null,
-    IReadOnlyList<FuelTypeItem>? FuelTypes = null)
+    IReadOnlyList<FuelTypeItem>? FuelTypes = null,
+    IReadOnlyDictionary<string, IReadOnlyList<VehicleCompartment>>? VehicleCompartments = null)
 {
     public static OrderCatalog Empty { get; } = new(
         new HashSet<string>(StringComparer.Ordinal),
@@ -518,7 +519,7 @@ public static class OrderWorkflow
             return "Neznámé vozidlo.";
         if (draft.DriverId is not null && !catalog.DriverIds.Contains(draft.DriverId))
             return "Neznámý řidič.";
-        return null;
+        return OrderLoads.CheckCompartments(draft.Loads, draft.VehicleId, catalog);
     }
 
     private static (string? Value, string? Error) Required(string? value, int max, string missing, string tooLong)
