@@ -821,10 +821,14 @@ function refreshRoute(prefix) {
       item.delivered += Number(stop.liters || 0);
       balance.set(k, item);
     }
-    const over = [...balance.values()].filter((item) => item.delivered > item.loaded);
-    warn.hidden = over.length === 0;
-    warn.textContent = over.length
-      ? `Vyloženo víc, než se naložilo: ${over.map((item) => `${item.name || "palivo"} ${orderLiters.format(item.delivered)} l z ${orderLiters.format(item.loaded)} l`).join(", ")}.`
+    // Vyloženo musí po každém palivu sedět na naloženo, jinak server zakázku neuloží.
+    const wrong = [...balance.values()].filter((item) => Math.abs(item.delivered - item.loaded) > 0.0005);
+    warn.hidden = wrong.length === 0;
+    warn.textContent = wrong.length
+      ? `Vyložené litry nesedí na naložené, zakázku nepůjde uložit: ${wrong.map((item) => {
+        const difference = item.delivered - item.loaded;
+        return `${item.name || "palivo"} naloženo ${orderLiters.format(item.loaded)} l, vyloženo ${orderLiters.format(item.delivered)} l (${difference > 0 ? "o" : "chybí"} ${orderLiters.format(Math.abs(difference))} l${difference > 0 ? " víc" : ""})`;
+      }).join("; ")}.`
       : "";
   }
   return state;
@@ -1256,7 +1260,11 @@ async function saveOrder(url, body, method) {
   return result.data;
 }
 
-document.querySelector("#tab-orders").addEventListener("click", () => showView("orders"));
+// Klepnutí na záložku Zakázky vždy ukáže jen seznam, otevřená zakázka se zavře.
+document.querySelector("#tab-orders").addEventListener("click", () => {
+  closeOrderDetail();
+  showView("orders");
+});
 document.querySelector("#tab-queue").addEventListener("click", () => showView("queue"));
 document.querySelector("#open-calendar").addEventListener("click", () => showView("calendar"));
 document.querySelector("#calendar-back").addEventListener("click", () => showView("orders"));
@@ -1527,11 +1535,13 @@ document.querySelector("#order-cancel").addEventListener("click", async () => {
   await openOrder(saved.id, false);
 });
 
-document.querySelector("#order-close").addEventListener("click", () => {
+function closeOrderDetail() {
   orderDetail = null;
   document.querySelector("#order-detail").hidden = true;
   closeVersion();
-});
+}
+
+document.querySelector("#order-close").addEventListener("click", closeOrderDetail);
 
 const orderStatusFilter = window.bindStatusFilter(document.querySelector("#order-status-filter"), {
   param: "zakazky",

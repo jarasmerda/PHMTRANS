@@ -84,6 +84,8 @@ public static class OrderWorkflow
         var routed = OrderRoute.Materialize(order, request, context.Catalog, distances: context.Distances);
         if (routed.Error is not null)
             return new OrderChange.Rejected(routed.Error);
+        if (OrderLoads.CheckBalance(routed.Order!) is { } createBalance)
+            return new OrderChange.Rejected(createBalance);
         return WithDistances(Finish(routed.Order!, previous: null, context, versionAdded: true, confirmRequested: false), routed.Distances);
     }
 
@@ -106,6 +108,8 @@ public static class OrderWorkflow
         var routed = OrderRoute.Materialize(order, request, context.Catalog, context.Current, context.Distances);
         if (routed.Error is not null)
             return new OrderChange.Rejected(routed.Error);
+        if (OrderLoads.CheckBalance(routed.Order!) is { } saveBalance)
+            return new OrderChange.Rejected(saveBalance);
         if (OrderPohodaFields.SameDocument(context.Current, routed.Order!))
             return WithDistances(new OrderChange.Saved(context.Current, false, null), routed.Distances);
 
