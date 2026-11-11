@@ -63,6 +63,59 @@ public static class OrderDocumentRules
 
 public sealed record OrderDocument(string Name, long Size, DateTimeOffset ModifiedAt, bool IsImage);
 
+public sealed record RequiredDocument(string Key, string Label);
+
+// Povinné doklady zakázky: nákladní list u nakládky, stáčecí list a potvrzení u každé vykládky.
+// Krok se pozná podle názvu souboru (yyyyMMdd-HHmmss-vykladka-1-staceci-list.jpg), stejně jako v dispecink-doklady.js.
+public static class OrderDocumentChecklist
+{
+    private static readonly System.Text.RegularExpressions.Regex Slot = new(
+        @"^\d{8}-\d{6}-(nakladka-nakladni-list|vykladka-\d+-(?:staceci-list|potvrzeni))(?:-\d+)?\.[a-z0-9]+$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    public static IReadOnlyList<RequiredDocument> Required(DispatchOrder order)
+    {
+        var list = new List<RequiredDocument> { new("nakladka-nakladni-list", "Nakládka: nákladní list") };
+        var stops = order.Stops is { Count: > 0 } ? order.Stops.Select(stop => stop.Place).ToArray() : [order.UnloadingPlace];
+        for (var index = 0; index < stops.Length; index++)
+        {
+            var number = index + 1;
+            var place = string.IsNullOrWhiteSpace(stops[index]) ? "" : $" ({stops[index]})";
+            list.Add(new($"vykladka-{number}-staceci-list", $"Vykládka {number}{place}: stáčecí list"));
+            list.Add(new($"vykladka-{number}-potvrzeni", $"Vykládka {number}{place}: potvrzení od zákazníka"));
+        }
+        return list;
+    }
+
+    public static string? SlotOf(string fileName)
+    {
+        var match = Slot.Match(fileName);
+        return match.Success ? match.Groups[1].Value.ToLowerInvariant() : null;
+    }
+
+    public static IReadOnlyList<RequiredDocument> Missing(DispatchOrder order, IEnumerable<string> fileNames)
+    {
+        var present = fileNames.Select(SlotOf).Where(slot => slot is not null).ToHashSet(StringComparer.Ordinal);
+        return Required(order).Where(item => !present.Contains(item.Key)).ToArray();
+    }
+
+    // Rozhodnutí při potvrzení k fakturaci. fileNames = null: složka není nastavená, doklady se nekontrolují.
+    // Důvod se uloží jen tehdy, když doklady opravdu chybí.
+    public static ConfirmCheck ForConfirm(DispatchOrder? order, IEnumerable<string>? fileNames, string? reason)
+    {
+        var text = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (order is null || fileNames is null || order.IsLocked
+            || order.Status is OrderStatuses.KFakturaci or OrderStatuses.Vyfakturovano or OrderStatuses.Stornovano)
+            return new ConfirmCheck(false, [], text);
+        var missing = Missing(order, fileNames).Select(item => item.Label).ToArray();
+        if (missing.Length == 0)
+            return new ConfirmCheck(false, [], null);
+        return new ConfirmCheck(text is null, missing, text);
+    }
+}
+
+public sealed record ConfirmCheck(bool NeedsReason, IReadOnlyList<string> Missing, string? Reason);
+
 public sealed class OrderDocumentFolder(string root)
 {
     public string Root { get; } = Path.GetFullPath(root);

@@ -281,4 +281,11 @@
   }
 
   window.loadOrderDocuments = load;
+  // Chybějící povinné doklady otevřené zakázky (popisky). null = nejde zjistit (složka není nastavená).
+  window.missingOrderDocuments = () => {
+    if (!current || !configured) return null;
+    return slotsFor(current).flatMap((group, groupIndex) => group.slots
+      .filter((slot) => !documents.some((doc) => slotOf(doc.name) === slot.key))
+      .map((slot) => `${groupIndex === 0 ? "Nakládka" : `Vykládka ${groupIndex}`}${group.place ? ` (${group.place})` : ""}: ${slot.label.toLowerCase()}`));
+  };
 })();

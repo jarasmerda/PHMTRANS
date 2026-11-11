@@ -141,7 +141,8 @@ public sealed record DispatchOrder(
     int? FuelTypeId = null,
     IReadOnlyList<OrderLoad>? Loads = null,
     string? LoadingTime = null,
-    string? UnloadingTime = null);
+    string? UnloadingTime = null,
+    string? MissingDocumentsReason = null);
 
 public sealed record OrderSaveRequest(
     int? CustomerPohodaId,

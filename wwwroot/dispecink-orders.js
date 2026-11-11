@@ -934,6 +934,11 @@ function renderDetail(data) {
   if (typeof window.loadOrderDocuments === "function") window.loadOrderDocuments(order);
   document.querySelector("#order-detail").hidden = false;
   document.querySelector("#order-detail-title").textContent = `${order.code} · verze ${order.currentVersion}`;
+  const docsReason = document.querySelector("#order-docs-reason");
+  docsReason.hidden = !order.missingDocumentsReason;
+  docsReason.textContent = order.missingDocumentsReason
+    ? `Potvrzeno k fakturaci bez všech dokladů. Důvod: ${order.missingDocumentsReason}`
+    : "";
   const syncWarning = (data.sync ?? []).find((item) => item.warning)?.warning || order.latestSyncWarning || "";
   const warningNote = document.querySelector("#order-sync-warning");
   warningNote.hidden = !syncWarning;
@@ -1481,13 +1486,71 @@ document.querySelector("#order-save").addEventListener("click", async () => {
   await openOrder(saved.id, false);
 });
 
-document.querySelector("#order-confirm").addEventListener("click", async () => {
-  if (!orderDetail?.order || !window.confirm("Potvrdit zakázku k fakturaci a zařadit ji do Pohody?")) return;
-  const saved = await saveOrder(`/api/dispatch/orders/${encodeURIComponent(orderDetail.order.id)}/confirm`, {}, "POST");
-  if (!saved) return;
-  orderShow(orderMessage, "Zakázka je potvrzená k fakturaci.");
+// Potvrzení k fakturaci kontroluje povinné doklady. Když chybí, otevře se okno s důvodem.
+const missingDocsDialog = document.querySelector("#confirm-docs-dialog");
+
+function openMissingDocs(missing) {
+  document.querySelector("#confirm-docs-missing").innerHTML = missing.map((item) => `<li>${orderText(item)}</li>`).join("");
+  const message = document.querySelector("#confirm-docs-message");
+  message.hidden = true;
+  message.textContent = "";
+  if (!missingDocsDialog.open) missingDocsDialog.showModal();
+  document.querySelector("#confirm-docs-reason").focus();
+}
+
+async function confirmOrder(reason) {
+  if (!orderDetail?.order || orderSaving) return;
+  orderSaving = true;
+  const result = await orderFetch(`/api/dispatch/orders/${encodeURIComponent(orderDetail.order.id)}/confirm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(reason ? { missingDocumentsReason: reason } : {})
+  });
+  orderSaving = false;
+  if (result.status === 409 && result.data?.needsReason) {
+    openMissingDocs(result.data.missingDocuments ?? []);
+    return;
+  }
+  if (!result.ok) {
+    const text = result.data?.message || "Potvrzení se nepodařilo.";
+    if (missingDocsDialog.open) {
+      const message = document.querySelector("#confirm-docs-message");
+      message.hidden = false;
+      message.textContent = text;
+    } else {
+      orderShow(orderMessage, text);
+    }
+    return;
+  }
+  if (missingDocsDialog.open) missingDocsDialog.close();
+  orderShow(orderMessage, reason
+    ? "Zakázka je potvrzená k fakturaci. Důvod chybějících dokladů je uložený."
+    : "Zakázka je potvrzená k fakturaci.");
   await loadOrders();
-  await openOrder(saved.id, false);
+  await openOrder(result.data.id, false);
+}
+
+document.querySelector("#order-confirm").addEventListener("click", () => {
+  if (!orderDetail?.order) return;
+  const missing = typeof window.missingOrderDocuments === "function" ? window.missingOrderDocuments() : null;
+  if (missing?.length) {
+    openMissingDocs(missing);
+    return;
+  }
+  if (!window.confirm("Potvrdit zakázku k fakturaci a zařadit ji do Pohody?")) return;
+  confirmOrder(null);
+});
+
+document.querySelector("#confirm-docs-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const reason = document.querySelector("#confirm-docs-reason").value.trim();
+  if (!reason) {
+    const message = document.querySelector("#confirm-docs-message");
+    message.hidden = false;
+    message.textContent = "Vyplňte, proč doklady chybí.";
+    return;
+  }
+  confirmOrder(reason);
 });
 
 document.querySelector("#order-invoice").addEventListener("click", async () => {

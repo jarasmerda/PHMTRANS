@@ -116,7 +116,7 @@ public static class OrderWorkflow
         return WithDistances(Finish(routed.Order!, context.Current, context, versionAdded: true, confirmRequested: false), routed.Distances);
     }
 
-    public static OrderChange Confirm(OrderEditContext context)
+    public static OrderChange Confirm(OrderEditContext context, string? missingDocumentsReason = null)
     {
         if (context.Current is null)
             return new OrderChange.Rejected("Zakázka neexistuje.");
@@ -124,6 +124,9 @@ public static class OrderWorkflow
             return new OrderChange.Rejected("Stornovaná zakázka je jen ke čtení.");
         if (context.Current.IsLocked)
             return new OrderChange.Rejected("Zakázka je uzamčená, protože je vyfakturovaná.");
+        var reason = string.IsNullOrWhiteSpace(missingDocumentsReason) ? null : missingDocumentsReason.Trim();
+        if (reason is { Length: > 500 })
+            return new OrderChange.Rejected("Důvod chybějících dokladů může mít nejvýše 500 znaků.");
 
         var changed = context.Current.Status != OrderStatuses.KFakturaci;
         var order = changed
@@ -131,7 +134,8 @@ public static class OrderWorkflow
             {
                 Status = OrderStatuses.KFakturaci,
                 CurrentVersion = context.Current.CurrentVersion + 1,
-                UpdatedAt = context.Now
+                UpdatedAt = context.Now,
+                MissingDocumentsReason = reason
             }
             : context.Current;
         return Finish(order, context.Current, context, changed, confirmRequested: true);
@@ -334,7 +338,8 @@ public static class OrderWorkflow
             FuelTypeId: draft.FuelTypeId,
             Loads: draft.Loads,
             LoadingTime: draft.LoadingTime,
-            UnloadingTime: draft.UnloadingTime);
+            UnloadingTime: draft.UnloadingTime,
+            MissingDocumentsReason: current?.MissingDocumentsReason);
     }
 
     private static (string Status, bool Locked, string? Invoice) ResolveState(

@@ -20,7 +20,8 @@ public interface IOrderStore
 
     Task SaveDistanceAsync(DistanceWrite write, string? updatedBy, CancellationToken cancellationToken);
 
-    Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken);
+    // missingDocumentsReason: proč chybí doklady, když se potvrzuje bez nich.
+    Task<OrderMutation> ConfirmAsync(string id, CancellationToken cancellationToken, string? missingDocumentsReason = null);
 
     Task<OrderMutation> MarkInvoicedAsync(string id, string? invoiceNumber, CancellationToken cancellationToken);
 
