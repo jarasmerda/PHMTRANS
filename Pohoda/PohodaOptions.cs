@@ -31,6 +31,12 @@ public sealed class PohodaOptions
     /// </summary>
     public string AddressBookDatabase { get; set; } = "StwPh_26950430_2026";
 
+    /// <summary>
+    /// Sloupec dbo.AD s marží zákazníka v procentech (Pohoda: Cena → Výchozí nastavení → Marže).
+    /// Dispečink z ní počítá Prodej Kč/km = Náklad Kč/km × (1 + marže / 100). Prázdné = nepoužívá se.
+    /// </summary>
+    public string CustomerMarginColumn { get; set; } = "";
+
     public string EffectiveSyncMode()
     {
         if (string.Equals(SyncMode, "Off", StringComparison.OrdinalIgnoreCase))

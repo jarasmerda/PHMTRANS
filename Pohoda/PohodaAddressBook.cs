@@ -25,6 +25,9 @@ public sealed class PohodaAddressBookException(string message, bool permissionDe
 
 public sealed record PohodaAddressGroup(int Id, string? Ico, string? Group, string? Name = null);
 
+// Marže zákazníka v procentech z adresáře Pohody. Message vysvětlí, proč chybí.
+public sealed record PohodaCustomerMargin(decimal? Percent, string? Message = null);
+
 public interface IPohodaAddressBook
 {
     Task<IReadOnlyList<PohodaAddress>> SearchAsync(string query, CancellationToken cancellationToken);
@@ -34,6 +37,10 @@ public interface IPohodaAddressBook
         IReadOnlyCollection<int> ids,
         IReadOnlyCollection<string> icos,
         CancellationToken cancellationToken);
+
+    /// <summary>Marže zákazníka v % (sloupec dbo.AD podle Pohoda:CustomerMarginColumn).</summary>
+    Task<PohodaCustomerMargin> MarginAsync(int id, CancellationToken cancellationToken) =>
+        Task.FromResult(new PohodaCustomerMargin(null, PohodaAddressSql.MarginNotConfigured));
 }
 
 // Jen čtení. Do dbo.AD se nezapisuje.
@@ -75,6 +82,22 @@ public static partial class PohodaAddressSql
         FROM {QualifiedTable(database)}
         WHERE ID IN @Ids OR ICO IN @Icos
         """;
+
+    public const string MarginNotConfigured =
+        "Marže zákazníka se z Pohody zatím nenačítá: není nastavený sloupec adresáře (Pohoda:CustomerMarginColumn).";
+
+    public static string MarginColumn(string? configured)
+    {
+        var name = configured?.Trim() ?? "";
+        if (name.Length == 0)
+            return "";
+        if (!Identifier().IsMatch(name))
+            throw new PohodaAddressBookException("Název sloupce marže v adresáři Pohody obsahuje nepovolené znaky.");
+        return name;
+    }
+
+    public static string MarginSql(string database, string column) =>
+        $"SELECT TOP (1) TRY_CONVERT(decimal(18,4), [{column}]) FROM {QualifiedTable(database)} WHERE ID = @Id";
 
     public static string Like(string query)
     {
@@ -171,6 +194,19 @@ public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<
             new { Ids = ids.ToArray(), Icos = icos.ToArray() },
             cancellationToken);
         return rows.Select(row => new PohodaAddressGroup(row.ID, row.ICO?.Trim(), row.Skupina?.Trim(), row.Name)).ToArray();
+    }
+
+    public async Task<PohodaCustomerMargin> MarginAsync(int id, CancellationToken cancellationToken)
+    {
+        var column = PohodaAddressSql.MarginColumn(options.Value.CustomerMarginColumn);
+        if (column.Length == 0)
+            return new PohodaCustomerMargin(null, PohodaAddressSql.MarginNotConfigured);
+
+        var rows = await QueryAsync<decimal?>(database => PohodaAddressSql.MarginSql(database, column), new { Id = id }, cancellationToken);
+        var percent = rows.FirstOrDefault();
+        return percent is null
+            ? new PohodaCustomerMargin(null, "Zákazník nemá v Pohodě vyplněnou marži.")
+            : new PohodaCustomerMargin(percent);
     }
 
     private async Task<IEnumerable<T>> QueryAsync<T>(Func<string, string> sqlFor, object parameters, CancellationToken cancellationToken)

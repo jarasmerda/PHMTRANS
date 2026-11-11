@@ -318,7 +318,8 @@ function formFields(prefix, order) {
             <option value="Liters"${mode === "Liters" ? " selected" : ""}>Za litr</option>
           </select>
         </label>
-        <label>Prodej Kč/km <input id="${prefix}-sale-km" type="number" min="0" step="0.0001" value="${orderText(order?.salePerKm ?? 0)}"></label>
+        <label>Prodej Kč/km <input id="${prefix}-sale-km" type="number" min="0" step="0.0001" value="${orderText(order?.salePerKm ?? 0)}">
+          <span class="note" id="${prefix}-sale-note"></span></label>
         <label>Prodej Kč/l <input id="${prefix}-sale-liter" type="number" min="0" step="0.0001" value="${orderText(order?.salePerLiter ?? 0)}"></label>
         <label>Náklad Kč/km <input id="${prefix}-cost-km" type="number" min="0" step="0.0001" value="${orderText(order?.costPerKm ?? "")}">
           <span class="note" id="${prefix}-cost-note"></span></label>
@@ -901,8 +902,55 @@ function applyCostDefault(prefix) {
     note.textContent = "";
 }
 
+// Marže zákazníka z adresáře Pohody (v %), podle formuláře.
+const customerMargins = {};
+
+async function loadCustomerMargin(prefix) {
+  const id = Number(document.querySelector(`#${prefix}-customer-id`)?.value || 0);
+  if (!id) {
+    customerMargins[prefix] = null;
+    refreshRoute(prefix);
+    return;
+  }
+  const result = await orderFetch(`/api/dispatch/customers/${id}/margin`);
+  if (Number(document.querySelector(`#${prefix}-customer-id`)?.value || 0) !== id) return;
+  const percent = result.data?.percent;
+  customerMargins[prefix] = {
+    percent: percent === null || percent === undefined ? null : Number(percent),
+    message: result.ok ? result.data?.message || "" : "Marži zákazníka se nepodařilo načíst."
+  };
+  refreshRoute(prefix);
+}
+
+// Prodej Kč/km = Náklad Kč/km × (1 + marže zákazníka / 100). Ruční hodnota se nepřepisuje.
+function applySaleDefault(prefix) {
+  const field = document.querySelector(`#${prefix}-sale-km`);
+  const note = document.querySelector(`#${prefix}-sale-note`);
+  if (!field) return;
+  const margin = customerMargins[prefix];
+  const cost = Number(document.querySelector(`#${prefix}-cost-km`)?.value || 0);
+  const locked = prefix === "edit" && !!orderDetail?.order?.isLocked;
+  const blank = field.value.trim() === "" || Number(field.value) === 0;
+  const known = margin && margin.percent !== null && Number.isFinite(margin.percent);
+  const rate = known && cost > 0 ? Math.round(cost * (1 + margin.percent / 100) * 10000) / 10000 : null;
+  if (rate !== null && !field.disabled && !locked && !field.dataset.touched && (blank || field.dataset.auto === "1")) {
+    field.value = String(rate);
+    field.dataset.auto = "1";
+  }
+  if (!note) return;
+  const formula = rate !== null
+    ? `Náklad ${orderMoney.format(cost)} × (1 + marže ${orderMoney.format(margin.percent)} %) = ${orderMoney.format(rate)} Kč/km`
+    : "";
+  if (!margin) note.textContent = "";
+  else if (!known) note.textContent = margin.message || "Zákazník nemá v Pohodě marži.";
+  else if (cost <= 0) note.textContent = `Marže zákazníka ${orderMoney.format(margin.percent)} %. Chybí Náklad Kč/km.`;
+  else if (field.dataset.auto === "1") note.textContent = `Doplněno: ${formula}.`;
+  else note.textContent = `Podle marže by bylo: ${formula}.`;
+}
+
 function refreshRoute(prefix) {
   applyCostDefault(prefix);
+  applySaleDefault(prefix);
   paintPairs(prefix);
   renderCompartments(prefix);
   renderStopCompartments(prefix);
@@ -1102,7 +1150,9 @@ function renderDetail(data) {
     });
   }
   stampPairs("edit");
+  customerMargins.edit = null;
   refreshRoute("edit");
+  if (!cancelled) loadCustomerMargin("edit");
   labelKnownKm("edit");
   if (!cancelled) refreshAvailability("edit");
   document.querySelector("#version-page").hidden = true;
@@ -1329,6 +1379,7 @@ async function fetchCatalog() {
 async function loadCatalog() {
   await fetchCatalog();
   document.querySelector("#order-create").innerHTML = formFields("create");
+  customerMargins.create = null;
   stampPairs("create");
   refreshRoute("create");
   labelKnownKm("create");
@@ -1460,6 +1511,7 @@ document.querySelector("#orders-view").addEventListener("click", (event) => {
     set("customer-zip", pick.dataset.zip);
     set("customer-email", pick.dataset.email);
     set("customer-phone", pick.dataset.phone);
+    loadCustomerMargin(prefix);
     const snapshot = document.querySelector(`#${prefix}-customer-snapshot`);
     if (snapshot) snapshot.textContent = [pick.dataset.ico ? `IČO ${pick.dataset.ico}` : "", [pick.dataset.street, pick.dataset.city, pick.dataset.zip].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
     const warn = document.querySelector(`#${prefix}-customer-warn`);
@@ -1548,10 +1600,11 @@ document.querySelector("#orders-view").addEventListener("input", (event) => {
     const idField = document.querySelector(`#${prefix}-customer-id`);
     if (idField && event.target.id === `${prefix}-customer`) {
       idField.value = "";
+      customerMargins[prefix] = null;
       scheduleCustomerSearch(prefix);
     }
   }
-  if (event.target.matches("[id$='-cost-km']")) {
+  if (event.target.matches("[id$='-cost-km'], [id$='-sale-km']")) {
     event.target.dataset.touched = "1";
     event.target.dataset.auto = "";
   }
@@ -1649,6 +1702,7 @@ document.querySelector("#order-create").addEventListener("submit", async (event)
   if (!created) return;
   distanceCache.clear();
   document.querySelector("#order-create").innerHTML = formFields("create");
+  customerMargins.create = null;
   stampPairs("create");
   refreshRoute("create");
   document.querySelector("#order-create-dialog")?.close();

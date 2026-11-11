@@ -221,6 +221,12 @@ public sealed class OrderCancelTests
         Assert.Null(new PohodaAddressRow { ID = 0, Firma = "X" }.ToAddress());
 
         Assert.Equal("StwPh_26950430_2026", PohodaAddressSql.DefaultDatabase);
+        Assert.Equal("", PohodaAddressSql.MarginColumn("  "));
+        Assert.Equal("Marze", PohodaAddressSql.MarginColumn(" Marze "));
+        Assert.Throws<PohodaAddressBookException>(() => PohodaAddressSql.MarginColumn("Marze; DROP"));
+        Assert.Equal(
+            "SELECT TOP (1) TRY_CONVERT(decimal(18,4), [Marze]) FROM [StwPh_26950430_2026].dbo.AD WHERE ID = @Id",
+            PohodaAddressSql.MarginSql("StwPh_26950430_2026", "Marze"));
         Assert.Equal("StwPh_26950430_2026", new PohodaOptions().AddressBookDatabase);
         var settingsDir = new DirectoryInfo(AppContext.BaseDirectory);
         string? settings = null;
