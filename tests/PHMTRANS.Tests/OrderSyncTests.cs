@@ -14,14 +14,17 @@ public sealed class OrderSyncTests
     private static readonly DateOnly Unloading = new(2026, 11, 5);
 
     [Fact]
-    public void New_order_is_queued_on_create_before_confirmation()
+    public void New_or_edited_order_is_not_sent_to_pohoda_before_confirmation()
     {
         var draft = Sample(version: 1, price: 10000m, fuel: "motorová nafta");
-        var plan = OrderSyncPlanner.Plan(draft, previous: null, lastSent: null, confirmRequested: false);
+        Assert.Equal(OrderSyncAction.None, OrderSyncPlanner.Plan(draft, previous: null, lastSent: null, confirmRequested: false).Action);
 
-        Assert.Equal(OrderSyncAction.Create, plan.Action);
-        Assert.Null(plan.VersionFrom);
-        Assert.Equal(1, plan.VersionTo);
+        var repriced = draft with { CurrentVersion = 2, AgreedPrice = 12000m };
+        Assert.Equal(OrderSyncAction.None, OrderSyncPlanner.Plan(repriced, draft, lastSent: null, confirmRequested: false).Action);
+
+        // Potvrzená zakázka, která v Pohodě ještě není, se po změně pošle znovu.
+        var confirmed = repriced with { Status = OrderStatuses.KFakturaci, CurrentVersion = 3, AgreedPrice = 13000m };
+        Assert.Equal(OrderSyncAction.Create, OrderSyncPlanner.Plan(confirmed, repriced with { Status = OrderStatuses.KFakturaci }, lastSent: null, confirmRequested: false).Action);
     }
 
     [Fact]
@@ -475,22 +478,19 @@ public sealed class OrderSyncTests
         live.SyncMode = "Live";
         var store = new MemoryOrderStore(new MemoryDispatchStore(), Options.Create(live));
         var created = Assert.IsType<OrderMutation.Success>(await store.CreateAsync(Request(), CancellationToken.None));
-        Assert.Equal(OrderQueueStatuses.Pending, created.Order.LatestSyncStatus);
-        var createdQueue = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
-        Assert.Equal(OrderSyncActions.Create, createdQueue.Action);
-        Assert.Equal(created.Order.CurrentVersion, createdQueue.VersionTo);
-        AssertSameDocumentNumber(XDocument.Parse(createdQueue.PayloadXml), created.Order.Code);
+        // Před potvrzením k fakturaci nic do Pohody nejde, ani Odeslat znovu.
+        Assert.Null(created.Order.LatestSyncStatus);
+        Assert.Empty(await store.ListQueueAsync(CancellationToken.None));
+        Assert.IsType<OrderMutation.Rejected>(await store.ResendAsync(created.Order.Id, CancellationToken.None));
 
         var noted = Assert.IsType<OrderMutation.Success>(await store.UpdateAsync(created.Order.Id, Request(note: "jen poznámka", driverId: "drv-1", cmr: "CMR-1"), CancellationToken.None));
-        Assert.Equal(OrderQueueStatuses.Pending, noted.Order.LatestSyncStatus);
         Assert.Equal(2, noted.Order.CurrentVersion);
-        var afterNote = Assert.Single(await store.ListQueueAsync(CancellationToken.None));
-        Assert.Equal(createdQueue.Id, afterNote.Id);
-        Assert.Equal(created.Order.CurrentVersion, afterNote.VersionTo);
+        Assert.Empty(await store.ListQueueAsync(CancellationToken.None));
 
         var confirmed = Assert.IsType<OrderMutation.Success>(await store.ConfirmAsync(created.Order.Id, CancellationToken.None));
         var queue = await store.ListQueueAsync(CancellationToken.None);
         var create = Assert.Single(queue);
+        AssertSameDocumentNumber(XDocument.Parse(create.PayloadXml), created.Order.Code);
         Assert.Equal(OrderSyncActions.Create, create.Action);
         Assert.Equal(OrderQueueStatuses.Pending, create.Status);
         Assert.Equal(confirmed.Order.CurrentVersion, create.VersionTo);

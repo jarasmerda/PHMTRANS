@@ -56,17 +56,21 @@ public static class OrderSyncPlanner
             && (previous is null || !OrderPohodaFields.Same(previous, current)))
             return new OrderSyncPlan(OrderSyncAction.Update, previous?.CurrentVersion, current.CurrentVersion);
 
-        // Nová zakázka jde do fronty hned při založení a znovu, když se změní údaje pro Pohodu.
-        // Stav „K fakturaci“ už není podmínka odeslání.
+        // Do Pohody se zakázka pošle až při potvrzení k fakturaci. Potvrzená zakázka, která v Pohodě
+        // ještě není, se pošle znovu, když se změní údaje pro Pohodu.
         if (!hasDocument)
         {
             var fieldsChanged = previous is null || !OrderPohodaFields.Same(previous, current);
-            if (fieldsChanged || confirmRequested)
+            if (confirmRequested || (IsConfirmed(current) && fieldsChanged))
                 return new OrderSyncPlan(OrderSyncAction.Create, null, current.CurrentVersion);
         }
 
         return OrderSyncPlan.None(current.CurrentVersion);
     }
+
+    // Zakázka je potvrzená k fakturaci (nebo už vyfakturovaná).
+    public static bool IsConfirmed(DispatchOrder order) =>
+        order.IsLocked || order.Status is OrderStatuses.KFakturaci or OrderStatuses.Vyfakturovano;
 
     public static OrderSyncPlan Force(DispatchOrder current, DispatchOrder? lastSent)
     {
