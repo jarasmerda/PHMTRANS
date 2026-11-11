@@ -78,8 +78,24 @@ public sealed class OrderDocumentTests : IDisposable
 
         Assert.Contains("capture=\"environment\"", html, StringComparison.Ordinal);
         Assert.Contains("Vyfotit doklad", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-doklady.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-doklady.js?v=2", html, StringComparison.Ordinal);
         Assert.Contains("window.loadOrderDocuments = load", js, StringComparison.Ordinal);
         Assert.Contains("/documents", js, StringComparison.Ordinal);
+        Assert.Contains("id=\"doc-steps\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"doc-confirm\"", html, StringComparison.Ordinal);
+        Assert.Contains("nakladka-nakladni-list", js, StringComparison.Ordinal);
+        Assert.Contains("-staceci-list", js, StringComparison.Ordinal);
+        Assert.Contains("-potvrzeni", js, StringComparison.Ordinal);
+        Assert.Contains("#order-confirm", js, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("nakladka-nakladni-list.jpg")]
+    [InlineData("vykladka-1-staceci-list.jpg")]
+    [InlineData("vykladka-12-potvrzeni.pdf")]
+    public void Step_file_names_survive_the_safe_name(string name)
+    {
+        // Krok dokladu se v prohlížeči pozná podle názvu, server ho nesmí změnit.
+        Assert.Equal(name, OrderDocumentRules.SafeName(name));
     }
 }

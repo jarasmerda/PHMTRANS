@@ -1,5 +1,6 @@
-// Doklady k zakázce: focení z mobilu a přikládání souborů.
-// Soubory ukládá server do složky zakázky, kterou synchronizuje OneDrive.
+// Doklady k zakázce po krocích: nakládka (nákladní list), každá vykládka (stáčecí list,
+// potvrzení od zákazníka) a ostatní doklady. Soubory ukládá server do složky zakázky,
+// kterou synchronizuje OneDrive. Krok se pozná podle názvu souboru (…-vykladka-1-staceci-list.jpg).
 (() => {
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
@@ -7,12 +8,21 @@
   const when = new Intl.DateTimeFormat("cs-CZ", { dateStyle: "short", timeStyle: "short" });
   const maxSide = 2400;
   const shrinkAbove = 1.5 * 1024 * 1024;
+  const closedStatuses = ["K fakturaci", "Vyfakturováno", "Stornováno"];
   let current = null;
+  let documents = [];
+  let configured = true;
   let uploading = false;
+  let pendingSlot = null;
+  let justFinished = false;
 
   const message = document.querySelector("#doc-message");
   const list = document.querySelector("#doc-list");
-  const buttons = [document.querySelector("#doc-camera-button"), document.querySelector("#doc-file-button")];
+  const steps = document.querySelector("#doc-steps");
+  const progress = document.querySelector("#doc-progress");
+  const confirmBox = document.querySelector("#doc-confirm");
+  const camera = document.querySelector("#doc-camera");
+  const picker = document.querySelector("#doc-file");
 
   function show(value) {
     message.hidden = !value;
@@ -29,15 +39,115 @@
     return `/api/dispatch/orders/${encodeURIComponent(current.id)}/documents/${encodeURIComponent(name)}`;
   }
 
-  function render(documents) {
-    list.innerHTML = (documents ?? []).map((doc) => {
-      const url = fileUrl(doc.name);
-      const preview = doc.isImage && !/\.(heic|heif)$/i.test(doc.name)
-        ? `<img src="${esc(url)}" alt="" loading="lazy">`
-        : `<span class="doc-pdf">${esc((doc.name.split(".").pop() || "").toUpperCase())}</span>`;
-      return `<li><a href="${esc(url)}" target="_blank" rel="noopener">${preview}${esc(doc.name)}</a>
-        <br><span class="note">${esc(sizeText(doc.size))} · ${esc(when.format(new Date(doc.modifiedAt)))}</span></li>`;
+  // Kroky podle zakázky: nakládka a každá vykládka.
+  function slotsFor(order) {
+    const groups = [{
+      title: "Doklady k nakládce",
+      place: order.loadingPlace || "",
+      slots: [{ key: "nakladka-nakladni-list", label: "Nákladní list" }]
+    }];
+    const stops = order.stops?.length ? order.stops : [{ place: order.unloadingPlace || "" }];
+    stops.forEach((stop, index) => {
+      const number = index + 1;
+      groups.push({
+        title: `Doklady k vykládce ${number}`,
+        place: stop.place || "",
+        slots: [
+          { key: `vykladka-${number}-staceci-list`, label: "Stáčecí list" },
+          { key: `vykladka-${number}-potvrzeni`, label: "Potvrzení od zákazníka" }
+        ]
+      });
+    });
+    return groups;
+  }
+
+  function slotOf(name) {
+    return /^\d{8}-\d{6}-(nakladka-nakladni-list|vykladka-\d+-(?:staceci-list|potvrzeni))(?:-\d+)?\.[a-z0-9]+$/i.exec(name)?.[1]?.toLowerCase() || null;
+  }
+
+  function preview(doc) {
+    const url = fileUrl(doc.name);
+    return doc.isImage && !/\.(heic|heif)$/i.test(doc.name)
+      ? `<img src="${esc(url)}" alt="" loading="lazy">`
+      : `<span class="doc-pdf">${esc((doc.name.split(".").pop() || "").toUpperCase())}</span>`;
+  }
+
+  function card(doc) {
+    return `<li><a href="${esc(fileUrl(doc.name))}" target="_blank" rel="noopener">${preview(doc)}${esc(doc.name)}</a>
+      <br><span class="note">${esc(sizeText(doc.size))} · ${esc(when.format(new Date(doc.modifiedAt)))}</span></li>`;
+  }
+
+  function canAdd() {
+    return configured && current && current.status !== "Stornováno" && !uploading;
+  }
+
+  function render() {
+    if (!current) return;
+    const groups = slotsFor(current);
+    const bySlot = new Map();
+    const others = [];
+    for (const doc of documents) {
+      const slot = slotOf(doc.name);
+      if (slot) bySlot.set(slot, [...(bySlot.get(slot) ?? []), doc]);
+      else others.push(doc);
+    }
+    const all = groups.flatMap((group) => group.slots);
+    const done = all.filter((slot) => bySlot.has(slot.key)).length;
+    const next = all.find((slot) => !bySlot.has(slot.key))?.key;
+    const enabled = canAdd();
+
+    progress.hidden = !configured;
+    progress.innerHTML = `Nahráno <strong>${done} z ${all.length}</strong> povinných dokladů`
+      + `<span class="doc-bar" aria-hidden="true"><i style="width:${all.length ? Math.round(done / all.length * 100) : 0}%"></i></span>`;
+
+    let step = 0;
+    steps.innerHTML = groups.map((group, groupIndex) => {
+      const letter = String.fromCharCode(97 + groupIndex);
+      const rows = group.slots.map((slot, slotIndex) => {
+        step += 1;
+        const files = bySlot.get(slot.key) ?? [];
+        const isDone = files.length > 0;
+        return `<div class="doc-step${isDone ? " done" : ""}${slot.key === next ? " next" : ""}">
+          <div class="doc-step-head">
+            <span class="doc-check" aria-hidden="true">${isDone ? "✓" : step}</span>
+            <strong>${esc(`${letter}${slotIndex + 1}) ${isDone ? "" : "Vyfoť "}${isDone ? slot.label : slot.label.toLowerCase()}`)}</strong>
+            ${isDone ? `<span class="note">nahráno ${files.length}×</span>` : slot.key === next ? `<span class="pill">další krok</span>` : ""}
+          </div>
+          <div class="doc-step-actions">
+            <button type="button" data-doc-slot="${slot.key}" data-doc-mode="camera"${enabled ? "" : " disabled"}${isDone ? ` class="ghost"` : ""}>${isDone ? "Přidat další foto" : "Vyfotit"}</button>
+            <button type="button" class="ghost" data-doc-slot="${slot.key}" data-doc-mode="file"${enabled ? "" : " disabled"}>Soubor</button>
+          </div>
+          ${files.length ? `<ul class="doc-list">${files.map(card).join("")}</ul>` : ""}
+        </div>`;
+      }).join("");
+      return `<section class="doc-group">
+        <h4>${esc(`${letter}) ${group.title}`)}${group.place ? ` <span class="note">${esc(group.place)}</span>` : ""}</h4>
+        ${rows}
+      </section>`;
     }).join("");
+
+    list.innerHTML = others.map(card).join("");
+    document.querySelector("#doc-others-empty").hidden = others.length > 0;
+    for (const id of ["#doc-camera-button", "#doc-file-button"])
+      document.querySelector(id).disabled = !enabled;
+
+    const confirmButton = document.querySelector("#order-confirm");
+    const complete = all.length > 0 && done === all.length;
+    if (complete && current.status === "K fakturaci") {
+      confirmBox.hidden = false;
+      confirmBox.className = "doc-confirm ok";
+      confirmBox.innerHTML = `<strong>Všechny doklady jsou nahrané.</strong> Zakázka je potvrzená k fakturaci.`;
+    } else if (complete && !closedStatuses.includes(current.status) && confirmButton && !confirmButton.disabled) {
+      confirmBox.hidden = false;
+      confirmBox.className = "doc-confirm";
+      confirmBox.innerHTML = `<strong>Všechny doklady jsou nahrané.</strong>
+        <button type="button" id="doc-confirm-button">Potvrdit k fakturaci</button>`;
+      if (justFinished) confirmBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      confirmBox.hidden = true;
+      confirmBox.innerHTML = "";
+    }
+    justFinished = false;
   }
 
   async function request(url, options) {
@@ -57,23 +167,28 @@
 
   async function load(order) {
     current = order;
+    documents = [];
+    configured = true;
+    steps.innerHTML = "";
     list.innerHTML = "";
-    const cancelled = order.status === "Stornováno";
-    buttons.forEach((button) => { button.disabled = cancelled; });
+    confirmBox.hidden = true;
     show("Načítám doklady…");
     const result = await request(`/api/dispatch/orders/${encodeURIComponent(order.id)}/documents`);
     if (current !== order) return;
     if (!result.ok) {
       show(result.data.message || "Doklady se nepodařilo načíst.");
+      render();
       return;
     }
     if (result.data.configured === false) {
-      buttons.forEach((button) => { button.disabled = true; });
+      configured = false;
       show(result.data.message);
+      render();
       return;
     }
-    render(result.data.documents);
-    show(result.data.documents?.length ? "" : "Zatím bez dokladů.");
+    documents = result.data.documents ?? [];
+    show("");
+    render();
   }
 
   // Velkou fotku z mobilu zmenší na nejvýš 2400 px, ať se rychle nahraje.
@@ -97,44 +212,71 @@
     }
   }
 
-  function photoName(file) {
-    // Fotoaparát v mobilu dává názvy jako image.jpg, doplní se kód zakázky.
-    if (!/^(image|photo|img)[-_\d]*\.\w+$/i.test(file.name)) return file.name;
-    const extension = (file.name.split(".").pop() || "jpg").toLowerCase();
-    return `${current.code}-foto.${extension}`;
+  function extensionOf(file) {
+    const fromName = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase();
+    if (fromName) return fromName;
+    return { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" }[file.type] || "jpg";
   }
 
-  async function upload(files) {
+  function uploadName(file, slot) {
+    if (slot) return `${slot}.${extensionOf(file)}`;
+    // Fotoaparát v mobilu dává názvy jako image.jpg, doplní se kód zakázky.
+    if (!/^(image|photo|img)[-_\d]*\.\w+$/i.test(file.name)) return file.name;
+    return `${current.code}-foto.${extensionOf(file)}`;
+  }
+
+  async function upload(files, slot) {
     if (!current || uploading || !files.length) return;
+    const order = current;
+    const before = slotsFor(order).flatMap((group) => group.slots).filter((item) => !documents.some((doc) => slotOf(doc.name) === item.key)).length;
     uploading = true;
-    buttons.forEach((button) => { button.disabled = true; });
+    render();
     show(files.length === 1 ? "Nahrávám doklad…" : `Nahrávám ${files.length} dokladů…`);
     const form = new FormData();
     for (const file of files) {
       const ready = await shrink(file);
-      form.append("files", ready, photoName(ready));
+      form.append("files", ready, uploadName(ready, slot));
     }
-    const order = current;
     const result = await request(`/api/dispatch/orders/${encodeURIComponent(order.id)}/documents`, { method: "POST", body: form });
     uploading = false;
-    buttons.forEach((button) => { button.disabled = order.status === "Stornováno"; });
     if (current !== order) return;
     if (!result.ok) {
       show(result.data.message || "Doklad se nepodařilo nahrát.");
+      render();
       return;
     }
-    render(result.data.documents);
+    documents = result.data.documents ?? documents;
+    const missing = slotsFor(order).flatMap((group) => group.slots).filter((item) => !documents.some((doc) => slotOf(doc.name) === item.key)).length;
+    justFinished = before > 0 && missing === 0;
     const count = result.data.saved?.length ?? 0;
     show(count === 1 ? "Doklad je uložený." : `Uloženo dokladů: ${count}.`);
+    render();
   }
 
-  for (const [buttonId, inputId] of [["#doc-camera-button", "#doc-camera"], ["#doc-file-button", "#doc-file"]]) {
-    const input = document.querySelector(inputId);
-    document.querySelector(buttonId).addEventListener("click", () => input.click());
+  function pick(slot, mode) {
+    if (!canAdd()) return;
+    pendingSlot = slot;
+    (mode === "file" ? picker : camera).click();
+  }
+
+  document.querySelector("#order-docs").addEventListener("click", (event) => {
+    const step = event.target.closest("[data-doc-slot]");
+    if (step) {
+      pick(step.dataset.docSlot, step.dataset.docMode);
+      return;
+    }
+    if (event.target.closest("#doc-camera-button")) pick(null, "camera");
+    else if (event.target.closest("#doc-file-button")) pick(null, "file");
+    else if (event.target.closest("#doc-confirm-button")) document.querySelector("#order-confirm")?.click();
+  });
+
+  for (const input of [camera, picker]) {
     input.addEventListener("change", async () => {
       const files = [...input.files];
+      const slot = pendingSlot;
       input.value = "";
-      await upload(files);
+      pendingSlot = null;
+      await upload(files, slot);
     });
   }
 
