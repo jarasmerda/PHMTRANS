@@ -38,9 +38,9 @@ public interface IPohodaAddressBook
         IReadOnlyCollection<string> icos,
         CancellationToken cancellationToken);
 
-    /// <summary>Marže zákazníka v % (sloupec dbo.AD podle Pohoda:CustomerMarginColumn).</summary>
+    /// <summary>Marže zákazníka v % z jeho cenové hladiny: dbo.AD.CenyIDS → dbo.SkCeny.IDS → SkCeny.Marze.</summary>
     Task<PohodaCustomerMargin> MarginAsync(int id, CancellationToken cancellationToken) =>
-        Task.FromResult(new PohodaCustomerMargin(null, PohodaAddressSql.MarginNotConfigured));
+        Task.FromResult(new PohodaCustomerMargin(null, "Marže zákazníka není k dispozici."));
 }
 
 // Jen čtení. Do dbo.AD se nezapisuje.
@@ -83,21 +83,18 @@ public static partial class PohodaAddressSql
         WHERE ID IN @Ids OR ICO IN @Icos
         """;
 
-    public const string MarginNotConfigured =
-        "Marže zákazníka se z Pohody zatím nenačítá: není nastavený sloupec adresáře (Pohoda:CustomerMarginColumn).";
+    public static string MarginPermissionMessage(string database) =>
+        $"Účet {Login} nemá oprávnění SELECT na cenové hladiny Pohody {database}.dbo.SkCeny. " +
+        $"Správce databáze musí spustit: GRANT SELECT ON [{database}].dbo.SkCeny TO {Login};";
 
-    public static string MarginColumn(string? configured)
-    {
-        var name = configured?.Trim() ?? "";
-        if (name.Length == 0)
-            return "";
-        if (!Identifier().IsMatch(name))
-            throw new PohodaAddressBookException("Název sloupce marže v adresáři Pohody obsahuje nepovolené znaky.");
-        return name;
-    }
-
-    public static string MarginSql(string database, string column) =>
-        $"SELECT TOP (1) TRY_CONVERT(decimal(18,4), [{column}]) FROM {QualifiedTable(database)} WHERE ID = @Id";
+    // Marže je u cenové hladiny zákazníka (Pohoda: Cena → Výchozí nastavení), ne přímo v adresáři.
+    public static string MarginSql(string database) =>
+        $"""
+        SELECT TOP (1) a.CenyIDS, TRY_CONVERT(decimal(18,4), c.Marze) AS Marze
+        FROM {QualifiedTable(database)} a
+        LEFT JOIN [{database}].dbo.SkCeny c ON c.IDS = a.CenyIDS
+        WHERE a.ID = @Id
+        """;
 
     public static string Like(string query)
     {
@@ -168,6 +165,24 @@ public sealed class PohodaAddressGroupRow
         : null;
 }
 
+public sealed class PohodaMarginRow
+{
+    public string? CenyIDS { get; set; }
+    public decimal? Marze { get; set; }
+
+    public static PohodaCustomerMargin ToMargin(PohodaMarginRow? row)
+    {
+        if (row is null)
+            return new PohodaCustomerMargin(null, "Zákazník v adresáři Pohody není.");
+        var level = row.CenyIDS?.Trim();
+        if (string.IsNullOrEmpty(level))
+            return new PohodaCustomerMargin(null, "Zákazník nemá v Pohodě cenovou hladinu (Cena → Výchozí nastavení).");
+        return row.Marze is null
+            ? new PohodaCustomerMargin(null, $"Cenová hladina {level} nemá v Pohodě vyplněnou marži.")
+            : new PohodaCustomerMargin(row.Marze, $"Cenová hladina {level}.");
+    }
+}
+
 public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<PohodaOptions> options) : IPohodaAddressBook
 {
     private readonly string? _connectionString = configuration.GetConnectionString("Dispatch");
@@ -198,15 +213,18 @@ public sealed class SqlPohodaAddressBook(IConfiguration configuration, IOptions<
 
     public async Task<PohodaCustomerMargin> MarginAsync(int id, CancellationToken cancellationToken)
     {
-        var column = PohodaAddressSql.MarginColumn(options.Value.CustomerMarginColumn);
-        if (column.Length == 0)
-            return new PohodaCustomerMargin(null, PohodaAddressSql.MarginNotConfigured);
+        IEnumerable<PohodaMarginRow> rows;
+        try
+        {
+            rows = await QueryAsync<PohodaMarginRow>(PohodaAddressSql.MarginSql, new { Id = id }, cancellationToken);
+        }
+        catch (PohodaAddressBookException exception) when (exception.PermissionDenied)
+        {
+            var database = PohodaAddressSql.DatabaseName(options.Value.AddressBookDatabase);
+            throw new PohodaAddressBookException(PohodaAddressSql.MarginPermissionMessage(database), permissionDenied: true);
+        }
 
-        var rows = await QueryAsync<decimal?>(database => PohodaAddressSql.MarginSql(database, column), new { Id = id }, cancellationToken);
-        var percent = rows.FirstOrDefault();
-        return percent is null
-            ? new PohodaCustomerMargin(null, "Zákazník nemá v Pohodě vyplněnou marži.")
-            : new PohodaCustomerMargin(percent);
+        return PohodaMarginRow.ToMargin(rows.FirstOrDefault());
     }
 
     private async Task<IEnumerable<T>> QueryAsync<T>(Func<string, string> sqlFor, object parameters, CancellationToken cancellationToken)

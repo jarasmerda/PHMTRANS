@@ -221,12 +221,14 @@ public sealed class OrderCancelTests
         Assert.Null(new PohodaAddressRow { ID = 0, Firma = "X" }.ToAddress());
 
         Assert.Equal("StwPh_26950430_2026", PohodaAddressSql.DefaultDatabase);
-        Assert.Equal("", PohodaAddressSql.MarginColumn("  "));
-        Assert.Equal("Marze", PohodaAddressSql.MarginColumn(" Marze "));
-        Assert.Throws<PohodaAddressBookException>(() => PohodaAddressSql.MarginColumn("Marze; DROP"));
-        Assert.Equal(
-            "SELECT TOP (1) TRY_CONVERT(decimal(18,4), [Marze]) FROM [StwPh_26950430_2026].dbo.AD WHERE ID = @Id",
-            PohodaAddressSql.MarginSql("StwPh_26950430_2026", "Marze"));
+        var marginSql = PohodaAddressSql.MarginSql("StwPh_26950430_2026");
+        Assert.Contains("FROM [StwPh_26950430_2026].dbo.AD a", marginSql, StringComparison.Ordinal);
+        Assert.Contains("LEFT JOIN [StwPh_26950430_2026].dbo.SkCeny c ON c.IDS = a.CenyIDS", marginSql, StringComparison.Ordinal);
+        Assert.Contains("c.Marze", marginSql, StringComparison.Ordinal);
+        Assert.Contains("GRANT SELECT ON [StwPh_26950430_2026].dbo.SkCeny TO phmtrans_dispatch;", PohodaAddressSql.MarginPermissionMessage("StwPh_26950430_2026"), StringComparison.Ordinal);
+        Assert.Equal(12.5m, PohodaMarginRow.ToMargin(new PohodaMarginRow { CenyIDS = "VO", Marze = 12.5m }).Percent);
+        Assert.Contains("nemá v Pohodě cenovou hladinu", PohodaMarginRow.ToMargin(new PohodaMarginRow { CenyIDS = " " }).Message);
+        Assert.Contains("Cenová hladina VO nemá", PohodaMarginRow.ToMargin(new PohodaMarginRow { CenyIDS = "VO" }).Message);
         Assert.Equal("StwPh_26950430_2026", new PohodaOptions().AddressBookDatabase);
         var settingsDir = new DirectoryInfo(AppContext.BaseDirectory);
         string? settings = null;
