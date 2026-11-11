@@ -1,5 +1,5 @@
-// Výběr času řidiče ve formuláři zakázky: den po hodinách, řádek pro každého řidiče.
-// Tažením přes volný úsek (nebo klepnutím na začátek) se vyplní řidič, datum a čas od–do.
+// Výběr času vozidla ve formuláři zakázky: den po hodinách, řádek pro každé vozidlo.
+// Tažením přes volný úsek (nebo klepnutím na začátek) se vyplní vozidlo, datum a čas od–do.
 (() => {
   // Šířka hodiny: na mobilu užší, ať je vidět víc hodin najednou.
   const HOUR = window.matchMedia?.("(max-width: 760px)").matches ? 28 : 40;
@@ -37,6 +37,11 @@
     return days * 1440 + (toMinutes(time) ?? 0);
   }
 
+  function vehicleName(vehicle) {
+    if (!vehicle) return "";
+    return vehicle.label ? `${vehicle.plate} · ${vehicle.label}` : vehicle.plate;
+  }
+
   function ownId(prefix) {
     try {
       // orderDetail je z dispecink-orders.js.
@@ -48,14 +53,14 @@
 
   // Výběr z formuláře, oříznutý na zobrazený den.
   function formPick(prefix, day) {
-    const driver = field(prefix, "driver")?.value || "";
+    const vehicle = field(prefix, "vehicle")?.value || "";
     const fromDate = field(prefix, "loading-date")?.value || "";
     const toDate = field(prefix, "unloading-date")?.value || fromDate;
-    if (!driver || !fromDate) return null;
+    if (!vehicle || !fromDate) return null;
     const start = minutesFrom(day, `${fromDate}T${field(prefix, "loading-time")?.value || "06:00"}`);
     const end = minutesFrom(day, `${toDate}T${field(prefix, "unloading-time")?.value || "14:00"}`);
     if (end <= 0 || start >= 1440 || end <= start) return null;
-    return { driver, start: Math.max(start, 0), end: Math.min(end, 1440), rawStart: start, rawEnd: end };
+    return { vehicle, start: Math.max(start, 0), end: Math.min(end, 1440), rawStart: start, rawEnd: end };
   }
 
   function busyOf(prefix, day) {
@@ -69,7 +74,7 @@
   function clashes(prefix, day, pick) {
     if (!pick) return [];
     return busyOf(prefix, day).filter((item) =>
-      item.event.driverId === pick.driver && item.start < pick.rawEnd && item.end > pick.rawStart);
+      item.event.vehicleId === pick.vehicle && item.start < pick.rawEnd && item.end > pick.rawStart);
   }
 
   async function load(prefix) {
@@ -101,35 +106,35 @@
     const current = state[prefix];
     if (!panel || panel.hidden || !current) return;
     const day = current.day;
-    const drivers = current.data?.drivers ?? [];
+    const vehicles = current.data?.vehicles ?? [];
     const pick = formPick(prefix, day);
     const clash = clashes(prefix, day, pick);
     const busy = busyOf(prefix, day);
     const hours = Array.from({ length: 24 }, (_, hour) => `<span style="width:${HOUR}px">${hour}</span>`).join("");
-    const rows = drivers.map((driver) => {
-      const blocks = busy.filter((item) => item.event.driverId === driver.id).map((item) => {
+    const rows = vehicles.map((vehicle) => {
+      const blocks = busy.filter((item) => item.event.vehicleId === vehicle.id).map((item) => {
         const left = Math.max(item.start, 0) / 60 * HOUR;
         const width = Math.max((Math.min(item.end, 1440) - Math.max(item.start, 0)) / 60 * HOUR, 6);
         const isClash = clash.some((other) => other.event.id === item.event.id);
         return `<div class="bk-busy${isClash ? " clash" : ""}" style="left:${left}px;width:${width}px">${esc(item.event.code)}</div>`;
       }).join("");
-      const mine = pick && pick.driver === driver.id
+      const mine = pick && pick.vehicle === vehicle.id
         ? `<div class="bk-pick" style="left:${pick.start / 60 * HOUR}px;width:${Math.max((pick.end - pick.start) / 60 * HOUR, 6)}px">${esc(hm(Math.min(pick.start, LAST)))}–${esc(pick.end >= 1440 ? "24:00" : hm(pick.end))}</div>`
         : "";
-      const pending = current.pending?.driver === driver.id
+      const pending = current.pending?.vehicle === vehicle.id
         ? `<div class="bk-start" style="left:${current.pending.start / 60 * HOUR}px"><span>od ${esc(hm(current.pending.start))}</span></div>`
         : "";
-      return `<div class="bk-row${pick?.driver === driver.id ? " chosen" : ""}${pending ? " pending" : ""}">
-        <div class="bk-name">${esc(driver.name)}</div>
-        <div class="bk-track" data-bk-track="${prefix}" data-driver="${esc(driver.id)}" style="width:${24 * HOUR}px;--bk-hour:${HOUR}px">${blocks}${mine}${pending}</div>
+      return `<div class="bk-row${pick?.vehicle === vehicle.id ? " chosen" : ""}${pending ? " pending" : ""}">
+        <div class="bk-name">${esc(vehicleName(vehicle))}</div>
+        <div class="bk-track" data-bk-track="${prefix}" data-vehicle="${esc(vehicle.id)}" style="width:${24 * HOUR}px;--bk-hour:${HOUR}px">${blocks}${mine}${pending}</div>
       </div>`;
     }).join("");
     let note = current.message;
     if (!note && current.pending) {
-      const name = drivers.find((item) => item.id === current.pending.driver)?.name || "";
-      note = `Začátek ${hm(current.pending.start)} u řidiče ${name}. Teď klepněte na konec ve stejném řádku.`;
+      const name = vehicleName(vehicles.find((item) => item.id === current.pending.vehicle));
+      note = `Začátek ${hm(current.pending.start)} u vozidla ${name}. Teď klepněte na konec ve stejném řádku.`;
     } else if (!note && clash.length)
-      note = `Pozor: řidič má v tu dobu i zakázku ${[...new Set(clash.map((item) => item.event.code))].join(", ")}.`;
+      note = `Pozor: vozidlo má v tu dobu i zakázku ${[...new Set(clash.map((item) => item.event.code))].join(", ")}.`;
     else if (!note && current.applied)
       note = current.applied;
     panel.innerHTML = `
@@ -137,13 +142,13 @@
         <button type="button" class="ghost" data-bk-shift="${prefix}" data-days="-1" aria-label="Předchozí den">‹</button>
         <strong>${esc(dayLabel.format(new Date(`${day}T00:00:00Z`)))}</strong>
         <button type="button" class="ghost" data-bk-shift="${prefix}" data-days="1" aria-label="Další den">›</button>
-        <span class="note">Klepněte u řidiče na začátek a pak na konec (myší můžete i táhnout). Šedé jsou jiné zakázky.</span>
+        <span class="note">Klepněte u vozidla na začátek a pak na konec (myší můžete i táhnout). Šedé jsou jiné zakázky.</span>
       </div>
       <p class="note bk-note${clash.length && !current.pending ? " warn" : ""}">${esc(note)}${current.pending ? ` <button type="button" class="ghost bk-cancel" data-bk-cancel="${prefix}">Zrušit</button>` : ""}</p>
       <div class="bk-scroll" data-bk-scroll="${prefix}">
         <div class="bk-grid">
           <div class="bk-row bk-head"><div class="bk-name"></div><div class="bk-hours">${hours}</div></div>
-          ${rows || `<div class="bk-row"><div class="bk-name">V dispečinku zatím nejsou řidiči.</div></div>`}
+          ${rows || `<div class="bk-row"><div class="bk-name">V dispečinku zatím nejsou vozidla.</div></div>`}
         </div>
       </div>`;
     const scroller = panel.querySelector(".bk-scroll");
@@ -152,9 +157,9 @@
     scroller.addEventListener("scroll", () => { current.scroll = scroller.scrollLeft; });
   }
 
-  function apply(prefix, driverId, start, end) {
-    const driver = field(prefix, "driver");
-    if (!driver || driver.disabled) return;
+  function apply(prefix, vehicleId, start, end) {
+    const vehicle = field(prefix, "vehicle");
+    if (!vehicle || vehicle.disabled) return;
     const current = state[prefix];
     current.pending = null;
     const from = Math.min(Math.max(start, 0), LAST);
@@ -169,9 +174,9 @@
     set("unloading-date", current.day);
     set("loading-time", hm(from));
     set("unloading-time", hm(to));
-    driver.value = driverId;
-    driver.dispatchEvent(new Event("change", { bubbles: true }));
-    const name = (current.data?.drivers ?? []).find((item) => item.id === driverId)?.name || "";
+    vehicle.value = vehicleId;
+    vehicle.dispatchEvent(new Event("change", { bubbles: true }));
+    const name = vehicleName((current.data?.vehicles ?? []).find((item) => item.id === vehicleId));
     current.applied = `Vybráno: ${name}, ${hm(from)}–${hm(to)}. Údaje jsou ve formuláři, po uložení zakázky se čas objeví v kalendáři.`;
     render(prefix);
   }
@@ -189,7 +194,7 @@
     if (!track || event.button > 0) return;
     const start = minuteAt(track, event.clientX);
     drag = {
-      track, prefix: track.dataset.bkTrack, driver: track.dataset.driver, start, end: start,
+      track, prefix: track.dataset.bkTrack, vehicle: track.dataset.vehicle, start, end: start,
       touch: event.pointerType === "touch", x: event.clientX, y: event.clientY, ghost: null
     };
     if (!drag.touch) {
@@ -215,7 +220,7 @@
 
   document.addEventListener("pointerup", (event) => {
     if (!drag) return;
-    const { prefix, driver, start, touch } = drag;
+    const { prefix, vehicle, start, touch } = drag;
     const moved = Math.abs(event.clientX - drag.x) + Math.abs(event.clientY - drag.y);
     let end = touch ? start : minuteAt(drag.track, event.clientX);
     drag.ghost?.remove();
@@ -226,21 +231,21 @@
     const to = Math.max(start, end);
     // Klepnutí (mobil) nebo kliknutí bez tažení: první určí začátek, druhé ve stejném řádku konec.
     if (to - from < SNAP) {
-      tapAt(prefix, driver, start);
+      tapAt(prefix, vehicle, start);
       return;
     }
-    apply(prefix, driver, from, to);
+    apply(prefix, vehicle, from, to);
   });
 
-  function tapAt(prefix, driver, minute) {
+  function tapAt(prefix, vehicle, minute) {
     const current = state[prefix];
     if (!current) return;
     const pending = current.pending;
-    if (pending && pending.driver === driver && minute > pending.start) {
-      apply(prefix, driver, pending.start, minute);
+    if (pending && pending.vehicle === vehicle && minute > pending.start) {
+      apply(prefix, vehicle, pending.start, minute);
       return;
     }
-    current.pending = { driver, start: Math.min(minute, LAST - SNAP) };
+    current.pending = { vehicle, start: Math.min(minute, LAST - SNAP) };
     current.applied = "";
     render(prefix);
   }
@@ -257,7 +262,7 @@
       const panel = field(prefix, "booking");
       if (!panel) return;
       panel.hidden = !panel.hidden;
-      toggle.textContent = panel.hidden ? "Naplánovat čas řidiče" : "Skrýt plánování";
+      toggle.textContent = panel.hidden ? "Naplánovat čas vozidla" : "Skrýt plánování";
       if (panel.hidden) return;
       state[prefix] = { day: field(prefix, "loading-date")?.value || todayIso(), data: null, sequence: 0, message: "", applied: "", scroll: state[prefix]?.scroll ?? null };
       load(prefix);
@@ -280,9 +285,9 @@
     }
   });
 
-  // Změna data, času nebo řidiče ve formuláři se hned ukáže v plánování.
+  // Změna data, času nebo vozidla ve formuláři se hned ukáže v plánování.
   document.addEventListener("change", (event) => {
-    const match = /^(create|edit)-(loading-date|unloading-date|loading-time|unloading-time|driver)$/.exec(event.target.id || "");
+    const match = /^(create|edit)-(loading-date|unloading-date|loading-time|unloading-time|vehicle)$/.exec(event.target.id || "");
     if (!match) return;
     const prefix = match[1];
     const current = state[prefix];

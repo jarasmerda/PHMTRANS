@@ -116,9 +116,9 @@
     .week-tools { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: center; justify-content: space-between; margin: 0.4rem 0; }
     .week-nav { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
     .week-nav strong { margin-left: 0.4rem; }
-    .week-drivers { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; }
-    .week-driver { display: inline-flex; gap: 0.35rem; align-items: center; font-size: 0.9rem; cursor: pointer; }
-    .week-driver span { border-left: 4px solid var(--driver); padding-left: 0.35rem; }
+    .week-vehicles { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; }
+    .week-vehicle { display: inline-flex; gap: 0.35rem; align-items: center; font-size: 0.9rem; cursor: pointer; }
+    .week-vehicle span { border-left: 4px solid var(--vehicle); padding-left: 0.35rem; }
     .week-hint { margin-top: 0.2rem; }
     .week-scroll { overflow: auto; height: calc(100vh - 13rem); min-height: 22rem; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
     .week-grid { min-width: 52rem; }
@@ -133,10 +133,10 @@
     .wk-col { position: relative; border-left: 1px solid var(--border); cursor: cell;
       background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--hour) - 1px), #e8ebf1 calc(var(--hour) - 1px), #e8ebf1 var(--hour)); }
     .wk-col.today { background-color: #fff8ef; }
-    .wk-event { position: absolute; overflow: hidden; text-align: left; padding: 0.15rem 0.3rem; margin: 0; border: 0; border-left: 4px solid var(--driver);
-      border-radius: 5px; background: color-mix(in srgb, var(--driver) 16%, #fff); color: var(--ink); font-size: 0.74rem; line-height: 1.2; cursor: pointer; font-weight: 400; }
-    .wk-event:hover { background: color-mix(in srgb, var(--driver) 28%, #fff); z-index: 1; }
-    .wk-event.estimated { border: 1px dashed var(--driver); border-left: 4px dashed var(--driver); }
+    .wk-event { position: absolute; overflow: hidden; text-align: left; padding: 0.15rem 0.3rem; margin: 0; border: 0; border-left: 4px solid var(--vehicle);
+      border-radius: 5px; background: color-mix(in srgb, var(--vehicle) 16%, #fff); color: var(--ink); font-size: 0.74rem; line-height: 1.2; cursor: pointer; font-weight: 400; }
+    .wk-event:hover { background: color-mix(in srgb, var(--vehicle) 28%, #fff); z-index: 1; }
+    .wk-event.estimated { border: 1px dashed var(--vehicle); border-left: 4px dashed var(--vehicle); }
     .wk-event b { font-size: 0.78rem; }
     .wk-event small { display: block; color: var(--text-secondary); }
     .wk-event span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -411,14 +411,14 @@
     @media (max-width: 900px) {
       #order-cards { grid-template-columns: 1fr 1fr; }
     }
-    /* ---------- Pohled řidiče ---------- */
-    .driver-wrap { background: #fff; border: 1px solid #dfe3ea; border-radius: 16px; padding: 1rem 1.1rem 1.2rem; }
-    .driver-wrap h3 { margin: 1rem 0 0.5rem; font-size: 1rem; }
-    .driver-tools { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: end; }
-    .driver-tools label { min-width: min(18rem, 100%); }
-    .driver-tools select { width: 100%; max-width: none; min-height: 2.6rem; font-size: 1rem; }
-    .driver-range { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-    .driver-agenda { display: grid; gap: 0.4rem; }
+    /* ---------- Pohled vozidla ---------- */
+    .vehicle-wrap { background: #fff; border: 1px solid #dfe3ea; border-radius: 16px; padding: 1rem 1.1rem 1.2rem; }
+    .vehicle-wrap h3 { margin: 1rem 0 0.5rem; font-size: 1rem; }
+    .vehicle-tools { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: end; }
+    .vehicle-tools label { min-width: min(18rem, 100%); }
+    .vehicle-tools select { width: 100%; max-width: none; min-height: 2.6rem; font-size: 1rem; }
+    .vehicle-range { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+    .vehicle-agenda { display: grid; gap: 0.4rem; }
     .dv-day { display: grid; gap: 0.3rem; padding: 0.5rem 0.7rem 0.6rem; border: 1px solid #dfe3ea; border-radius: 10px; background: #fbfcfe; }
     .dv-bar { position: relative; height: 2rem; border-radius: 6px; background-color: #eef1f6;
       background-image: repeating-linear-gradient(to right, rgba(16, 24, 40, 0.12) 0, rgba(16, 24, 40, 0.12) 1px, transparent 1px, transparent calc(100% / 24)); }
@@ -445,7 +445,7 @@
     .dv-slot { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; text-align: left; background: #fff; color: var(--ink); border: 1px solid #cfd5df; border-left: 5px solid var(--unload-a-line, #2e9e5b); font-weight: 400; padding: 0.4rem 0.6rem; }
     .dv-slot:hover { background: #eef1f6; color: var(--ink); }
     .dv-time { font-weight: 800; }
-    .driver-orders { display: grid; gap: 0.8rem; }
+    .vehicle-orders { display: grid; gap: 0.8rem; }
     .dv-order { border: 1px solid #dfe3ea; border-radius: 14px; padding: 0.8rem 0.9rem; background: #fff; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05); scroll-margin-top: 5rem; }
     .dv-order header { display: flex; flex-wrap: wrap; gap: 0.4rem 0.6rem; align-items: center; width: auto; padding: 0; border: 0; position: static; margin-bottom: 0.5rem; font-size: 1.05rem; }
     .dv-order section { width: auto; margin: 0 0 0.6rem; }
@@ -465,7 +465,7 @@
     .dv-stop-items { flex-basis: 100%; margin: 0; padding-left: 1.1rem; }
     .dv-note { padding: 0.4rem 0.6rem; border-radius: 8px; background: #fff8dc; }
     @media (max-width: 760px) {
-      .driver-wrap { padding: 0.7rem 0.6rem; }
+      .vehicle-wrap { padding: 0.7rem 0.6rem; }
       .dv-day { padding: 0.45rem 0.5rem 0.55rem; }
     }
     /* Sekce v oknech nemají šířku stránky (erp.css), ale celou šířku okna. */
@@ -501,8 +501,8 @@
   </header>
   <section class="view-tabs" aria-label="Pohledy dispečinku">
     <button type="button" id="tab-orders" aria-current="page">Zakázky</button>
-    <button type="button" id="tab-driver" class="ghost">Pohled řidiče</button>
-    <button type="button" id="tab-week" class="ghost" data-open-week="" title="Otevře týdenní kalendář řidičů po hodinách v novém okně">Vytíženost po hodinách ↗</button>
+    <button type="button" id="tab-vehicle" class="ghost">Pohled vozidla</button>
+    <button type="button" id="tab-week" class="ghost" data-open-week="" title="Otevře týdenní kalendář vozidel po hodinách v novém okně">Vytíženost po hodinách ↗</button>
     <button type="button" id="tab-queue" class="ghost">Fronta Pohody</button>
   </section>
   <div id="orders-view">
@@ -538,7 +538,7 @@
       <div class="dialog-head">
         <h2>Zakázky</h2>
         <div class="head-actions">
-          <button type="button" class="ghost" id="open-calendar">Kalendář řidičů</button>
+          <button type="button" class="ghost" id="open-calendar">Kalendář vozidel</button>
           <button type="button" class="ghost" id="open-week">Kalendář po hodinách</button>
           <button type="button" id="open-order-create">Nová zakázka</button>
         </div>
@@ -623,10 +623,10 @@
   <div id="calendar-view" hidden>
     <section id="calendar-wrap">
       <div class="dialog-head">
-        <h2>Vytíženost řidičů</h2>
+        <h2>Vytíženost vozidel</h2>
         <button type="button" class="ghost" id="calendar-back">Zpět na zakázky</button>
       </div>
-      <p class="note">Řidič je obsazený od data nakládky do data vykládky zakázky. Stornované zakázky se nepočítají. Kliknutím na zakázku ji otevřete.</p>
+      <p class="note">Vozidlo je obsazené od data nakládky do data vykládky zakázky. Stornované zakázky se nepočítají. Kliknutím na zakázku ji otevřete.</p>
       <form class="calendar-tools" id="calendar-tools">
         <button type="button" class="ghost" data-cal-shift="-1">← Předchozí</button>
         <button type="button" class="ghost" data-cal-today>Tento týden</button>
@@ -649,22 +649,22 @@
       </div>
     </section>
   </div>
-  <div id="driver-view" hidden>
-    <section class="driver-wrap">
-      <div class="driver-tools">
-        <label>Řidič <select id="driver-pick"></select></label>
-        <div class="driver-range">
+  <div id="vehicle-view" hidden>
+    <section class="vehicle-wrap">
+      <div class="vehicle-tools">
+        <label>Vozidlo <select id="vehicle-pick"></select></label>
+        <div class="vehicle-range">
           <button type="button" class="ghost" data-dv-shift="-7" aria-label="Předchozí týden">‹</button>
-          <strong id="driver-range-title"></strong>
+          <strong id="vehicle-range-title"></strong>
           <button type="button" class="ghost" data-dv-shift="7" aria-label="Další týden">›</button>
           <button type="button" class="ghost" data-dv-today>Tento týden</button>
         </div>
       </div>
-      <p id="driver-message" class="note" hidden></p>
+      <p id="vehicle-message" class="note" hidden></p>
       <h3>Můj kalendář</h3>
-      <div id="driver-agenda" class="driver-agenda"></div>
+      <div id="vehicle-agenda" class="vehicle-agenda"></div>
       <h3>Moje zakázky</h3>
-      <div id="driver-orders" class="driver-orders"></div>
+      <div id="vehicle-orders" class="vehicle-orders"></div>
     </section>
   </div>
   <div id="queue-view" hidden>
@@ -705,7 +705,7 @@
         <button type="button" class="ghost" data-week-shift="7" aria-label="Další týden">›</button>
         <strong id="week-title"></strong>
       </div>
-      <div id="week-drivers" class="week-drivers" aria-label="Zobrazená vozidla"></div>
+      <div id="week-vehicles" class="week-vehicles" aria-label="Zobrazená vozidla"></div>
       <div class="week-nav">
         <button type="button" class="ghost" id="week-refresh">Obnovit</button>
         <button type="button" id="week-new">Nová zakázka</button>
@@ -750,7 +750,7 @@
         <p>Zakázka nemá nahrané tyto povinné doklady:</p>
         <ul id="confirm-docs-missing" class="missing-docs"></ul>
         <label class="reason-field">Důvod, proč doklady chybí
-          <textarea id="confirm-docs-reason" rows="3" maxlength="500" placeholder="Např. zákazník potvrzení nevydal, stáčecí list dodá řidič zítra…"></textarea>
+          <textarea id="confirm-docs-reason" rows="3" maxlength="500" placeholder="Např. zákazník potvrzení nevydal, stáčecí list dodáme zítra…"></textarea>
         </label>
         <p id="confirm-docs-message" class="note warn" hidden></p>
         <div class="dialog-actions">
@@ -760,11 +760,11 @@
       </form>
     </dialog>
   <script src="/multi-filter.js?v=1"></script>
-  <script src="/dispecink.js?v=15"></script>
-  <script src="/dispecink-orders.js?v=37"></script>
-  <script src="/dispecink-doklady.js?v=5"></script>
-  <script src="/dispecink-tyden.js?v=3"></script>
-  <script src="/dispecink-booking.js?v=2"></script>
-  <script src="/dispecink-ridic.js?v=5"></script>
+  <script src="/dispecink.js?v=16"></script>
+  <script src="/dispecink-orders.js?v=38"></script>
+  <script src="/dispecink-doklady.js?v=6"></script>
+  <script src="/dispecink-tyden.js?v=4"></script>
+  <script src="/dispecink-booking.js?v=3"></script>
+  <script src="/dispecink-vozidlo.js?v=1"></script>
 </body>
 </html>

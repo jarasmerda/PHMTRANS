@@ -2,13 +2,13 @@ using System.Globalization;
 
 namespace PHMTRANS.Dispatch;
 
-// Kalendář vytíženosti řidičů. Počítá se jen ze zakázek: řidič je obsazený
-// od data nakládky do data vykládky. Stornované zakázky se nepočítají.
-public static class DriverCalendar
+// Kalendář vytíženosti vozidel. Počítá se jen ze zakázek: vozidlo je obsazené
+// od data nakládky do data vykládky. Stornované zakázky se nepočítají. Řidiči se nepoužívají.
+public static class VehicleCalendar
 {
     public const int DefaultDays = 14;
     public const int MaxDays = 62;
-    public const string UnassignedName = "Bez řidiče";
+    public const string UnassignedName = "Bez vozidla";
 
     public static (DateOnly From, int Days, string? Error) ParseRange(string? from, int? days, DateOnly today)
     {
@@ -25,8 +25,10 @@ public static class DriverCalendar
     public static DateOnly WeekStart(DateOnly day) =>
         day.AddDays(-(((int)day.DayOfWeek + 6) % 7));
 
+    public static string Name(DispatchVehicle vehicle) =>
+        string.IsNullOrWhiteSpace(vehicle.Label) ? vehicle.Plate : $"{vehicle.Plate} · {vehicle.Label}";
+
     public static CalendarResponse Build(
-        IReadOnlyList<DispatchDriver> drivers,
         IReadOnlyList<DispatchVehicle> vehicles,
         IReadOnlyList<DispatchOrder> orders,
         DateOnly from,
@@ -34,8 +36,7 @@ public static class DriverCalendar
     {
         var to = from.AddDays(days - 1);
         var dates = Enumerable.Range(0, days).Select(from.AddDays).ToArray();
-        var plates = vehicles.ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.Plate, StringComparer.Ordinal);
-        var known = drivers.Select(driver => driver.Id).ToHashSet(StringComparer.Ordinal);
+        var known = vehicles.Select(vehicle => vehicle.Id).ToHashSet(StringComparer.Ordinal);
         var active = orders
             .Where(order => order.Status != OrderStatuses.Stornovano)
             .Where(order => Start(order) <= to && End(order) >= from)
@@ -43,46 +44,37 @@ public static class DriverCalendar
             .ThenBy(order => order.Code, StringComparer.Ordinal)
             .ToArray();
 
-        var rows = drivers
-            .Select(driver => Row(driver.Id, driver.Name, driver.Phone, active.Where(order => order.DriverId == driver.Id), dates, plates))
+        var rows = vehicles
+            .Select(vehicle => Row(vehicle.Id, Name(vehicle), active.Where(order => order.VehicleId == vehicle.Id), dates))
             .ToList();
-        var unassigned = active.Where(order => order.DriverId is null || !known.Contains(order.DriverId)).ToArray();
+        var unassigned = active.Where(order => order.VehicleId is null || !known.Contains(order.VehicleId)).ToArray();
         if (unassigned.Length > 0)
-            rows.Add(Row(null, UnassignedName, null, unassigned, dates, plates));
+            rows.Add(Row(null, UnassignedName, unassigned, dates));
 
         return new CalendarResponse(from, to, dates, rows);
     }
 
-    private static CalendarDriverRow Row(
+    private static CalendarVehicleRow Row(
         string? id,
         string name,
-        string? phone,
         IEnumerable<DispatchOrder> orders,
-        IReadOnlyList<DateOnly> dates,
-        IReadOnlyDictionary<string, string> plates)
+        IReadOnlyList<DateOnly> dates)
     {
         var list = orders.ToArray();
         var cells = dates
             .Select(date => new CalendarDay(
                 date,
                 list.Where(order => Start(order) <= date && End(order) >= date)
-                    .Select(order => new CalendarOrder(
-                        order.Id,
-                        order.Code,
-                        order.CustomerName,
-                        order.Liters,
-                        order.Status,
-                        order.VehicleId is not null && plates.TryGetValue(order.VehicleId, out var plate) ? plate : null))
+                    .Select(order => new CalendarOrder(order.Id, order.Code, order.CustomerName, order.Liters, order.Status))
                     .ToArray()))
             .ToArray();
         var busy = cells.Count(cell => cell.Orders.Count > 0);
         var percent = dates.Count == 0 ? 0 : (int)Math.Round(busy * 100m / dates.Count, MidpointRounding.AwayFromZero);
-        return new CalendarDriverRow(id, name, phone, busy, percent, cells);
+        return new CalendarVehicleRow(id, name, busy, percent, cells);
     }
 
     // Hodinový kalendář: zakázky jako události s časem od–do (OrderTimes.Span).
     public static CalendarEvents Events(
-        IReadOnlyList<DispatchDriver> drivers,
         IReadOnlyList<DispatchVehicle> vehicles,
         IReadOnlyList<DispatchOrder> orders,
         DateOnly from,
@@ -91,34 +83,35 @@ public static class DriverCalendar
         var start = from.ToDateTime(TimeOnly.MinValue);
         var end = from.AddDays(days).ToDateTime(TimeOnly.MinValue);
         var plates = vehicles.ToDictionary(vehicle => vehicle.Id, vehicle => vehicle.Plate, StringComparer.Ordinal);
-        var known = drivers.Select(driver => driver.Id).ToHashSet(StringComparer.Ordinal);
         var events = orders
             .Where(order => order.Status != OrderStatuses.Stornovano)
             .Select(order => (Order: order, Span: OrderTimes.Span(order)))
             .Where(item => item.Span.Start < end && item.Span.End > start)
             .OrderBy(item => item.Span.Start)
             .ThenBy(item => item.Order.Code, StringComparer.Ordinal)
-            .Select(item => new CalendarEvent(
-                item.Order.Id,
-                item.Order.Code,
-                item.Order.CustomerName,
-                item.Order.LoadingPlace,
-                item.Order.UnloadingPlace,
-                item.Order.Liters,
-                item.Order.Status,
-                item.Order.DriverId is not null && known.Contains(item.Order.DriverId) ? item.Order.DriverId : null,
-                item.Order.VehicleId is not null && plates.TryGetValue(item.Order.VehicleId, out var plate) ? plate : null,
-                item.Span.Start,
-                item.Span.End,
-                item.Order.LoadingTime is null || item.Order.UnloadingTime is null,
-                item.Order.VehicleId is not null && plates.ContainsKey(item.Order.VehicleId) ? item.Order.VehicleId : null))
+            .Select(item =>
+            {
+                var known = item.Order.VehicleId is not null && plates.ContainsKey(item.Order.VehicleId);
+                return new CalendarEvent(
+                    item.Order.Id,
+                    item.Order.Code,
+                    item.Order.CustomerName,
+                    item.Order.LoadingPlace,
+                    item.Order.UnloadingPlace,
+                    item.Order.Liters,
+                    item.Order.Status,
+                    known ? item.Order.VehicleId : null,
+                    known ? plates[item.Order.VehicleId!] : null,
+                    item.Span.Start,
+                    item.Span.End,
+                    item.Order.LoadingTime is null || item.Order.UnloadingTime is null);
+            })
             .ToArray();
         return new CalendarEvents(
             from,
             from.AddDays(days - 1),
-            drivers.Select(driver => new CalendarDriver(driver.Id, driver.Name, driver.Phone)).ToArray(),
-            events,
-            vehicles.Select(vehicle => new CalendarVehicle(vehicle.Id, vehicle.Plate, vehicle.Label)).ToArray());
+            vehicles.Select(vehicle => new CalendarVehicle(vehicle.Id, vehicle.Plate, vehicle.Label)).ToArray(),
+            events);
     }
 
     private static DateOnly Start(DispatchOrder order) => order.LoadingDate;
@@ -127,19 +120,19 @@ public static class DriverCalendar
         order.UnloadingDate < order.LoadingDate ? order.LoadingDate : order.UnloadingDate;
 }
 
-public sealed record CalendarOrder(string Id, string Code, string Customer, decimal Liters, string Status, string? Vehicle);
+public sealed record CalendarOrder(string Id, string Code, string Customer, decimal Liters, string Status);
 
 public sealed record CalendarDay(DateOnly Date, IReadOnlyList<CalendarOrder> Orders);
 
-public sealed record CalendarDriverRow(
-    string? DriverId,
+public sealed record CalendarVehicleRow(
+    string? VehicleId,
     string Name,
-    string? Phone,
     int BusyDays,
     int Percent,
     IReadOnlyList<CalendarDay> Days);
 
-public sealed record CalendarDriver(string Id, string Name, string? Phone);
+// Vozidlo v hodinovém kalendáři (filtr, barva, řádek plánování).
+public sealed record CalendarVehicle(string Id, string Plate, string Label);
 
 // Start a End jsou místní čas bez zóny ("2026-11-06T06:00:00"). Estimated = bez zadaného času, bere se 6:00–14:00.
 public sealed record CalendarEvent(
@@ -150,25 +143,20 @@ public sealed record CalendarEvent(
     string UnloadingPlace,
     decimal Liters,
     string Status,
-    string? DriverId,
+    string? VehicleId,
     string? Vehicle,
     DateTime Start,
     DateTime End,
-    bool Estimated,
-    string? VehicleId = null);
-
-// Vozidlo v týdenním kalendáři vytíženosti (řádek filtru a barva).
-public sealed record CalendarVehicle(string Id, string Plate, string Label);
+    bool Estimated);
 
 public sealed record CalendarEvents(
     DateOnly From,
     DateOnly To,
-    IReadOnlyList<CalendarDriver> Drivers,
-    IReadOnlyList<CalendarEvent> Events,
-    IReadOnlyList<CalendarVehicle>? Vehicles = null);
+    IReadOnlyList<CalendarVehicle> Vehicles,
+    IReadOnlyList<CalendarEvent> Events);
 
 public sealed record CalendarResponse(
     DateOnly From,
     DateOnly To,
     IReadOnlyList<DateOnly> Dates,
-    IReadOnlyList<CalendarDriverRow> Drivers);
+    IReadOnlyList<CalendarVehicleRow> Vehicles);

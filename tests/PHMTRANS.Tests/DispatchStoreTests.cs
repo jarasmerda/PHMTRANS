@@ -40,33 +40,41 @@ public sealed class DispatchPageTests
         var js = File.ReadAllText(Path.Combine(root, "dispecink.js"));
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
-        Assert.Contains("dispecink.js?v=15", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=37", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink.js?v=16", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=38", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
-        Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
+        Assert.Contains("-vehicle-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
         Assert.Contains("table.avail", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-tyden.js?v=3", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-tyden.js?v=4", html, StringComparison.Ordinal);
         Assert.Contains("id=\"open-week\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"week-view\" hidden", html, StringComparison.Ordinal);
         Assert.Contains("#zakazka=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-open-week", ordersJs, StringComparison.Ordinal);
-        Assert.Contains("dispecink-booking.js?v=2", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-booking.js?v=3", html, StringComparison.Ordinal);
         Assert.Contains("data-toggle-booking", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-comp-number", ordersJs, StringComparison.Ordinal);
         Assert.Contains("closeOrderDetail();", ordersJs, StringComparison.Ordinal);
-        Assert.Contains("dispecink-ridic.js?v=5", html, StringComparison.Ordinal);
-        Assert.Contains("id=\"tab-driver\"", html, StringComparison.Ordinal);
-        Assert.Contains("id=\"driver-view\" hidden", html, StringComparison.Ordinal);
-        Assert.Contains("#ridic", ordersJs, StringComparison.Ordinal);
-        var driverJs = File.ReadAllText(Path.Combine(root, "dispecink-ridic.js"));
-        Assert.DoesNotContain("agreedPrice", driverJs, StringComparison.Ordinal);
-        Assert.DoesNotContain("salePer", driverJs, StringComparison.Ordinal);
-        Assert.Contains("openOrderDocuments", driverJs, StringComparison.Ordinal);
-        Assert.Contains("confirmOrderToInvoice", driverJs, StringComparison.Ordinal);
+        Assert.Contains("dispecink-vozidlo.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"tab-vehicle\" class=\"ghost\">Pohled vozidla<", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"vehicle-view\" hidden", html, StringComparison.Ordinal);
+        Assert.Contains("#vozidlo", ordersJs, StringComparison.Ordinal);
+        var vehicleJs = File.ReadAllText(Path.Combine(root, "dispecink-vozidlo.js"));
+        Assert.DoesNotContain("agreedPrice", vehicleJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("salePer", vehicleJs, StringComparison.Ordinal);
+        Assert.Contains("openOrderDocuments", vehicleJs, StringComparison.Ordinal);
+        Assert.Contains("confirmOrderToInvoice", vehicleJs, StringComparison.Ordinal);
+        Assert.Contains("event.vehicleId === vehicleId", vehicleJs, StringComparison.Ordinal);
+        // Řidiči se v dispečinku nikde nepoužívají.
+        foreach (var file in new[] { "dispecink.html", "dispecink.js", "dispecink-orders.js", "dispecink-doklady.js", "dispecink-tyden.js", "dispecink-booking.js", "dispecink-vozidlo.js" })
+        {
+            var content = File.ReadAllText(Path.Combine(root, file));
+            Assert.DoesNotContain("řidič", content, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("/api/dispatch/drivers", content, StringComparison.Ordinal);
+        }
         Assert.Contains("window.confirmOrderToInvoice", ordersJs, StringComparison.Ordinal);
-        // Okna dokladů a potvrzení jsou mimo #orders-view, aby šla otevřít i z pohledu řidiče.
-        Assert.True(html.IndexOf("<dialog id=\"docs-dialog\">", StringComparison.Ordinal) > html.IndexOf("<div id=\"driver-view\"", StringComparison.Ordinal));
+        // Okna dokladů a potvrzení jsou mimo #orders-view, aby šla otevřít i z pohledu vozidla.
+        Assert.True(html.IndexOf("<dialog id=\"docs-dialog\">", StringComparison.Ordinal) > html.IndexOf("<div id=\"vehicle-view\"", StringComparison.Ordinal));
         Assert.Contains("reason-row", ordersJs, StringComparison.Ordinal);
         Assert.Contains("<dialog id=\"docs-dialog\">", html, StringComparison.Ordinal);
         Assert.Contains("data-open-docs", html, StringComparison.Ordinal);
@@ -90,7 +98,7 @@ public sealed class DispatchPageTests
         var weekJs = File.ReadAllText(Path.Combine(root, "dispecink-tyden.js"));
         Assert.Contains("/api/dispatch/calendar/events?from=", weekJs, StringComparison.Ordinal);
         Assert.Contains("data-week-vehicle", weekJs, StringComparison.Ordinal);
-        Assert.DoesNotContain("driverName", weekJs, StringComparison.Ordinal);
+        Assert.DoesNotContain("driver", weekJs, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("multi-filter.js?v=1", html, StringComparison.Ordinal);
         Assert.Contains("filter.css?v=1", html, StringComparison.Ordinal);
         Assert.Contains("value=\"Nová\" checked", html, StringComparison.Ordinal);
@@ -99,7 +107,7 @@ public sealed class DispatchPageTests
         Assert.Contains("id=\"order-create-dialog\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"open-order-create\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"open-calendar\"", html, StringComparison.Ordinal);
-        Assert.Contains("Kalendář řidičů", html, StringComparison.Ordinal);
+        Assert.Contains("Kalendář vozidel", html, StringComparison.Ordinal);
         Assert.Contains("id=\"calendar-view\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("id=\"rates-wrap\"", html, StringComparison.Ordinal);
         Assert.Contains("Potvrdit k fakturaci", html, StringComparison.Ordinal);

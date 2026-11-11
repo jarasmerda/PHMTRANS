@@ -95,7 +95,7 @@
     message.textContent = text || "";
   }
 
-  // Barvy a filtr podle vozidel. Jména řidičů se tu nepoužívají.
+  // Barvy a filtr podle vozidel.
   function vehicleColor(id) {
     const index = (data?.vehicles ?? []).findIndex((vehicle) => vehicle.id === id);
     return index < 0 ? "#7d8696" : palette[index % palette.length];
@@ -138,8 +138,8 @@
 
   function renderVehicles() {
     const rows = [...(data?.vehicles ?? []).map((vehicle) => ({ id: vehicle.id, name: vehicle.label ? `${vehicle.plate} · ${vehicle.label}` : vehicle.plate })), { id: "", name: "Bez vozidla" }];
-    document.querySelector("#week-drivers").innerHTML = rows.map((row) => `
-      <label class="week-driver" style="--driver:${vehicleColor(row.id || null)}">
+    document.querySelector("#week-vehicles").innerHTML = rows.map((row) => `
+      <label class="week-vehicle" style="--vehicle:${vehicleColor(row.id || null)}">
         <input type="checkbox" data-week-vehicle="${esc(row.id)}"${hidden.has(row.id) ? "" : " checked"}>
         <span>${esc(row.name)}</span>
       </label>`).join("");
@@ -198,7 +198,7 @@
         const time = `${item.before ? "↑ " : ""}${clock(item.start)}–${clock(item.end)}${item.after ? " ↓" : ""}`;
         const title = `${event.code} · ${vehicleName(event.vehicleId)}\n${event.customer}\n${event.loadingPlace} → ${event.unloadingPlace}\n${liters.format(event.liters)} l · ${event.status}${event.estimated ? "\nČas není zadaný, bere se 6:00–14:00." : ""}`;
         return `<button type="button" class="wk-event${event.estimated ? " estimated" : ""}" data-week-order="${esc(event.id)}"
-          style="top:${item.top / 60 * HOUR}px;height:${height}px;left:calc(${item.column * width}% + 1px);width:calc(${width}% - 3px);--driver:${vehicleColor(event.vehicleId)}"
+          style="top:${item.top / 60 * HOUR}px;height:${height}px;left:calc(${item.column * width}% + 1px);width:calc(${width}% - 3px);--vehicle:${vehicleColor(event.vehicleId)}"
           title="${esc(title)}">
           <b>${esc(event.code)}</b> <small>${esc(time)}</small>
           <span>${esc(vehicleName(event.vehicleId))}</span>
@@ -258,7 +258,7 @@
     }
   });
 
-  document.querySelector("#week-drivers").addEventListener("change", (event) => {
+  document.querySelector("#week-vehicles").addEventListener("change", (event) => {
     const box = event.target.closest("[data-week-vehicle]");
     if (!box) return;
     if (box.checked) hidden.delete(box.dataset.weekVehicle);

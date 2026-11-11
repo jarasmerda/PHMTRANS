@@ -60,7 +60,7 @@ public sealed class DispatchHttpTests : IClassFixture<DispatchApp>
         Assert.Equal("sql", json.RootElement.GetProperty("storage").GetString());
         Assert.Contains("Pohody", json.RootElement.GetProperty("storageNote").GetString(), StringComparison.Ordinal);
         Assert.False(json.RootElement.TryGetProperty("trips", out _));
-        Assert.Equal(3, json.RootElement.GetProperty("drivers").GetArrayLength());
+        Assert.False(json.RootElement.TryGetProperty("drivers", out _));
     }
 
 

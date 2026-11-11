@@ -1,8 +1,8 @@
-// Pohled řidiče: nahoře výběr řidiče, pod ním jeho týden (každý den jako časová osa 0–24 h)
+// Pohled vozidla: nahoře výběr vozidla, pod ním jeho týden (každý den jako časová osa 0–24 h)
 // a karty zakázek: co, kdy, kam (s adresou, GPS, kontaktem a navigací), přepážky,
 // doklady k nafocení a Potvrdit k fakturaci. Ceny se tu neukazují.
 (() => {
-  const storageKey = "phm-ridic";
+  const storageKey = "phm-vozidlo";
   const closed = ["K fakturaci", "Vyfakturováno", "Stornováno"];
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
@@ -11,9 +11,9 @@
   const shortDay = new Intl.DateTimeFormat("cs-CZ", { weekday: "short", day: "numeric", month: "numeric", timeZone: "UTC" });
   const liters = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 });
   const pad = (value) => String(value).padStart(2, "0");
-  const select = document.querySelector("#driver-pick");
-  const message = document.querySelector("#driver-message");
-  let drivers = [];
+  const select = document.querySelector("#vehicle-pick");
+  const message = document.querySelector("#vehicle-message");
+  let vehicles = [];
   let points = new Map();
   let orders = new Map();
   let weekStart = mondayOf(todayIso());
@@ -49,7 +49,7 @@
   }
 
   // Hláška po potvrzení k fakturaci (volá dispecink-orders.js).
-  window.driverViewNotice = (text) => {
+  window.vehicleViewNotice = (text) => {
     show(text);
     message.scrollIntoView({ behavior: "smooth", block: "center" });
   };
@@ -84,14 +84,14 @@
     return { ok: response.ok, data: await response.json().catch(() => ({})) };
   }
 
-  async function loadDrivers() {
-    const [driverResult, pointResult] = await Promise.all([getJson("/api/dispatch/drivers"), getJson("/api/dispatch/points")]);
-    drivers = Array.isArray(driverResult.data) ? driverResult.data : [];
+  async function loadVehicles() {
+    const [vehicleResult, pointResult] = await Promise.all([getJson("/api/dispatch/vehicles"), getJson("/api/dispatch/points")]);
+    vehicles = Array.isArray(vehicleResult.data) ? vehicleResult.data : [];
     points = new Map((Array.isArray(pointResult.data) ? pointResult.data : [])
       .map((point) => [String(point.name || "").trim().toLowerCase(), point]));
     const chosen = select.value || remembered();
-    select.innerHTML = `<option value="">— vyberte řidiče —</option>` + drivers.map((driver) =>
-      `<option value="${esc(driver.id)}"${driver.id === chosen ? " selected" : ""}>${esc(driver.name)}</option>`).join("");
+    select.innerHTML = `<option value="">— vyberte vozidlo —</option>` + vehicles.map((vehicle) =>
+      `<option value="${esc(vehicle.id)}"${vehicle.id === chosen ? " selected" : ""}>${esc(vehicle.label ? `${vehicle.plate} · ${vehicle.label}` : vehicle.plate)}</option>`).join("");
   }
 
   function placesText(order) {
@@ -253,16 +253,16 @@
 
   async function load() {
     const current = ++loading;
-    const driverId = select.value;
+    const vehicleId = select.value;
     const end = shiftIso(weekStart, 6);
-    document.querySelector("#driver-range-title").textContent =
+    document.querySelector("#vehicle-range-title").textContent =
       `${shortDay.format(asDate(weekStart))} – ${shortDay.format(asDate(end))}`;
-    const agendaBox = document.querySelector("#driver-agenda");
-    const ordersBox = document.querySelector("#driver-orders");
-    if (!driverId) {
+    const agendaBox = document.querySelector("#vehicle-agenda");
+    const ordersBox = document.querySelector("#vehicle-orders");
+    if (!vehicleId) {
       agendaBox.innerHTML = "";
       ordersBox.innerHTML = "";
-      show("Vyberte nahoře řidiče.");
+      show("Vyberte nahoře vozidlo.");
       return;
     }
     show("Načítám…");
@@ -272,20 +272,20 @@
       show(result.data?.message || "Kalendář se nepodařilo načíst.");
       return;
     }
-    const events = (result.data.events ?? []).filter((event) => event.driverId === driverId);
+    const events = (result.data.events ?? []).filter((event) => event.vehicleId === vehicleId);
     const details = await Promise.all(events.map((event) => getJson(`/api/dispatch/orders/${encodeURIComponent(event.id)}`)));
     if (current !== loading) return;
     orders = new Map();
     details.forEach((detail, index) => {
       if (detail.ok && detail.data?.order) orders.set(events[index].id, detail.data.order);
     });
-    show(events.length ? "" : "V tomto týdnu nemáte žádnou zakázku.");
+    show(events.length ? "" : "Vozidlo nemá v tomto týdnu žádnou zakázku.");
     agendaBox.innerHTML = agenda(events);
     ordersBox.innerHTML = events.map((event) => orders.has(event.id) ? card(event, orders.get(event.id)) : "").join("");
   }
 
-  document.querySelector("#tab-driver")?.addEventListener("click", () => {
-    if (typeof showView === "function") showView("driver");
+  document.querySelector("#tab-vehicle")?.addEventListener("click", () => {
+    if (typeof showView === "function") showView("vehicle");
   });
 
   select.addEventListener("change", () => {
@@ -293,7 +293,7 @@
     load();
   });
 
-  document.querySelector("#driver-view").addEventListener("click", (event) => {
+  document.querySelector("#vehicle-view").addEventListener("click", (event) => {
     const shift = event.target.closest("[data-dv-shift]");
     if (shift) {
       weekStart = shiftIso(weekStart, Number(shift.dataset.dvShift));
@@ -325,13 +325,13 @@
 
   // Po zavření okna dokladů se karty obnoví (stav, důvod).
   document.querySelector("#docs-dialog")?.addEventListener("close", () => {
-    const view = document.querySelector("#driver-view");
+    const view = document.querySelector("#vehicle-view");
     if (view && !view.hidden && select.value) load();
   });
 
-  // Volá ho showView("driver") z dispecink-orders.js.
-  window.loadDriverView = async () => {
-    if (!drivers.length) await loadDrivers();
+  // Volá ho showView("vehicle") z dispecink-orders.js.
+  window.loadVehicleView = async () => {
+    if (!vehicles.length) await loadVehicles();
     await load();
   };
 })();

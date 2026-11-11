@@ -38,11 +38,11 @@ public sealed record DispatchSnapshot(
     IReadOnlyList<DispatchDriver> Drivers,
     decimal DefaultCostPerKm = 0m);
 
+// Deska dispečinku: jen vozidla. Řidiči se v dispečinku nepoužívají (tabulka Disp_Driver zůstává beze změny).
 public sealed record DispatchBoard(
     string Storage,
     string StorageNote,
-    IReadOnlyList<DispatchVehicle> Vehicles,
-    IReadOnlyList<DispatchDriver> Drivers);
+    IReadOnlyList<DispatchVehicle> Vehicles);
 
 public sealed record VehicleCostUpdate(string? Id, decimal? CostPerKm);
 
