@@ -179,6 +179,27 @@
     .load-bar { display: block; height: 0.35rem; border-radius: 1rem; background: var(--border); margin-top: 0.3rem; overflow: hidden; }
     .load-bar i { display: block; height: 100%; background: var(--accent); }
     .doc-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
+    /* Barvy: doklady oranžově, nakládka modře, vykládky zeleně na střídačku. */
+    :root { --docs-bg: #fdf1e2; --docs-line: #c77f28; --load-bg: #eaf2fd; --load-line: #2f6fdf;
+      --unload-a-bg: #e8f6ed; --unload-a-line: #2e9e5b; --unload-b-bg: #d3eedd; --unload-b-line: #1d7a45; }
+    .docs-summary { margin: 0.6rem 0 0.8rem; padding: 0.7rem 0.9rem; border: 1px solid var(--docs-line); border-left-width: 6px; border-radius: 12px; background: var(--docs-bg); }
+    .docs-summary-head { display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; align-items: baseline; }
+    .docs-summary-head strong { font-size: 1.05rem; }
+    .docs-summary-head .note, .docs-summary > .note { margin: 0.2rem 0 0; }
+    .docs-summary.complete { border-color: #2e9e5b; background: #eaf7ef; }
+    .docs-summary-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    #docs-dialog { width: min(52rem, calc(100% - 1rem)); background: #fff; }
+    #docs-dialog .dialog-head { position: sticky; top: -1rem; z-index: 2; margin: -1rem -1.1rem 0.4rem; padding: 0.7rem 1.1rem; background: var(--docs-bg); border-bottom: 2px solid var(--docs-line); }
+    .doc-group.load { background: var(--load-bg); border-color: var(--load-line); border-left-width: 6px; }
+    .doc-group.unload-a { background: var(--unload-a-bg); border-color: var(--unload-a-line); border-left-width: 6px; }
+    .doc-group.unload-b { background: var(--unload-b-bg); border-color: var(--unload-b-line); border-left-width: 6px; }
+    .doc-group.load .doc-step.next, .doc-group.unload-a .doc-step.next, .doc-group.unload-b .doc-step.next { background: rgba(255, 255, 255, 0.65); }
+    .loads { background: var(--load-bg); border: 1px solid var(--load-line); border-left-width: 6px; border-radius: 12px; padding: 0.4rem 0.8rem 0.6rem; }
+    [data-route] > [id$="-stops"] > .stop-row { padding: 0.6rem 0.7rem; border: 1px solid var(--unload-a-line); border-left-width: 6px; border-radius: 12px; background: var(--unload-a-bg); }
+    [data-route] > [id$="-stops"] > .stop-row:nth-child(even) { border-color: var(--unload-b-line); background: var(--unload-b-bg); }
+    .reason-row td { padding-top: 0; background: #fff8ef; border-top: 0; }
+    .reason-row .reason-label { font-weight: 700; color: #a35a00; margin-right: 0.3rem; }
+    tr.has-reason td { border-bottom: 0; }
     #confirm-docs-dialog { width: min(34rem, calc(100% - 2rem)); }
     .missing-docs { margin: 0.4rem 0 0.8rem; padding-left: 1.2rem; color: #a33; font-weight: 700; }
     .reason-field { display: grid; gap: 0.3rem; font-weight: 700; }
@@ -381,24 +402,16 @@
       <p id="order-cancel-note" class="note warn" hidden></p>
       <p id="order-sync-warning" class="note warn" hidden></p>
       <p id="order-docs-reason" class="note warn" hidden></p>
-      <section id="order-docs" class="docs">
-        <h3>Doklady</h3>
-        <p class="note">Postupujte po krocích. Fotky a PDF se ukládají do složky zakázky na serveru, odkud je OneDrive synchronizuje.</p>
-        <p id="doc-progress" class="doc-progress" hidden></p>
-        <p id="doc-message" class="note" hidden></p>
-        <div id="doc-steps" class="doc-steps"></div>
-        <div id="doc-confirm" class="doc-confirm" hidden></div>
-        <section class="doc-group">
-          <h4>Ostatní doklady <span class="note">nepovinné</span></h4>
-          <div class="doc-actions">
-            <button type="button" id="doc-camera-button" class="ghost">Vyfotit doklad</button>
-            <button type="button" id="doc-file-button" class="ghost">Přiložit soubor</button>
-            <input type="file" id="doc-camera" accept="image/*" capture="environment" hidden>
-            <input type="file" id="doc-file" accept="image/*,application/pdf,.heic,.heif" multiple hidden>
-          </div>
-          <p id="doc-others-empty" class="note">Zatím žádné.</p>
-          <ul id="doc-list" class="doc-list"></ul>
-        </section>
+      <section id="order-docs-summary" class="docs-summary">
+        <div class="docs-summary-head">
+          <strong>Doklady</strong>
+          <span id="doc-summary-text" class="note"></span>
+        </div>
+        <p id="doc-summary-missing" class="note"></p>
+        <div class="docs-summary-actions">
+          <button type="button" data-open-docs>Otevřít doklady</button>
+        </div>
+      </section>
       </section>
       <form id="order-edit"></form>
       <div class="order-actions">
@@ -428,6 +441,29 @@
         <form id="order-create"></form>
       </section>
     </dialog>
+    <dialog id="docs-dialog">
+        <section id="order-docs" class="docs">
+          <div class="dialog-head">
+            <h2 id="docs-dialog-title">Doklady</h2>
+            <button type="button" class="ghost" data-close-dialog>Zavřít</button>
+          </div>
+          <p class="note">Postupujte po krocích. Fotky a PDF se ukládají do složky zakázky na serveru, odkud je OneDrive synchronizuje.</p>
+          <p id="doc-progress" class="doc-progress" hidden></p>
+          <p id="doc-message" class="note" hidden></p>
+          <div id="doc-steps" class="doc-steps"></div>
+          <div id="doc-confirm" class="doc-confirm" hidden></div>
+          <section class="doc-group">
+            <h4>Ostatní doklady <span class="note">nepovinné</span></h4>
+            <div class="doc-actions">
+              <button type="button" id="doc-camera-button" class="ghost">Vyfotit doklad</button>
+              <button type="button" id="doc-file-button" class="ghost">Přiložit soubor</button>
+              <input type="file" id="doc-camera" accept="image/*" capture="environment" hidden>
+              <input type="file" id="doc-file" accept="image/*,application/pdf,.heic,.heif" multiple hidden>
+            </div>
+            <p id="doc-others-empty" class="note">Zatím žádné.</p>
+            <ul id="doc-list" class="doc-list"></ul>
+          </section>
+    </dialog>
     <dialog id="confirm-docs-dialog">
       <form id="confirm-docs-form">
         <div class="dialog-head">
@@ -442,7 +478,7 @@
         <p id="confirm-docs-message" class="note warn" hidden></p>
         <div class="dialog-actions">
           <button type="submit">Potvrdit k fakturaci s důvodem</button>
-          <button type="button" class="ghost" data-close-dialog>Zpět k dokladům</button>
+          <button type="button" class="ghost" data-close-dialog data-open-docs>Zpět k dokladům</button>
         </div>
       </form>
     </dialog>
@@ -537,8 +573,8 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=26"></script>
-  <script src="/dispecink-doklady.js?v=3"></script>
+  <script src="/dispecink-orders.js?v=27"></script>
+  <script src="/dispecink-doklady.js?v=4"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=1"></script>
 </body>

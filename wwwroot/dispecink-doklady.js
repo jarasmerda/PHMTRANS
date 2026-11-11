@@ -22,6 +22,8 @@
   const progress = document.querySelector("#doc-progress");
   const confirmBox = document.querySelector("#doc-confirm");
   const camera = document.querySelector("#doc-camera");
+  const dialog = document.querySelector("#docs-dialog");
+  const summary = document.querySelector("#order-docs-summary");
   const picker = document.querySelector("#doc-file");
 
   function show(value) {
@@ -120,7 +122,8 @@
           ${files.length ? `<ul class="doc-list">${files.map(card).join("")}</ul>` : ""}
         </div>`;
       }).join("");
-      return `<section class="doc-group">
+      const tone = groupIndex === 0 ? "load" : groupIndex % 2 === 1 ? "unload-a" : "unload-b";
+      return `<section class="doc-group ${tone}">
         <h4>${esc(`${letter}) ${group.title}`)}${group.place ? ` <span class="note">${esc(group.place)}</span>` : ""}</h4>
         ${rows}
       </section>`;
@@ -148,6 +151,28 @@
       confirmBox.innerHTML = "";
     }
     justFinished = false;
+    renderSummary(all, bySlot, complete);
+  }
+
+  // Přehled dokladů v detailu zakázky, celá agenda je v okně Doklady.
+  function renderSummary(all, bySlot, complete) {
+    document.querySelector("#docs-dialog-title").textContent = `Doklady · ${current.code}`;
+    const text = document.querySelector("#doc-summary-text");
+    const missingNote = document.querySelector("#doc-summary-missing");
+    summary.classList.toggle("complete", configured && complete);
+    if (!configured) {
+      text.textContent = "Složka pro doklady není nastavená.";
+      missingNote.textContent = "";
+      return;
+    }
+    const done = all.filter((slot) => bySlot.has(slot.key)).length;
+    text.textContent = `Nahráno ${done} z ${all.length} povinných`;
+    const missing = window.missingOrderDocuments() ?? [];
+    // Krátce: do dvou dokladů celý výčet, jinak počet a kde chybí.
+    const places = [...new Set(missing.map((item) => item.split(":")[0]))];
+    missingNote.textContent = missing.length
+      ? missing.length <= 2 ? `Chybí: ${missing.join(", ")}.` : `Chybí ${missing.length} dokladů: ${places.join(", ")}.`
+      : closedStatuses.includes(current.status) ? "Všechny doklady jsou nahrané." : "Všechny doklady jsou nahrané, zakázku můžete potvrdit k fakturaci.";
   }
 
   async function request(url, options) {
@@ -166,6 +191,7 @@
   }
 
   async function load(order) {
+    if (current?.id !== order.id && dialog.open) dialog.close();
     current = order;
     documents = [];
     configured = true;
@@ -267,7 +293,16 @@
     }
     if (event.target.closest("#doc-camera-button")) pick(null, "camera");
     else if (event.target.closest("#doc-file-button")) pick(null, "file");
-    else if (event.target.closest("#doc-confirm-button")) document.querySelector("#order-confirm")?.click();
+    else if (event.target.closest("#doc-confirm-button")) {
+      dialog.close();
+      document.querySelector("#order-confirm")?.click();
+    }
+  });
+
+  // Okno Doklady se otevírá z přehledu v detailu a z okna Chybí doklady.
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest("[data-open-docs]") || !current) return;
+    if (!dialog.open) dialog.showModal();
   });
 
   for (const input of [camera, picker]) {
