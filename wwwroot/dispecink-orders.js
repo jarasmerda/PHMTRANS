@@ -264,55 +264,75 @@ function formFields(prefix, order) {
   const legs = order?.legs || [];
   const legacy = !!order && !order.customerPohodaId;
   return `
-    <label class="wide">Zákazník z adresáře Pohody
-      <input id="${prefix}-customer" required maxlength="160" autocomplete="off" placeholder="Název nebo IČO" value="${orderText(order?.customerName || "")}">
-    </label>
-    <p class="note warn wide" id="${prefix}-customer-warn"${legacy ? "" : " hidden"}>Zakázka nemá vazbu na adresář Pohody (AD). Vyberte zákazníka z našeptávače.</p>
-    <p class="note wide" id="${prefix}-customer-snapshot">${orderText(customerSnapshot(order))}</p>
-    <div class="picker customer-results wide" id="${prefix}-results"></div>
-    <input type="hidden" id="${prefix}-customer-id" value="${orderText(order?.customerPohodaId ?? "")}">
-    <input type="hidden" id="${prefix}-customer-ico" value="${orderText(order?.customerIco || "")}">
-    <input type="hidden" id="${prefix}-customer-dic" value="${orderText(order?.customerDic || "")}">
-    <input type="hidden" id="${prefix}-customer-street" value="${orderText(order?.customerStreet || "")}">
-    <input type="hidden" id="${prefix}-customer-city" value="${orderText(order?.customerCity || "")}">
-    <input type="hidden" id="${prefix}-customer-zip" value="${orderText(order?.customerZip || "")}">
-    <input type="hidden" id="${prefix}-customer-email" value="${orderText(order?.customerEmail || "")}">
-    <input type="hidden" id="${prefix}-customer-phone" value="${orderText(order?.customerPhone || "")}">
-    ${loadingField(prefix, order?.loadingPlace || "")}
-    <label>Nakládka (datum a čas)
-      <span class="date-time">
-        <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}">
-        <input id="${prefix}-loading-time" type="time" step="900" aria-label="Čas nakládky" value="${orderText(order ? order.loadingTime || "" : "06:00")}">
-      </span></label>
-    <label>Vykládka (datum a čas)
-      <span class="date-time">
-        <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}">
-        <input id="${prefix}-unloading-time" type="time" step="900" aria-label="Čas vykládky" value="${orderText(order ? order.unloadingTime || "" : "14:00")}">
-      </span></label>
-    <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
-    <div class="wide availability">
-      <button type="button" data-toggle-booking="${prefix}">Naplánovat čas řidiče</button>
-      <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář řidičů</button>
-      <button type="button" class="ghost" data-open-week="${prefix}">Vytíženost po hodinách ↗</button>
-      <span class="note" id="${prefix}-driver-note" hidden></span>
-      <div id="${prefix}-booking" class="avail-panel" hidden></div>
-      <div id="${prefix}-availability" class="avail-panel" hidden></div>
-    </div>
-    <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
-    <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
-    <label>Režim prodeje
-      <select id="${prefix}-mode">
-        <option value="Km"${mode === "Km" ? " selected" : ""}>Za kilometr</option>
-        <option value="Liters"${mode === "Liters" ? " selected" : ""}>Za litr</option>
-      </select>
-    </label>
-    <label>Prodej Kč/km <input id="${prefix}-sale-km" type="number" min="0" step="0.0001" value="${orderText(order?.salePerKm ?? 0)}"></label>
-    <label>Prodej Kč/l <input id="${prefix}-sale-liter" type="number" min="0" step="0.0001" value="${orderText(order?.salePerLiter ?? 0)}"></label>
-    <label>Náklad Kč/km <input id="${prefix}-cost-km" type="number" min="0" step="0.0001" value="${orderText(order?.costPerKm ?? "")}"></label>
-    <label>Stav <select id="${prefix}-status">${orderStatusOptions(status)}</select></label>
-    <label>Číslo CMR <input id="${prefix}-cmr" maxlength="40" value="${orderText(order?.cmrNumber || "")}"></label>
-    <label>Číslo faktury <input id="${prefix}-invoice" maxlength="40" value="${orderText(order?.pohodaInvoiceNumber || "")}"></label>
-    <label class="wide">Poznámka <input id="${prefix}-note" maxlength="500" value="${orderText(order?.note || "")}"></label>
+    <fieldset class="wide form-card">
+      <legend>Zákazník</legend>
+      <div class="card-grid">
+        <label class="wide">Zákazník z adresáře Pohody
+          <input id="${prefix}-customer" required maxlength="160" autocomplete="off" placeholder="Název nebo IČO" value="${orderText(order?.customerName || "")}">
+        </label>
+        <p class="note warn wide" id="${prefix}-customer-warn"${legacy ? "" : " hidden"}>Zakázka nemá vazbu na adresář Pohody (AD). Vyberte zákazníka z našeptávače.</p>
+        <p class="note wide" id="${prefix}-customer-snapshot">${orderText(customerSnapshot(order))}</p>
+        <div class="picker customer-results wide" id="${prefix}-results"></div>
+      </div>
+      <input type="hidden" id="${prefix}-customer-id" value="${orderText(order?.customerPohodaId ?? "")}">
+      <input type="hidden" id="${prefix}-customer-ico" value="${orderText(order?.customerIco || "")}">
+      <input type="hidden" id="${prefix}-customer-dic" value="${orderText(order?.customerDic || "")}">
+      <input type="hidden" id="${prefix}-customer-street" value="${orderText(order?.customerStreet || "")}">
+      <input type="hidden" id="${prefix}-customer-city" value="${orderText(order?.customerCity || "")}">
+      <input type="hidden" id="${prefix}-customer-zip" value="${orderText(order?.customerZip || "")}">
+      <input type="hidden" id="${prefix}-customer-email" value="${orderText(order?.customerEmail || "")}">
+      <input type="hidden" id="${prefix}-customer-phone" value="${orderText(order?.customerPhone || "")}">
+    </fieldset>
+    <fieldset class="wide form-card">
+      <legend>Termín a posádka</legend>
+      <div class="card-grid">
+        ${loadingField(prefix, order?.loadingPlace || "")}
+        <label>Nakládka (datum a čas)
+          <span class="date-time">
+            <input id="${prefix}-loading-date" type="date" required value="${orderText(order?.loadingDate || orderToday())}">
+            <input id="${prefix}-loading-time" type="time" step="900" aria-label="Čas nakládky" value="${orderText(order ? order.loadingTime || "" : "06:00")}">
+          </span></label>
+        <label>Vykládka (datum a čas)
+          <span class="date-time">
+            <input id="${prefix}-unloading-date" type="date" required value="${orderText(order?.unloadingDate || orderToday())}">
+            <input id="${prefix}-unloading-time" type="time" step="900" aria-label="Čas vykládky" value="${orderText(order ? order.unloadingTime || "" : "14:00")}">
+          </span></label>
+        <label>Vozidlo <select id="${prefix}-vehicle">${orderOptions(orderCatalog.vehicles, vehicle, "— nepřiřazeno —", (item) => `${item.plate} · ${item.label}`)}</select></label>
+        <label>Řidič <select id="${prefix}-driver">${orderOptions(orderCatalog.drivers, driver, "— nepřiřazeno —", (item) => item.name)}</select></label>
+      </div>
+      <div class="availability">
+        <button type="button" data-toggle-booking="${prefix}">Naplánovat čas řidiče</button>
+        <button type="button" class="ghost" data-toggle-availability="${prefix}">Kalendář řidičů</button>
+        <button type="button" class="ghost" data-open-week="${prefix}">Vytíženost po hodinách ↗</button>
+        <span class="note" id="${prefix}-driver-note" hidden></span>
+        <div id="${prefix}-booking" class="avail-panel" hidden></div>
+        <div id="${prefix}-availability" class="avail-panel" hidden></div>
+      </div>
+    </fieldset>
+    <fieldset class="wide form-card">
+      <legend>Cena a náklady</legend>
+      <div class="card-grid">
+        <label>Režim prodeje
+          <select id="${prefix}-mode">
+            <option value="Km"${mode === "Km" ? " selected" : ""}>Za kilometr</option>
+            <option value="Liters"${mode === "Liters" ? " selected" : ""}>Za litr</option>
+          </select>
+        </label>
+        <label>Prodej Kč/km <input id="${prefix}-sale-km" type="number" min="0" step="0.0001" value="${orderText(order?.salePerKm ?? 0)}"></label>
+        <label>Prodej Kč/l <input id="${prefix}-sale-liter" type="number" min="0" step="0.0001" value="${orderText(order?.salePerLiter ?? 0)}"></label>
+        <label>Náklad Kč/km <input id="${prefix}-cost-km" type="number" min="0" step="0.0001" value="${orderText(order?.costPerKm ?? "")}"></label>
+        <label>Příplatky (Kč) <input id="${prefix}-surcharges" type="number" step="0.01" value="${orderText(order?.surcharges ?? 0)}"></label>
+      </div>
+    </fieldset>
+    <fieldset class="wide form-card">
+      <legend>Stav a evidence</legend>
+      <div class="card-grid">
+        <label>Stav <select id="${prefix}-status">${orderStatusOptions(status)}</select></label>
+        <label>Číslo CMR <input id="${prefix}-cmr" maxlength="40" value="${orderText(order?.cmrNumber || "")}"></label>
+        <label>Číslo faktury <input id="${prefix}-invoice" maxlength="40" value="${orderText(order?.pohodaInvoiceNumber || "")}"></label>
+        <label class="wide">Poznámka <input id="${prefix}-note" maxlength="500" value="${orderText(order?.note || "")}"></label>
+      </div>
+    </fieldset>
     <div class="wide loads" data-loads="${prefix}">
       <h3>Nakládka po palivech</h3>
       <div id="${prefix}-loads">${orderLoadsOf(order).map((load) => loadRow(load, !order)).join("")}</div>
@@ -326,8 +346,8 @@ function formFields(prefix, order) {
       <div id="${prefix}-totals" class="totals"></div>
       <p id="${prefix}-liter-warn" class="route-warn" hidden></p>
     </div>
-    ${prefix === "create" ? `<div class="wide"><button type="submit">Založit zakázku</button>
-      <p class="note">Doklady (fotky, PDF) přiložíte hned po založení: otevře se detail zakázky a sekce Doklady je nahoře.</p></div>` : ""}
+    ${prefix === "create" ? `<div class="wide create-actions"><button type="submit">Založit zakázku</button>
+      <p class="note">Doklady (fotky, PDF) přiložíte hned po založení: v detailu zakázky tlačítkem Otevřít doklady.</p></div>` : ""}
   `;
 }
 
@@ -936,6 +956,9 @@ function renderDetail(data) {
   if (typeof window.loadOrderDocuments === "function") window.loadOrderDocuments(order);
   document.querySelector("#order-detail").hidden = false;
   document.querySelector("#order-detail-title").textContent = `${order.code} · verze ${order.currentVersion}`;
+  const statusPill = document.querySelector("#order-detail-status");
+  statusPill.textContent = order.status || "";
+  statusPill.dataset.status = order.status || "";
   const docsReason = document.querySelector("#order-docs-reason");
   docsReason.hidden = !order.missingDocumentsReason;
   docsReason.textContent = order.missingDocumentsReason

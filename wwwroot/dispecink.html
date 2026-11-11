@@ -160,6 +160,57 @@
       background: rgba(253, 236, 214, 0.94); font-size: 0.74rem; font-weight: 700; white-space: nowrap; overflow: hidden; pointer-events: none; }
     .bk-ghost { border-style: dashed; }
     .date-time { display: flex; gap: 0.3rem; }
+    /* ---------- Vzhled detailu a formuláře zakázky ---------- */
+    #order-detail, #order-create-wrap { background: #fff; border: 1px solid #dfe3ea; border-radius: 16px; padding: 0 1.2rem 1.2rem; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 8px 24px rgba(16, 24, 40, 0.06); }
+    #order-create-wrap { padding-top: 1rem; border: 0; box-shadow: none; }
+    .detail-head { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; justify-content: space-between;
+      margin: 0 -1.2rem 1rem; padding: 0.9rem 1.2rem; background: #fff; border-bottom: 1px solid #dfe3ea; border-radius: 16px 16px 0 0; }
+    .detail-title { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+    .detail-title h2 { margin: 0; font-size: 1.25rem; }
+    .detail-head .order-actions { margin: 0; }
+    .status-pill { display: inline-block; padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.8rem; font-weight: 700; background: #eef1f6; color: var(--ink); }
+    .status-pill[data-status="Nová"] { background: #eef1f6; }
+    .status-pill[data-status="Naplánovaná"] { background: #e3edfc; color: #1d4fa8; }
+    .status-pill[data-status="Na cestě"] { background: #fff1d6; color: #8a5a00; }
+    .status-pill[data-status="Doručeno"] { background: #e3f5e9; color: #1d7a45; }
+    .status-pill[data-status="K fakturaci"] { background: #fdf1e2; color: #a35a00; }
+    .status-pill[data-status="Vyfakturováno"] { background: #1d7a45; color: #fff; }
+    .status-pill[data-status="Stornováno"] { background: #fde8e8; color: #a33; }
+    #order-create, #order-edit { gap: 1rem; align-items: start; border: 0; padding: 0; background: transparent; box-shadow: none; }
+    .picker:empty { display: none; }
+    #order-detail section, #order-detail .detail-head { width: auto; max-width: none; box-sizing: border-box; }
+    .form-card .note { margin-top: 0.2rem; }
+    .form-card { margin: 0; min-width: 0; padding: 0.9rem 1rem 1rem; border: 1px solid #dfe3ea; border-radius: 12px; background: #fbfcfe; }
+    .form-card > legend, .form-card > h3 { padding: 0 0.35rem; margin: 0 0 0.2rem -0.35rem; font-size: 0.95rem; font-weight: 800; color: var(--ink); }
+    .form-card > h3 { margin: 0 0 0.6rem; padding: 0; }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.75rem 1rem; align-items: start; }
+    .card-grid .wide { grid-column: 1 / -1; }
+    .form-card label, .card-grid label { font-size: 0.76rem; letter-spacing: 0.01em; }
+    #order-detail input:not([type="checkbox"]):not([type="radio"]), #order-detail select,
+    #order-create-wrap input:not([type="checkbox"]):not([type="radio"]), #order-create-wrap select {
+      min-height: 2.35rem; box-sizing: border-box; background: #fff; border-color: #cfd5df; border-radius: 8px; max-width: none; width: 100%; }
+    #order-detail input:focus, #order-detail select:focus, #order-create-wrap input:focus, #order-create-wrap select:focus {
+      outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+    .form-card .availability { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed #dfe3ea; }
+    .loads, [data-route] { padding: 0.9rem 1rem 1rem; }
+    [data-route] { border: 1px solid #dfe3ea; border-radius: 12px; background: #fbfcfe; }
+    .loads h3, [data-route] > h3 { margin: 0 0 0.7rem; font-size: 0.95rem; font-weight: 800; }
+    .totals { margin-top: 0.8rem; }
+    .stop-actions button { padding: 0.3rem 0.65rem; font-size: 0.82rem; }
+    .stop-actions [data-stop-up], .stop-actions [data-stop-down] { background: #fff; color: var(--ink); border: 1px solid #cfd5df; }
+    .stop-actions [data-stop-up]:hover, .stop-actions [data-stop-down]:hover { background: #eef1f6; color: var(--ink); }
+    .create-actions { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; padding-top: 0.4rem; }
+    .create-actions .note { margin: 0; }
+    .detail-extra { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .detail-extra .form-card { background: #fff; }
+    #order-detail > .note { margin: 0 0 0.6rem; }
+    .docs-summary { margin-top: 0; }
+    @media (max-width: 760px) {
+      #order-detail { padding: 0 0.7rem 0.9rem; }
+      .detail-head { margin: 0 -0.7rem 0.8rem; padding: 0.7rem; }
+      .detail-head .order-actions button { flex: 1 1 auto; }
+      .form-card, .loads, [data-route] { padding: 0.7rem; }
+    }
     .date-time input[type="date"] { flex: 1 1 8.5rem; min-width: 0; }
     .date-time input[type="time"] { flex: 0 0 6.2rem; min-width: 0; }
     .availability { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; min-width: 0; }
@@ -397,7 +448,20 @@
       <p id="orders-empty" hidden></p>
     </section>
     <section id="order-detail" hidden>
-      <h2 id="order-detail-title">Zakázka</h2>
+      <div class="detail-head">
+        <div class="detail-title">
+          <h2 id="order-detail-title">Zakázka</h2>
+          <span id="order-detail-status" class="status-pill"></span>
+        </div>
+        <div class="order-actions">
+          <button type="button" id="order-save">Uložit změny</button>
+          <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
+          <button type="button" id="order-invoice" class="ghost">Označit jako vyfakturované</button>
+          <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
+          <button type="button" id="order-cancel" class="ghost">Stornovat</button>
+          <button type="button" id="order-close" class="ghost">Zavřít</button>
+        </div>
+      </div>
       <p id="order-lock-note" class="note" hidden>Zakázka je uzamčená. Změna údajů, které jdou do Pohody, založí opravný doklad: storno poslední odeslané verze a nová verze.</p>
       <p id="order-cancel-note" class="note warn" hidden></p>
       <p id="order-sync-warning" class="note warn" hidden></p>
@@ -412,23 +476,19 @@
           <button type="button" data-open-docs>Otevřít doklady</button>
         </div>
       </section>
-      </section>
       <form id="order-edit"></form>
-      <div class="order-actions">
-        <button type="button" id="order-save">Uložit změny</button>
-        <button type="button" id="order-confirm">Potvrdit k fakturaci</button>
-        <button type="button" id="order-invoice">Označit jako vyfakturované</button>
-        <button type="button" id="order-resend" class="ghost">Odeslat znovu</button>
-        <button type="button" id="order-cancel" class="ghost">Stornovat</button>
-        <button type="button" id="order-close" class="ghost">Zavřít</button>
+      <div class="detail-extra">
+        <section class="form-card">
+          <h3>Historie verzí</h3>
+          <p class="note">Starší uložené snímky. Aktuální údaje jsou ve formuláři nahoře.</p>
+          <ul id="version-links" class="version-links"></ul>
+          <p id="version-empty" class="note" hidden>Starší verze zatím nejsou.</p>
+        </section>
+        <section class="form-card">
+          <h3>Synchronizace do Pohody</h3>
+          <div id="order-sync"></div>
+        </section>
       </div>
-
-      <h3>Historie verzí</h3>
-      <p class="note">Starší uložené snímky. Aktuální údaje jsou ve formuláři nahoře.</p>
-      <ul id="version-links" class="version-links"></ul>
-      <p id="version-empty" class="note" hidden>Starší verze zatím nejsou.</p>
-      <h3>Synchronizace do Pohody</h3>
-      <div id="order-sync"></div>
     </section>
     <section id="version-page" hidden></section>
     <dialog id="order-create-dialog">
@@ -463,6 +523,7 @@
             <p id="doc-others-empty" class="note">Zatím žádné.</p>
             <ul id="doc-list" class="doc-list"></ul>
           </section>
+        </section>
     </dialog>
     <dialog id="confirm-docs-dialog">
       <form id="confirm-docs-form">
@@ -573,7 +634,7 @@
   </div>
   <script src="/multi-filter.js?v=1"></script>
   <script src="/dispecink.js?v=14"></script>
-  <script src="/dispecink-orders.js?v=27"></script>
+  <script src="/dispecink-orders.js?v=28"></script>
   <script src="/dispecink-doklady.js?v=4"></script>
   <script src="/dispecink-tyden.js?v=2"></script>
   <script src="/dispecink-booking.js?v=1"></script>
