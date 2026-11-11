@@ -41,7 +41,7 @@ public sealed class DispatchPageTests
         var ordersJs = File.ReadAllText(Path.Combine(root, "dispecink-orders.js"));
 
         Assert.Contains("dispecink.js?v=15", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-orders.js?v=31", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-orders.js?v=32", html, StringComparison.Ordinal);
         Assert.Contains("/api/dispatch/calendar?from=", ordersJs, StringComparison.Ordinal);
         Assert.Contains("-driver-note", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-toggle-availability", ordersJs, StringComparison.Ordinal);
@@ -55,13 +55,18 @@ public sealed class DispatchPageTests
         Assert.Contains("data-toggle-booking", ordersJs, StringComparison.Ordinal);
         Assert.Contains("data-comp-number", ordersJs, StringComparison.Ordinal);
         Assert.Contains("closeOrderDetail();", ordersJs, StringComparison.Ordinal);
-        Assert.Contains("dispecink-ridic.js?v=1", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-ridic.js?v=2", html, StringComparison.Ordinal);
         Assert.Contains("id=\"tab-driver\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"driver-view\" hidden", html, StringComparison.Ordinal);
         Assert.Contains("#ridic", ordersJs, StringComparison.Ordinal);
         var driverJs = File.ReadAllText(Path.Combine(root, "dispecink-ridic.js"));
         Assert.DoesNotContain("agreedPrice", driverJs, StringComparison.Ordinal);
         Assert.DoesNotContain("salePer", driverJs, StringComparison.Ordinal);
+        Assert.Contains("openOrderDocuments", driverJs, StringComparison.Ordinal);
+        Assert.Contains("confirmOrderToInvoice", driverJs, StringComparison.Ordinal);
+        Assert.Contains("window.confirmOrderToInvoice", ordersJs, StringComparison.Ordinal);
+        // Okna dokladů a potvrzení jsou mimo #orders-view, aby šla otevřít i z pohledu řidiče.
+        Assert.True(html.IndexOf("<dialog id=\"docs-dialog\">", StringComparison.Ordinal) > html.IndexOf("<div id=\"driver-view\"", StringComparison.Ordinal));
         Assert.Contains("reason-row", ordersJs, StringComparison.Ordinal);
         Assert.Contains("<dialog id=\"docs-dialog\">", html, StringComparison.Ordinal);
         Assert.Contains("data-open-docs", html, StringComparison.Ordinal);
@@ -200,7 +205,8 @@ public sealed class DispatchSqlGuardTests
         Assert.Contains("IF COL_LENGTH(N'dbo.Disp_Trip', N'DriverId') IS NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD VehicleId nvarchar(64) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Trip ADD DriverId nvarchar(64) NULL", script, StringComparison.Ordinal);
-        Assert.Equal(44, Count(script, "ALTER TABLE"));
+        Assert.Equal(49, Count(script, "ALTER TABLE"));
+        Assert.Contains("ALTER TABLE dbo.Disp_Point ADD Latitude decimal(9,6) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Order ADD MissingDocumentsReason nvarchar(500) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_OrderLoad ADD Compartments nvarchar(40) NULL", script, StringComparison.Ordinal);
         Assert.Contains("ALTER TABLE dbo.Disp_Order ADD LoadingTime time(0) NULL", script, StringComparison.Ordinal);

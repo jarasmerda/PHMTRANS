@@ -78,7 +78,7 @@ public sealed class OrderDocumentTests : IDisposable
 
         Assert.Contains("capture=\"environment\"", html, StringComparison.Ordinal);
         Assert.Contains("Vyfotit doklad", html, StringComparison.Ordinal);
-        Assert.Contains("dispecink-doklady.js?v=4", html, StringComparison.Ordinal);
+        Assert.Contains("dispecink-doklady.js?v=5", html, StringComparison.Ordinal);
         Assert.Contains("window.loadOrderDocuments = load", js, StringComparison.Ordinal);
         Assert.Contains("/documents", js, StringComparison.Ordinal);
         Assert.Contains("id=\"doc-steps\"", html, StringComparison.Ordinal);
@@ -86,7 +86,7 @@ public sealed class OrderDocumentTests : IDisposable
         Assert.Contains("nakladka-nakladni-list", js, StringComparison.Ordinal);
         Assert.Contains("-staceci-list", js, StringComparison.Ordinal);
         Assert.Contains("-potvrzeni", js, StringComparison.Ordinal);
-        Assert.Contains("#order-confirm", js, StringComparison.Ordinal);
+        Assert.Contains("confirmOrderToInvoice", js, StringComparison.Ordinal);
     }
 
     [Theory]

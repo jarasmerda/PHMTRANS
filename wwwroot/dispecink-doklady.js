@@ -134,13 +134,12 @@
     for (const id of ["#doc-camera-button", "#doc-file-button"])
       document.querySelector(id).disabled = !enabled;
 
-    const confirmButton = document.querySelector("#order-confirm");
     const complete = all.length > 0 && done === all.length;
     if (complete && current.status === "K fakturaci") {
       confirmBox.hidden = false;
       confirmBox.className = "doc-confirm ok";
       confirmBox.innerHTML = `<strong>Všechny doklady jsou nahrané.</strong> Zakázka je potvrzená k fakturaci.`;
-    } else if (complete && !closedStatuses.includes(current.status) && confirmButton && !confirmButton.disabled) {
+    } else if (complete && !closedStatuses.includes(current.status) && !current.isLocked) {
       confirmBox.hidden = false;
       confirmBox.className = "doc-confirm";
       confirmBox.innerHTML = `<strong>Všechny doklady jsou nahrané.</strong>
@@ -295,7 +294,7 @@
     else if (event.target.closest("#doc-file-button")) pick(null, "file");
     else if (event.target.closest("#doc-confirm-button")) {
       dialog.close();
-      document.querySelector("#order-confirm")?.click();
+      window.confirmOrderToInvoice?.(current.id);
     }
   });
 
@@ -316,9 +315,14 @@
   }
 
   window.loadOrderDocuments = load;
+  // Otevře okno dokladů pro zakázku (pohled řidiče).
+  window.openOrderDocuments = async (order) => {
+    await load(order);
+    if (!dialog.open) dialog.showModal();
+  };
   // Chybějící povinné doklady otevřené zakázky (popisky). null = nejde zjistit (složka není nastavená).
-  window.missingOrderDocuments = () => {
-    if (!current || !configured) return null;
+  window.missingOrderDocuments = (id) => {
+    if (!current || !configured || (id && current.id !== id)) return null;
     return slotsFor(current).flatMap((group, groupIndex) => group.slots
       .filter((slot) => !documents.some((doc) => slotOf(doc.name) === slot.key))
       .map((slot) => `${groupIndex === 0 ? "Nakládka" : `Vykládka ${groupIndex}`}${group.place ? ` (${group.place})` : ""}: ${slot.label.toLowerCase()}`));
