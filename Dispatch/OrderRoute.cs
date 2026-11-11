@@ -11,7 +11,48 @@ public sealed record OrderStop(
     string? Note,
     DateTimeOffset? ArrivalAt,
     int? FuelTypeId = null,
-    string? FuelType = null);
+    string? FuelType = null,
+    IReadOnlyList<OrderStopItem>? Items = null);
+
+// Jedno palivo vykládky: z které přepážky, jaké palivo a kolik litrů. Vykládka jich může mít víc.
+public sealed record OrderStopItem(int? FuelTypeId, string FuelType, int? Compartment, decimal Liters);
+
+public sealed record OrderStopItemInput(int? FuelTypeId, int? Compartment, decimal? Liters);
+
+public static class OrderStopItems
+{
+    public const int MaxCount = 10;
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    // Paliva vykládky. Stará vykládka bez řádků má jedno palivo bez přepážky.
+    public static IReadOnlyList<OrderStopItem> Of(OrderStop stop) =>
+        stop.Items is { Count: > 0 }
+            ? stop.Items
+            : [new OrderStopItem(stop.FuelTypeId, stop.FuelType ?? "", null, stop.Liters)];
+
+    public static string FuelText(OrderStop stop) =>
+        string.Join(" + ", Of(stop).Select(item => item.FuelType.Trim()).Where(name => name.Length > 0).Distinct());
+
+    public static bool Same(OrderStop left, OrderStop right) => Of(left).SequenceEqual(Of(right));
+
+    public static string? Write(IReadOnlyList<OrderStopItem>? items) =>
+        items is { Count: > 0 } ? JsonSerializer.Serialize(items, Json) : null;
+
+    public static IReadOnlyList<OrderStopItem>? Read(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+        try
+        {
+            var items = JsonSerializer.Deserialize<OrderStopItem[]>(json, Json);
+            return items is { Length: > 0 } ? items : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+}
 
 public sealed record OrderLeg(
     string Id,
@@ -31,7 +72,8 @@ public sealed record OrderStopInput(
     decimal? Liters,
     string? Note,
     DateTimeOffset? ArrivalAt,
-    int? FuelTypeId = null);
+    int? FuelTypeId = null,
+    IReadOnlyList<OrderStopItemInput>? Items = null);
 
 // Nakládka jednoho paliva. Zakázka jich může mít víc (nafta, benzín …).
 // Compartments = čísla přepážek vozidla, do kterých se palivo nalévá (nepovinné).
@@ -135,6 +177,55 @@ public static class OrderLoads
         return null;
     }
 
+    // Vykládka: každé palivo se vykládá z přepážky, ve které to palivo je (když se přepážky přiřazují).
+    public static string? CheckUnloadCompartments(DispatchOrder order, OrderCatalog catalog)
+    {
+        var owners = new Dictionary<int, OrderLoad>();
+        foreach (var load in Effective(order))
+            foreach (var number in load.Compartments ?? [])
+                owners[number] = load;
+        IReadOnlyList<VehicleCompartment> available = [];
+        if (order.VehicleId is not null && catalog.VehicleCompartments is not null
+            && catalog.VehicleCompartments.TryGetValue(order.VehicleId, out var list))
+            available = list;
+
+        var total = new Dictionary<int, decimal>();
+        foreach (var stop in order.Stops ?? [])
+        {
+            var label = $"Vykládka {stop.Sequence} ({stop.Place})";
+            foreach (var item in OrderStopItems.Of(stop))
+            {
+                if (item.Compartment is not { } number)
+                {
+                    if (owners.Count > 0 && item.Liters > 0m)
+                        return $"{label}: u paliva {item.FuelType} vyberte přepážku, ze které se vykládá.";
+                    continue;
+                }
+
+                if (owners.Count == 0)
+                    return $"{label}: přepážku vyberte až po přiřazení přepážek u nakládky.";
+                if (!owners.TryGetValue(number, out var owner))
+                    return $"{label}: přepážka {number} se v nakládce neplní.";
+                var sameFuel = owner.FuelTypeId is not null && item.FuelTypeId is not null
+                    ? owner.FuelTypeId == item.FuelTypeId
+                    : string.Equals(owner.FuelType.Trim(), item.FuelType.Trim(), StringComparison.OrdinalIgnoreCase);
+                if (!sameFuel)
+                    return $"{label}: v přepážce {number} je {owner.FuelType}, ne {item.FuelType}.";
+                total[number] = total.GetValueOrDefault(number) + item.Liters;
+            }
+        }
+
+        // Z jedné přepážky se nedá vyložit víc, než pojme.
+        foreach (var (number, liters) in total.OrderBy(pair => pair.Key))
+        {
+            var capacity = available.FirstOrDefault(item => item.Number == number)?.CapacityLiters;
+            if (capacity is not null && liters > capacity)
+                return $"Z přepážky {number} se vykládá {liters.ToString("N0", Czech)} l, ale pojme jen {capacity.Value.ToString("N0", Czech)} l.";
+        }
+
+        return null;
+    }
+
     public static string CompartmentsText(IReadOnlyList<int>? compartments) =>
         compartments is { Count: > 0 } ? string.Join(",", compartments) : "";
 
@@ -166,15 +257,15 @@ public static class OrderLoads
                 rows[index] = rows[index] with { Loaded = rows[index].Loaded + load.Liters };
         }
 
-        foreach (var stop in order.Stops ?? [])
+        foreach (var item in (order.Stops ?? []).SelectMany(OrderStopItems.Of))
         {
-            var id = stop.FuelTypeId ?? (string.IsNullOrWhiteSpace(stop.FuelType) ? first.FuelTypeId : null);
-            var name = string.IsNullOrWhiteSpace(stop.FuelType) ? first.FuelType : stop.FuelType!;
+            var id = item.FuelTypeId ?? (string.IsNullOrWhiteSpace(item.FuelType) ? first.FuelTypeId : null);
+            var name = string.IsNullOrWhiteSpace(item.FuelType) ? first.FuelType : item.FuelType;
             var index = rows.FindIndex(row => Same(row.FuelTypeId, row.FuelType, id, name));
             if (index < 0)
-                rows.Add(new FuelBalance(id, name, 0m, stop.Liters));
+                rows.Add(new FuelBalance(id, name, 0m, item.Liters));
             else
-                rows[index] = rows[index] with { Delivered = rows[index].Delivered + stop.Liters };
+                rows[index] = rows[index] with { Delivered = rows[index].Delivered + item.Liters };
         }
 
         return rows;
@@ -452,18 +543,33 @@ public static class OrderRoute
             var place = input.Place.Trim();
             if (place.Length > 160)
                 return (null, "Místo vykládky může mít nejvýše 160 znaků.", null);
-            if (input.Liters is null)
-                return (null, "Vyplňte litry na vykládce.", null);
-            if (input.Liters is < 0m or > 1_000_000m)
-                return (null, "Litry na vykládce musí být od 0 do 1 000 000.", null);
             if (!string.IsNullOrWhiteSpace(input.Note) && input.Note.Trim().Length > 500)
                 return (null, "Poznámka vykládky může mít nejvýše 500 znaků.", null);
 
-            var fuel = StopFuel(input.FuelTypeId, headerFuelId, headerFuel, fuelTypes);
-            if (fuel.Error is not null)
-                return (null, fuel.Error, null);
+            List<OrderStopItem>? items = null;
+            (int? Id, string? Name, string? Error) fuel;
+            decimal liters;
+            if (input.Items is { Count: > 0 })
+            {
+                var parsed = StopItems(input.Items, index + 1, headerFuelId, headerFuel, fuelTypes);
+                if (parsed.Error is not null)
+                    return (null, parsed.Error, null);
+                items = parsed.Items!;
+                fuel = (items[0].FuelTypeId, items[0].FuelType, null);
+                liters = OrderPricing.Liters(items.Sum(item => item.Liters));
+            }
+            else
+            {
+                if (input.Liters is null)
+                    return (null, "Vyplňte litry na vykládce.", null);
+                if (input.Liters is < 0m or > 1_000_000m)
+                    return (null, "Litry na vykládce musí být od 0 do 1 000 000.", null);
+                fuel = StopFuel(input.FuelTypeId, headerFuelId, headerFuel, fuelTypes);
+                if (fuel.Error is not null)
+                    return (null, fuel.Error, null);
+                liters = OrderPricing.Liters(input.Liters.Value);
+            }
 
-            var liters = OrderPricing.Liters(input.Liters.Value);
             var from = index == 0 ? loadingPlace : builtStops[index - 1].Place;
             var legInput = legs is not null && index < legs.Count ? legs[index] : null;
             decimal? kilometers = null;
@@ -507,7 +613,8 @@ public static class OrderRoute
                 string.IsNullOrWhiteSpace(input.Note) ? null : input.Note.Trim(),
                 input.ArrivalAt,
                 fuel.Id,
-                fuel.Name));
+                fuel.Name,
+                items));
             builtLegs.Add(new OrderLeg(
                 NewId(),
                 sequence,
@@ -523,6 +630,38 @@ public static class OrderRoute
         }
 
         return (new OrderRouteSnapshot(mode, salePerKm, salePerLiter, costPerKm, builtStops, builtLegs), null, writes);
+    }
+
+    private static (List<OrderStopItem>? Items, string? Error) StopItems(
+        IReadOnlyList<OrderStopItemInput> inputs,
+        int sequence,
+        int? headerFuelId,
+        string headerFuel,
+        IReadOnlyList<FuelTypeItem>? fuelTypes)
+    {
+        if (inputs.Count > OrderStopItems.MaxCount)
+            return (null, $"Vykládka {sequence} může mít nejvýše {OrderStopItems.MaxCount} řádků paliv.");
+        var items = new List<OrderStopItem>(inputs.Count);
+        foreach (var input in inputs)
+        {
+            var fuel = StopFuel(input.FuelTypeId, headerFuelId, headerFuel, fuelTypes);
+            if (fuel.Error is not null)
+                return (null, $"Vykládka {sequence}: vyberte palivo.");
+            var name = fuel.Name ?? headerFuel;
+            if (input.Liters is null)
+                return (null, $"Vykládka {sequence}: vyplňte litry ({name}).");
+            if (input.Liters is < 0m or > 1_000_000m)
+                return (null, $"Vykládka {sequence}: litry musí být od 0 do 1 000 000.");
+            if (input.Compartment is < 1 or > VehicleCompartments.MaxCount)
+                return (null, $"Vykládka {sequence}: přepážky se číslují 1 až {VehicleCompartments.MaxCount}.");
+            if (items.Any(item => item.FuelTypeId == fuel.Id && item.Compartment == input.Compartment))
+                return (null, input.Compartment is null
+                    ? $"Vykládka {sequence}: {name} je tam dvakrát. Litry sečtěte do jednoho řádku."
+                    : $"Vykládka {sequence}: přepážka {input.Compartment} s palivem {name} je tam dvakrát.");
+            items.Add(new OrderStopItem(fuel.Id, name, input.Compartment, OrderPricing.Liters(input.Liters.Value)));
+        }
+
+        return (items, null);
     }
 
     private static (int? Id, string? Name, string? Error) StopFuel(
