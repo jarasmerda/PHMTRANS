@@ -144,6 +144,7 @@
       ? `<span class="dv-nav">
           <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(target)}" target="_blank" rel="noopener">Navigovat (Google)</a>
           <a href="https://mapy.cz/zakladni?q=${encodeURIComponent(target)}" target="_blank" rel="noopener">Mapy.cz</a>
+          <a href="https://maps.apple.com/?daddr=${encodeURIComponent(target)}&dirflg=d" target="_blank" rel="noopener">Apple Mapy</a>
         </span>`
       : "";
     return `<div class="dv-place">${lines.join("")}${links}${point ? "" : `<span class="note">Adresa místa není v systému zadaná.</span>`}</div>`;

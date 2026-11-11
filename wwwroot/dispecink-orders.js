@@ -1919,6 +1919,10 @@ function openCreate(prefill) {
     }
     if (prefill.driver && orderCatalog.drivers.some((driver) => driver.id === prefill.driver))
       set("driver", prefill.driver);
+    if (prefill.vehicle && orderCatalog.vehicles.some((vehicle) => vehicle.id === prefill.vehicle)) {
+      set("vehicle", prefill.vehicle);
+      refreshRoute("create");
+    }
   }
   const dialog = document.querySelector("#order-create-dialog");
   if (dialog && !dialog.open) dialog.showModal();
@@ -1927,7 +1931,7 @@ function openCreate(prefill) {
 
 document.querySelector("#open-order-create")?.addEventListener("click", () => openCreate());
 
-// Odkazy z hodinového kalendáře: #zakazka=ID otevře zakázku, #nova=RRRR-MM-DDTHH:MM&ridic=ID založí novou.
+// Odkazy z hodinového kalendáře: #zakazka=ID otevře zakázku, #nova=RRRR-MM-DDTHH:MM&vozidlo=ID (nebo &ridic=ID) založí novou.
 function handleLinkHash() {
   const hash = decodeURIComponent(location.hash);
   if (hash.startsWith("#zakazka=")) {
@@ -1943,7 +1947,8 @@ function handleLinkHash() {
     openCreate({
       date: /^\d{4}-\d{2}-\d{2}$/.test(date || "") ? date : null,
       time: /^\d{2}:\d{2}$/.test(time || "") ? time : null,
-      driver: params.get("ridic")
+      driver: params.get("ridic"),
+      vehicle: params.get("vozidlo")
     });
     return true;
   }
